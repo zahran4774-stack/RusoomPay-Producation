@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import type { Role } from '@/lib/roles'
-import AppShell from '../AppShell'
+import AppShell from './AppShell'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()

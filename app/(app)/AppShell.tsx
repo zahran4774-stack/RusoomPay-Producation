@@ -5,8 +5,8 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import type { Role } from '@/lib/roles'
 import { isStaff, canAccessFinance, isOwner } from '@/lib/roles'
-import WhatsAppSupport from './(app)/WhatsAppSupport'
-import { LogoMark } from './Logo'
+import WhatsAppSupport from './WhatsAppSupport'
+import { LogoMark } from '../Logo'
 import {
   LayoutDashboard, GraduationCap, ReceiptText, Users, Apple, Bus,
   Package, BarChart3, ClipboardList, Gem, MessageCircle, Settings, type LucideIcon,

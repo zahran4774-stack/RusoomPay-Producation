@@ -1,28 +1,40 @@
-// تخطيط الصفحات المُصادَقة — يلفّها بقشرة التطبيق (شريط جانبي + تخطيط)
-// مجموعة (app) لا تظهر في الرابط؛ المسارات تبقى /dashboard /students ...
-import { createClient } from '@/lib/supabase-server'
-import { redirect } from 'next/navigation'
-import type { Role } from '@/lib/roles'
-import AppShell from '../AppShell'
+import type { Metadata, Viewport } from 'next'
+import './globals.css'
+import PWARegister from './PWARegister'
+import ClickSound from './ClickSound'
 
-export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+export const metadata: Metadata = {
+  title: 'RusoomPay — منظومة المدارس الذكية',
+  description: 'نظام إدارة مالية للمدارس الخاصة في الخليج',
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'RusoomPay',
+  },
+}
 
-  const { data: profile } = await supabase
-    .from('profiles').select('role').eq('id', user.id).single()
-  const role = (profile?.role ?? 'admin') as Role
+export const viewport: Viewport = {
+  themeColor: '#0A1D33',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: 'cover',
+}
 
-  // مدير المنصة: لوحته الخاصة بلا شريط جانبي للمدرسة
-  if (role === 'platform_admin') {
-    return <main className="app-main" style={{ padding: 0 }}>{children}</main>
-  }
-
-  // ولي الأمر: بوابة مبسّطة خاصة به (بلا شريط طاقم المدرسة)
-  if (role === 'parent') {
-    return <main className="app-main" style={{ padding: 0 }}>{children}</main>
-  }
-
-  return <AppShell role={role}>{children}</AppShell>
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="ar" dir="rtl">
+      <head>
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+        <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+      </head>
+      <body>
+        <PWARegister />
+        <ClickSound />
+        {children}
+      </body>
+    </html>
+  )
 }
