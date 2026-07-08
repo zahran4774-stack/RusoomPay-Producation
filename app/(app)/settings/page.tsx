@@ -24,7 +24,6 @@ export default async function SettingsPage() {
 
   // إعداد الضريبة حسب قانون الدولة (لكل المستخدمين للعرض، التعديل للمدير)
   const { data: vat } = await supabase.rpc('my_vat_setting').maybeSingle()
-
   // طبقة الذكاء — حالة المحرّكات (School Intelligence Core)
   const { data: engines } = await supabase.rpc('intelligence_status')
 
