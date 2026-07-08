@@ -25,7 +25,7 @@ export default async function SubscriptionPage() {
       <p style={{ color: '#667', fontSize: 14, marginBottom: 20 }}>
         هذا اشتراك مدرستك في المنصة — منفصل عن رسوم الطلاب
       </p>
-      <PlansManager sub={sub} schoolId={profile.school_id} />
+      <PlansManager sub={sub} schoolId={profile?.school_id} />
     </div>
   )
 }
