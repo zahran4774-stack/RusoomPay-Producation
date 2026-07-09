@@ -8,7 +8,7 @@ const nextConfig = {
   },
   typescript: {
     // لا توقف البناء بسبب أخطاء نوع غير حرجة أثناء الإطلاق الأول
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
 };
 
