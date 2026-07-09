@@ -27,7 +27,12 @@ export default function SchoolCopilot({ data, sym, firstName }: { data: CopilotD
 
   if (!data || data.ok === false) return null
 
-  const { summary, alerts, recommendations, kpis, health } = data
+    const summary = data.summary ?? { today_collected: 0, outstanding: 0, collection_rate: 0, pending_approvals: 0, students: 0, employees: 0, revenue: 0, expense: 0 }
+  const alerts = data.alerts ?? []
+  const recommendations = data.recommendations ?? []
+  const kpis = data.kpis ?? { collection_rate: 0, outstanding: 0, overdue_count: 0, pending_payments: 0, low_stock: 0 }
+  const health = data.health ?? { score: 0, status: '—', breakdown: {} }
+
   const nothingUrgent = alerts.length === 0 && recommendations.length === 0
 
   const healthColor = health.score >= 85 ? '#067647' : health.score >= 70 ? '#1E5C4E' : health.score >= 50 ? '#B54708' : '#B42318'
