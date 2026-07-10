@@ -42,9 +42,8 @@ export async function middleware(request: NextRequest) {
   // حماية لوحة المنصة على مستوى الطبقة الوسطى — قبل تحميل الصفحة
   // (نستعلم عن الدور فقط لمسار /platform، لا لكل طلب، حفاظاً على الأداء)
   if (request.nextUrl.pathname.startsWith('/platform') && user) {
-    const { data: profile } = await supabase
-      .from('profiles').select('role').eq('id', user.id).single()
-    if (profile?.role !== 'platform_admin') {
+    const { data: myRole } = await supabase.rpc('my_role')
+   if (myRole !== 'platform_admin') {
       const url = request.nextUrl.clone()
       url.pathname = '/dashboard'
       return NextResponse.redirect(url)
