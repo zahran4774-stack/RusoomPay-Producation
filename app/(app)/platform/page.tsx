@@ -12,17 +12,9 @@ export default async function PlatformPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
+  // قراءة الدور عبر my_role() — موثوقة (security definer، لا تتأثّر بـRLS)
   const { data: myRole } = await supabase.rpc('my_role')
- if (myRole !== 'platform_admin') {
-   return (
-<div dir="rtl" style={{ padding: 40, fontFamily: 'monospace', fontSize: 16 }}>
-<h2>🔍 تشخيص</h2>
-<p>معرّف المستخدم: <b>{user.id}</b></p>
-<p>البريد: <b>{user.email}</b></p>
-<p>قيمة my_role(): <b style={{ color: 'red' }}>{JSON.stringify(myRole)}</b></p>
-</div>
-   )
- }
+  if (myRole !== 'platform_admin') redirect('/dashboard')
 
   // بيانات مركز التحكّم (نظرة عامة + إيرادات)
   const { data: summary } = await supabase.rpc('control_center_summary')

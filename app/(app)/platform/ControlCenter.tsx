@@ -22,13 +22,14 @@ export default function ControlCenter({ overview, revenue, subscriptions, pendin
   overview: Nums; revenue: Nums; subscriptions: Sub[]; pending: Pending[]
   analytics: SchoolStat[]; audit: AuditRow[]; feedback: FeedbackRow[]
 }) {
+  // قيم افتراضية آمنة — تمنع الانهيار حين تكون المنصة فارغة (لا مدارس بعد)
   overview = overview ?? {}
- revenue = revenue ?? {}
- subscriptions = subscriptions ?? []
- pending = pending ?? []
- analytics = analytics ?? []
- audit = audit ?? []
- feedback = feedback ?? []
+  revenue = revenue ?? {}
+  subscriptions = subscriptions ?? []
+  pending = pending ?? []
+  analytics = analytics ?? []
+  audit = audit ?? []
+  feedback = feedback ?? []
   const [tab, setTab] = useState<'overview' | 'revenue' | 'subs' | 'schools' | 'audit' | 'feedback' | 'monitor' | 'settings'>('overview')
   const [manageSchool, setManageSchool] = useState<{ id: string; name: string } | null>(null)
   const [filter, setFilter] = useState('all')

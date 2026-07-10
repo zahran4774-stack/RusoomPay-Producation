@@ -1,8 +1,10 @@
+// Middleware — يحدّث جلسة المستخدم ويحمي المسارات
+// يعمل على الخادم قبل كل طلب — لا يمكن تجاوزه من المتصفح
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next()
+  let response = NextResponse.next({ request })
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,9 +15,8 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
-          // Do NOT mutate request.cookies in middleware (it's read-only).
-          // Only set cookies on the response.
-          response = NextResponse.next()
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+          response = NextResponse.next({ request })
           cookiesToSet.forEach(({ name, value, options }) =>
             response.cookies.set(name, value, options)
           )
@@ -24,37 +25,23 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Safely get the user
-  const getUserResult = await supabase.auth.getUser()
-  const user = getUserResult?.data?.user ?? null
+  // تحديث الجلسة
+  const { data: { user } } = await supabase.auth.getUser()
 
-  // Protected paths
+  // المسارات المحمية — تتطلب تسجيل دخول
   const protectedPaths = ['/dashboard', '/students', '/employees', '/fees', '/subscription', '/accounting', '/platform', '/activity']
   const isProtected = protectedPaths.some((p) => request.nextUrl.pathname.startsWith(p))
 
   if (isProtected && !user) {
+    // غير مُصادَق → إعادة توجيه لتسجيل الدخول
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 
-  // Platform-level role check — handle RPC result shape robustly
+  // حماية لوحة المنصة على مستوى الطبقة الوسطى — نستخدم my_role() (security definer، موثوقة)
   if (request.nextUrl.pathname.startsWith('/platform') && user) {
-    const { data: roleData, error: roleError } = await supabase.rpc('my_role')
-    let myRole: string | null = null
-
-    if (!roleError && roleData != null) {
-      // RPC might return a scalar, an object, or an array of objects depending on the function.
-      if (Array.isArray(roleData)) {
-        // e.g. [{ my_role: 'platform_admin' }]
-        myRole = roleData[0]?.my_role ?? (typeof roleData[0] === 'string' ? roleData[0] : null)
-      } else if (typeof roleData === 'object') {
-        myRole = (roleData as any).my_role ?? null
-      } else {
-        myRole = String(roleData)
-      }
-    }
-
+    const { data: myRole } = await supabase.rpc('my_role')
     if (myRole !== 'platform_admin') {
       const url = request.nextUrl.clone()
       url.pathname = '/dashboard'

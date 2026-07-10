@@ -22,15 +22,19 @@ export default async function AccountingPage() {
   const { data: school } = await supabase.from('schools').select('name, vat_number, currency').single()
   const currency = school?.currency ?? 'OMR'
 
-  // الأرصدة والملخّص المالي — تُحسب في قاعدة البيانات (لحظية مهما تراكمت القيود)
-  const { data: balances } = await supabase.rpc('account_balances')
-  const { data: summary } = await supabase.rpc('financial_summary').single()
-  // آخر القيود للعرض فقط (محدودة — لا تُستخدم للحساب)
-  const { data: entries } = await supabase
-    .from('journal_entries')
-    .select('id, entry_date, description, reference, reversed_by_entry, reverses_entry, journal_lines(debit)')
-    .order('entry_date', { ascending: false })
-    .limit(10)
+  // الأرصthe والملخّص والقيود — تُجلb معاً بالتوازي (أسرع من التسلسل)
+  const [balancesRes, summaryRes, entriesRes] = await Promise.all([
+    supabase.rpc('account_balances'),
+    supabase.rpc('financial_summary').single(),
+    supabase
+      .from('journal_entries')
+      .select('id, entry_date, description, reference, reversed_by_entry, reverses_entry, journal_lines(debit)')
+      .order('entry_date', { ascending: false })
+      .limit(10),
+  ])
+  const balances = balancesRes.data
+  const summary = summaryRes.data
+  const entries = entriesRes.data
 
   const bal = (balances ?? []) as { account_id: string; code: string; name: string; type: string; balance: number }[]
   // قائمة الحسابات لنموذج القيد (مشتقّة من نتيجة الأرصدة)

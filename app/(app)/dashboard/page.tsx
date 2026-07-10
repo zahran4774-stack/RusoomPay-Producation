@@ -14,7 +14,9 @@ export default async function DashboardPage() {
 
   const { data: profile } = await supabase
     .from('profiles').select('full_name, role').eq('id', user.id).single()
-  const role = (profile?.role ?? 'admin') as Role
+  // قراءة الدور عبر my_role() — موثوقة (security definer)
+  const { data: myRole } = await supabase.rpc('my_role')
+  const role = (myRole ?? profile?.role ?? 'admin') as Role
 
   // مدير المنصة له لوحته الخاصة
   if (role === 'platform_admin') redirect('/platform')
