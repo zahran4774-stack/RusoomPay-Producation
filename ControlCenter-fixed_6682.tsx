@@ -31,7 +31,7 @@ export default function ControlCenter({ overview, revenue, subscriptions, pendin
   audit = audit ?? []
   feedback = feedback ?? []
   const [tab, setTab] = useState<'overview' | 'revenue' | 'subs' | 'schools' | 'audit' | 'feedback' | 'monitor' | 'settings'>('overview')
-  const [manageSchool, setManageSchool] = useState<{ id: string; name: string } | null>(null)
+  const [manageSchool, setSchoolManageModal] = useState<{ id: string; name: string } | null>(null)
   const [filter, setFilter] = useState('all')
   const fmt = (n: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
   const int = (n: number) => (n ?? 0).toLocaleString('en-US')
