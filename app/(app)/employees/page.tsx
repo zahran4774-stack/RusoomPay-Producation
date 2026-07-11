@@ -132,6 +132,9 @@ export default async function EmployeesPage() {
       <FocusScroller />
 
       {/* جدول الموظفين التفاعلي */}
+      <div style={{ marginBottom: 18 }}>
+<AddEmployee />
+</div>
       <EmployeesTable employees={employees ?? []} role={role} rates={rates} />
 
       {/* الهيكل التنظيمي (شجرة الموظفين) */}
