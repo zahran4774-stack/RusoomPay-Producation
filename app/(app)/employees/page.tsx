@@ -2,7 +2,11 @@
 // يجلب الموظفين وطلبات تعديل الرواتب، ويمرّرها لمكوّنات العميل التفاعلية
 import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
+<div style={{ marginBottom: 18 }}>
+<AddEmployee />
+</div>
 import EmployeesTable from './EmployeesTable'
+import AddEmployee from './AddEmployee'
 import OrgChart from './OrgChart'
 import FocusScroller from '../FocusScroller'
 import SalaryRequests from './SalaryRequests'
