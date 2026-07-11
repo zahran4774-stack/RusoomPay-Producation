@@ -5,9 +5,12 @@ import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import { isStaff, type Role } from '@/lib/roles'
 import PrintButton from '../PrintButton'
+<div style={{ marginBottom: 18 }}>
+<AddStudent />
+</div>
 import LinkParent from './LinkParent'
 import StudentsByClass from './StudentsByClass'
-
+import AddStudent from './AddStudent'
 export default async function StudentsPage() {
   const supabase = await createClient()
 
