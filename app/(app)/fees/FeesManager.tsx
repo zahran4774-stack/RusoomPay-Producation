@@ -2,7 +2,7 @@
 // مدير الرسوم — يعرض بنود كل طالب، وزر فاتورة منفصلة لكل بند
 // الفاتورة تحمل هوية المدرسة (لا المنصة) · المتبقي يُخفى عند الطباعة/التنزيل
 import { useState } from 'react'
-import { generateInvoicePDF } from  '@/lib/invoice-pdf'
+import { generateInvoicePDF } from  '@/lib/invoice-html'
 import CashPayment from './CashPayment'
 const CUR_DEC: Record<string, number> = { OMR: 3, KWD: 3, BHD: 3, SAR: 2, AED: 2, QAR: 2 }
 const CUR_SYM: Record<string, string> = { OMR: 'ر.ع', SAR: 'ر.س', AED: 'د.إ', QAR: 'ر.ق', KWD: 'د.ك', BHD: 'د.ب' }
@@ -101,7 +101,7 @@ function InvoiceModal({ student, fee, school, sym, fmt, onClose }: {
   async function downloadPDF() {
     setPdfBusy(true)
     try {
-      await generateInvoicePDF({
+      generateInvoice({
         school: { name: scName, vat: school?.vat_number, address: school?.address, phone: school?.phone },
         invoiceNo: ref,
         paidAt: new Date().toISOString(),
