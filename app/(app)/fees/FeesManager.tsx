@@ -2,8 +2,8 @@
 // مدير الرسوم — يعرض بنود كل طالب، وزر فاتورة منفصلة لكل بند
 // الفاتورة تحمل هوية المدرسة (لا المنصة) · المتبقي يُخفى عند الطباعة/التنزيل
 import { useState } from 'react'
-import { generateInvoicePDF } from '@/lib/invoice-pdf'
-
+import { generateInvoicePDF } from  '@/lib/invoice-pdf'
+import CashPayment from './CashPayment'
 const CUR_DEC: Record<string, number> = { OMR: 3, KWD: 3, BHD: 3, SAR: 2, AED: 2, QAR: 2 }
 const CUR_SYM: Record<string, string> = { OMR: 'ر.ع', SAR: 'ر.س', AED: 'د.إ', QAR: 'ر.ق', KWD: 'د.ك', BHD: 'د.ب' }
 
@@ -41,6 +41,7 @@ export default function FeesManager({ students, school, currency }: { students: 
                   <th style={{ padding: '6px 8px' }}>البند</th><th style={{ padding: '6px 8px' }}>الإجمالي</th>
                   <th style={{ padding: '6px 8px' }}>المسدّد</th><th style={{ padding: '6px 8px' }}>المتبقي</th>
                   <th style={{ padding: '6px 8px' }}>فاتورة</th>
+                  <th style={{ padding: '6px 8px' }}>الدفع</th>
                 </tr>
               </thead>
               <tbody>
@@ -57,12 +58,15 @@ export default function FeesManager({ students, school, currency }: { students: 
                           title="طباعة فاتورة هذا البند"
                           style={{ background: '#FBF3D5', border: '1px solid #E8D9A4', borderRadius: 8, padding: '4px 9px', cursor: 'pointer' }}>
                           🧾
-                        </button>
+                        </button> 
                       </td>
+                      <td style={{ padding: '8px' }}>
+<CashPayment fee={f} studentName={s.full_name} currency={currency} sym={sym} dec={dec} />
+</td>
                     </tr>
                   )
                 })}
-                {fees.length === 0 && <tr><td colSpan={5} style={{ padding: 12, color: '#999' }}>لا توجد رسوم</td></tr>}
+                {fees.length === 0 && <tr><td colSpan={6} style={{ padding: 12, color: '#999' }}>لا توجد رسوم</td></tr>}
                 {fees.length > 0 && (
                   <tr style={{ borderTop: '2px solid #0F2744', fontWeight: 700 }}>
                     <td style={{ padding: '8px' }}>الإجمالي</td>
