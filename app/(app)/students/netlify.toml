@@ -1,0 +1,11 @@
+# إعداد نشر RusoomPay على Netlify (Next.js 15)
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+# إضافة Netlify الرسمية لـNext.js (تُفعّل SSR وواجهات API تلقائياً)
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[build.environment]
+  NODE_VERSION = "20"
