@@ -26,8 +26,9 @@ export function printReport(opts: {
   ).join('')
 
   const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${title}</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-*{margin:0;padding:0;box-sizing:border-box;font-family:'IBM Plex Sans Arabic',Tahoma,sans-serif}
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Cairo',Tahoma,sans-serif}
 body{padding:28px;color:#1a2530}
 .rep-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0F2744;padding-bottom:16px}
 .rep-brand{display:flex;gap:12px;align-items:center}
