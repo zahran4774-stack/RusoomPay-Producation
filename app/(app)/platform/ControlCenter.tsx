@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import SchoolManageModal from './SchoolManageModal'
+import PendingSubs from './PendingSubs'
 import CountryToggles from './CountryToggles'
 import type { Sub, SchoolStat, AuditRow, FeedbackRow } from './types'
 
