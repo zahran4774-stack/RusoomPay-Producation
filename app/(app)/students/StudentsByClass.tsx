@@ -4,11 +4,14 @@
 // التوسّع في المتصفّح (لا طلبات إضافية) — سريع ومناسب حتى مئات الطلاب.
 import { useState, useMemo } from 'react'
 import CertificatesButton from './CertificatesButton'
+import EditStudent from './EditStudent'
 
 type Student = {
   id: string; code: string; full_name: string
   grade: string; section: string | null
   guardian_name: string | null; status: string
+  guardian_phone?: string | null; guardian_email?: string | null
+  birth_date?: string | null; gender?: string | null
 }
 
 type ClassGroup = { key: string; grade: string; section: string; students: Student[] }
@@ -125,6 +128,7 @@ export default function StudentsByClass({
                         <th style={{ padding: 11 }}>ولي الأمر</th>
                         <th style={{ padding: 11 }}>الحالة</th>
                         <th style={{ padding: 11 }}>الشهادات</th>
+                        <th style={{ padding: 11 }}>تعديل</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -138,6 +142,19 @@ export default function StudentsByClass({
                           </td>
                           <td style={{ padding: 11 }}>
                             <CertificatesButton studentId={s.id} studentName={s.full_name} school={school} />
+                          </td>
+                          <td style={{ padding: 11 }}>
+                            <EditStudent student={{
+                              id: s.id,
+                              full_name: s.full_name,
+                              grade: s.grade,
+                              section: s.section,
+                              guardian_name: s.guardian_name,
+                              guardian_phone: s.guardian_phone ?? null,
+                              guardian_email: s.guardian_email ?? null,
+                              birth_date: s.birth_date ?? null,
+                              gender: s.gender ?? null,
+                            }} />
                           </td>
                         </tr>
                       ))}
