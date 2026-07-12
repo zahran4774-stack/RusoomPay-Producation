@@ -8,7 +8,7 @@ import PrintButton from '../PrintButton'
 import LinkParent from './LinkParent'
 import StudentsByClass from './StudentsByClass'
 import AddStudent from './AddStudent'
-
+import ImportStudents from './ImportStudents'
 export default async function StudentsPage() {
   const supabase = await createClient()
 
@@ -27,7 +27,7 @@ export default async function StudentsPage() {
   // جلب الطلاب — RLS يقصرها على مدرسة المستخدم تلقائياً
   const { data: students, error } = await supabase
     .from('students')
-    .select('id, code, full_name, grade, section, guardian_name, status')
+    .select('id, code, full_name, grade, section, guardian_name, guardian_phone, guardian_email, birth_date, gender, status')
     .order('code')
 
   return (
@@ -63,9 +63,10 @@ export default async function StudentsPage() {
 
       {error && <div style={{ color: '#C0392B' }}>تعذّر جلب البيانات: {error.message}</div>}
 
-      <div style={{ marginBottom: 18 }}>
-        <AddStudent />
-      </div>
+     <div style={{ marginBottom: 18, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+<AddStudent />
+<ImportStudents />
+</div>
 
       <LinkParent students={(students ?? []).map((s) => ({ id: s.id, full_name: s.full_name, code: s.code }))} />
 
