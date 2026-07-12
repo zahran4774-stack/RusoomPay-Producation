@@ -123,7 +123,14 @@ export default function ControlCenter({ overview, revenue, subscriptions, pendin
           {pending.length > 0 && (
             <div style={{ marginBottom: 18 }}>
               <SecLabel>تحويلات بنكية بانتظار الاعتماد ({pending.length})</SecLabel>
-              <PendingSubsInline pending={pending} />
+              <PendingSubs items={pending.map((s) => ({
+               id: s.id,
+               plan: s.plan,
+               pay_method: (s as any).pay_method ?? null,
+               receipt_url: (s as any).receipt_url ?? null,
+               schoolName: (Array.isArray(s.schools) ? s.schools[0]?.name : (s.schools as any)?.name) ?? 'مدرسة',
+               created_at: s.created_at ?? '',
+             }))} />
             </div>
           )}
 
