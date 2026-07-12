@@ -2,7 +2,7 @@
 // مدير الرسوم — يعرض بنود كل طالب، وزر فاتورة منفصلة لكل بند
 // الفاتورة تحمل هوية المدرسة (لا المنصة) · المتبقي يُخفى عند الطباعة/التنزيل
 import { useState } from 'react'
-import { generateInvoice } from  '@/lib/invoice-html'
+import { generateInvoice } from  '@/lib/invoice-PDF'
 import CashPayment from './CashPayment'
 const CUR_DEC: Record<string, number> = { OMR: 3, KWD: 3, BHD: 3, SAR: 2, AED: 2, QAR: 2 }
 const CUR_SYM: Record<string, string> = { OMR: 'ر.ع', SAR: 'ر.س', AED: 'د.إ', QAR: 'ر.ق', KWD: 'د.ك', BHD: 'د.ب' }
