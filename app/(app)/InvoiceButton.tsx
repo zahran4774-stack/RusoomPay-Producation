@@ -2,7 +2,7 @@
 // app/(app)/InvoiceButton.tsx
 // زرّ تنزيل فاتورة PDF فوري — يُستخدم في صفحة الرسوم وبوابة ولي الأمر.
 import { useState } from 'react'
-import { generateInvoicePDF, type InvoiceData } from '@/lib/invoice-pdf'
+import { generateInvoice, type InvoiceData } from '@/lib/invoice-pdf'
 
 export default function InvoiceButton({ data, label = 'تنزيل الفاتورة PDF' }: {
   data: InvoiceData
@@ -14,7 +14,7 @@ export default function InvoiceButton({ data, label = 'تنزيل الفاتور
   async function handle() {
     setBusy(true); setErr('')
     try {
-      await generateInvoicePDF(data)
+      generateInvoice(data)
     } catch {
       setErr('تعذّر إنشاء الفاتورة، حاول مجدداً')
     } finally {
