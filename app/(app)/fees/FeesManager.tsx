@@ -101,7 +101,7 @@ function InvoiceModal({ student, fee, school, sym, fmt, onClose }: {
   async function downloadPDF() {
     setPdfBusy(true)
     try {
-      generateInvoice({
+  generateInvoice({
         school: { name: scName, vat: school?.vat_number, address: school?.address, phone: school?.phone },
         invoiceNo: ref,
         paidAt: new Date().toISOString(),
