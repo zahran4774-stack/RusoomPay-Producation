@@ -4,10 +4,12 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
+import GrantAccess from './GrantAccess'
 
 type Emp = {
   id: string; code: string; full_name: string; job_title: string | null
   nationality: string; basic: number; allowance: number; iban: string | null
+  email?: string | null
 }
 
 function payslip(basic: number, allow: number, nat: string, rates: InsRates) {
@@ -86,10 +88,15 @@ export default function EmployeesTable({ employees, role, rates }: { employees: 
                   <td style={{ padding: 12 }}>{fmt(p.emp)}</td>
                   <td style={{ padding: 12 }}>{fmt(p.er)}</td>
                   <td style={{ padding: 12 }}>
-                    <button onClick={() => { setEditing(e); setMsg('') }}
-                      style={{ background: '#EEF2F9', color: '#163B68', border: '1px solid #D8E2EF', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontSize: 13 }}>
-                      ✏️ تعديل
-                    </button>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <button onClick={() => { setEditing(e); setMsg('') }}
+                        style={{ background: '#EEF2F9', color: '#163B68', border: '1px solid #D8E2EF', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontSize: 13 }}>
+                        ✏️ تعديل
+                      </button>
+                      {role === 'owner' && (
+                        <GrantAccess employeeId={e.id} employeeName={e.full_name} email={e.email ?? null} />
+                      )}
+                    </div>
                   </td>
                 </tr>
               )
