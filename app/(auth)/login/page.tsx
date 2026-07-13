@@ -35,8 +35,14 @@ export default function LoginPage() {
   async function finishLogin() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setError('انتهت الجلسة، أعد المحاولة'); setLoading(false); setMfaStep(false); return }
-    const { data: profile } = await supabase.from('profiles').select('id, role').eq('id', user.id).maybeSingle()
-    if (!profile && user.user_metadata?.school_name) {
+    // قراءة الدور عبر my_role() — موثوقة (لا تتأثّر بـRLS)، تمنع تكرار إنشاء المدرسة
+    const { data: myRole } = await supabase.rpc('my_role')
+    // ربط دعوة طاقم إن وُجدت (بلا دور بعد)
+    if (!myRole) {
+      const { data: accepted } = await supabase.rpc('accept_staff_invite')
+      if (accepted && (accepted as { ok?: boolean }).ok) { router.push('/dashboard'); router.refresh(); return }
+    }
+    if (!myRole && user.user_metadata?.school_name) {
       const m = user.user_metadata
       const { error: rpcErr } = await supabase.rpc('register_school', {
         p_name: m.school_name, p_branch: m.branch || '', p_country: m.country || 'OM',
@@ -47,7 +53,8 @@ export default function LoginPage() {
       if (rpcErr) { setError('تعذّر إكمال تسجيل المدرسة: ' + rpcErr.message); setLoading(false); return }
       router.push('/subscription'); router.refresh(); return
     }
-    if (profile?.role === 'parent') router.push('/parent')
+    if (myRole === 'platform_admin') router.push('/platform')
+    else if (myRole === 'parent') router.push('/parent')
     else router.push('/dashboard')
     router.refresh()
   }
@@ -181,17 +188,6 @@ export default function LoginPage() {
                 {loading ? <span className="lp-spin" /> : 'تسجيل الدخول'}
               </button>
 
-              {/* دخول خارجي — هيكل جاهز (يتطلّب تفعيل OAuth في Supabase) */}
-              <div className="lp-divider"><span>أو</span></div>
-              <button type="button" className="lp-sso" disabled title="يتطلّب تفعيل من المنصّة">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#f25022" d="M3 3h8v8H3z"/><path fill="#7fba00" d="M13 3h8v8h-8z"/><path fill="#00a4ef" d="M3 13h8v8H3z"/><path fill="#ffb900" d="M13 13h8v8h-8z"/></svg>
-                الدخول عبر Microsoft
-              </button>
-              <button type="button" className="lp-sso" disabled title="يتطلّب تفعيل من المنصّة">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M22 12c0-.7-.1-1.4-.2-2H12v4h5.6a4.8 4.8 0 01-2 3.1v2.6h3.2A9.8 9.8 0 0022 12z"/><path fill="#34A853" d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5a6 6 0 01-9-3.1H3.1v2.6A10 10 0 0012 22z"/><path fill="#FBBC05" d="M6.4 14a6 6 0 010-3.8V7.6H3.1a10 10 0 000 8.9z"/><path fill="#EA4335" d="M12 6.1c1.5 0 2.8.5 3.8 1.5l2.8-2.8A10 10 0 003.1 7.6l3.3 2.6A6 6 0 0112 6.1z"/></svg>
-                الدخول عبر Google
-              </button>
-
               <div className="lp-foot-links">
                 <span>مدرسة جديدة؟ <a href="/register">سجّل مدرستك</a></span>
                 <span>ولي أمر؟ <a href="/parent-register">أنشئ حساب</a></span>
@@ -253,12 +249,6 @@ export default function LoginPage() {
         .lp-msg.err{ color:#B42318; background:#FEF3F2; border:1px solid #FECDCA; }
         .lp-msg.ok{ color:#067647; background:#ECFDF3; border:1px solid #ABEFC6; }
 
-        .lp-divider{ display:flex; align-items:center; gap:12px; margin:18px 0; color:var(--lp-muted); font-size:12px; }
-        .lp-divider::before,.lp-divider::after{ content:''; flex:1; height:1px; background:var(--lp-line); }
-        .lp-sso{ width:100%; height:46px; border:1.5px solid var(--lp-line); border-radius:12px; background:#fff; color:var(--lp-ink); font-family:inherit; font-size:14px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:10px; transition:background .15s, border-color .15s; }
-        .lp-sso svg{ width:18px; height:18px; }
-        .lp-sso:disabled{ opacity:.55; cursor:not-allowed; }
-        .lp-sso:not(:disabled):hover{ background:#F7F8FA; border-color:#C9D2DE; }
 
         .lp-foot-links{ display:flex; flex-direction:column; gap:7px; text-align:center; margin-top:16px; font-size:13px; color:var(--lp-muted); }
         .lp-foot-links a{ color:var(--lp-primary); font-weight:600; text-decoration:none; }
