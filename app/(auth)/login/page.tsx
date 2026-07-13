@@ -271,9 +271,10 @@ export default function LoginPage() {
           .lp-bldg{ position:absolute; inset-block-end:-20px; inset-inline-start:50%; transform:translateX(-50%); width:90%; max-width:460px; opacity:.10; stroke:#fff; stroke-width:2; fill:none; }
         }
         @media (prefers-reduced-motion:reduce){ .lp-card{ animation:none } .lp-btn,.lp-field input{ transition:none } }
-      `}</style>
+            `}</style>
     </div>
-    fill:none; }
-    fill:none; }
+  )
+}
+
 }   
   )
