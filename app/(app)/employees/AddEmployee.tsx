@@ -13,7 +13,7 @@ export default function AddEmployee() {
 
   const [f, setF] = useState({
     full_name: '', job_title: '', nationality: 'om',
-    basic: '', allowance: '', iban: '', code: '',
+    basic: '', allowance: '', iban: '', code: '', email: '',
   })
   const set = (k: string, v: string) => setF((p) => ({ ...p, [k]: v }))
 
@@ -29,11 +29,12 @@ export default function AddEmployee() {
       p_allowance: f.allowance ? Number(f.allowance) : 0,
       p_iban: f.iban || null,
       p_code: f.code || null,
+      p_email: f.email || null,
     })
     setSaving(false)
     if (error) { setErr(error.message); return }
     setOk(true)
-    setF({ full_name: '', job_title: '', nationality: 'om', basic: '', allowance: '', iban: '', code: '' })
+    setF({ full_name: '', job_title: '', nationality: 'om', basic: '', allowance: '', iban: '', code: '', email: '' })
     router.refresh()
     setTimeout(() => { setOk(false); setOpen(false) }, 1200)
   }
@@ -66,6 +67,10 @@ export default function AddEmployee() {
         <div style={cell}>
           <label style={label}>المسمّى الوظيفي</label>
           <input style={input} value={f.job_title} onChange={(e) => set('job_title', e.target.value)} placeholder="معلّم رياضيات" />
+        </div>
+        <div style={cell}>
+          <label style={label}>البريد الإلكتروني (لمنح صلاحية دخول)</label>
+          <input style={input} value={f.email} onChange={(e) => set('email', e.target.value)} placeholder="staff@email.com" dir="ltr" />
         </div>
         <div style={cell}>
           <label style={label}>الجنسية</label>
