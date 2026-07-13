@@ -47,7 +47,7 @@ export default async function SettingsPage() {
       {engines && engines.length > 0 && (
         <IntelligencePanel initial={engines} canEdit={isOwner} />
       )}
-    </div> {isOwner && <StaffInvites />}
+    {isOwner && <StaffInvites />}</div> 
 
   )
 }
