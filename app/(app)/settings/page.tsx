@@ -5,7 +5,7 @@ import MfaSetup from './MfaSetup'
 import SchoolBranding from './SchoolBranding'
 import VatSetting from './VatSetting'
 import IntelligencePanel from './IntelligencePanel'
-
+import StaffInvites from './StaffInvites'
 export default async function SettingsPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -48,5 +48,6 @@ export default async function SettingsPage() {
         <IntelligencePanel initial={engines} canEdit={isOwner} />
       )}
     </div>
+    {isOwner && <StaffInvites />}
   )
 }
