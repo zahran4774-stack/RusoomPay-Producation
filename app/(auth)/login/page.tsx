@@ -191,6 +191,7 @@ export default function LoginPage() {
               <div className="lp-foot-links">
                 <span>مدرسة جديدة؟ <a href="/register">سجّل مدرستك</a></span>
                 <span>ولي أمر؟ <a href="/parent-register">أنشئ حساب</a></span>
+                <span>موظف مدعوّ؟ <a href="/staff-register">أنشئ حساب</a></span>
               </div>
             </form>
           )}
@@ -272,5 +273,7 @@ export default function LoginPage() {
         @media (prefers-reduced-motion:reduce){ .lp-card{ animation:none } .lp-btn,.lp-field input{ transition:none } }
       `}</style>
     </div>
+    fill:none; }
+    fill:none; }
+}   
   )
-}
