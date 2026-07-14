@@ -275,7 +275,7 @@ export default function LoginPage() {
           <span className="lp-stat-ic slate">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10l9-5 9 5" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 19h18" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round"/></svg>
           </span>
-          <div><b>+50 مدرسة</b><span>تثق في RusoomPay</span></div>
+          <div><b>+500 مدرسة</b><span>تثق في RusoomPay</span></div>
         </div>
         <div className="lp-stat">
           <span className="lp-stat-ic blue">
@@ -298,7 +298,7 @@ export default function LoginPage() {
           position: relative;
           min-height: 100dvh;
           display: grid;
-          grid-template-columns: minmax(380px, 460px) 1fr;
+          grid-template-columns: 1fr minmax(380px, 460px);
           grid-template-rows: 1fr auto;
           gap: 0 40px;
           padding: 0 clamp(20px, 4vw, 56px);
@@ -317,8 +317,6 @@ export default function LoginPage() {
             url('/hero-school.jpg');
           background-size: cover;
           background-position: center 30%;
-          /* قلب أفقي: التلاشي الأبيض في الصورة ينتقل لليمين ليقع تحت بطاقة الدخول */
-          transform: scaleX(-1);
           z-index: 0;
         }
 
@@ -326,7 +324,7 @@ export default function LoginPage() {
         .lp-lang {
           position: absolute;
           top: 22px;
-          right: 28px;
+          left: 28px;
           z-index: 3;
           display: flex;
           align-items: center;
@@ -348,7 +346,7 @@ export default function LoginPage() {
         .lp-hero {
           position: relative;
           z-index: 2;
-          grid-column: 2;
+          grid-column: 1;
           grid-row: 1;
           display: flex;
           flex-direction: column;
@@ -430,7 +428,7 @@ export default function LoginPage() {
         .lp-pane {
           position: relative;
           z-index: 2;
-          grid-column: 1;
+          grid-column: 2;
           grid-row: 1;
           display: grid;
           place-items: center;
@@ -727,7 +725,7 @@ export default function LoginPage() {
           }
           .lp-root::before { inset: 0 0 auto 0; height: 300px; }
           .lp-hero { display: none; }
-          .lp-lang { top: 16px; right: 16px; }
+          .lp-lang { top: 16px; left: 16px; }
           .lp-pane {
             grid-column: 1; grid-row: 1;
             padding: 74px 0 28px;
