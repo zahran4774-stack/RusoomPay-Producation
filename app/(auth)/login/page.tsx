@@ -111,6 +111,10 @@ export default function LoginPage() {
 
   return (
     <div className="lp-root" dir="rtl">
+      {/* طبقة الصورة — غير مقلوبة، مُزاحة لليسار ليبقى اليمين نظيفاً */}
+      <div className="lp-bg" aria-hidden="true" />
+      <div className="lp-wash" aria-hidden="true" />
+
       {/* ═══ مبدّل اللغة (بصري فقط في هذه المرحلة) ═══ */}
       <div className="lp-lang" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="16" height="16">
@@ -124,63 +128,7 @@ export default function LoginPage() {
         </svg>
       </div>
 
-      {/* ═══ منطقة البطل: النص + الصورة ═══ */}
-      <section className="lp-hero">
-        <div className="lp-hero-copy">
-          <div className="lp-hero-mark"><Logo height={44} /></div>
-          <h1 className="lp-hero-title">
-            النظام المالي والإداري المتكامل
-            <br />
-            <span>للمدارس الخاصة في الخليج</span>
-          </h1>
-          <p className="lp-hero-sub">
-            إدارة الرسوم والمدفوعات والعمليات المالية بكل سهولة وأمان.
-            <br />
-            ضمن منصّة حديثة تساعد المدارس على العمل بكفاءة أعلى.
-          </p>
-        </div>
-
-        {/* بطاقات المزايا العائمة */}
-        <div className="lp-features">
-          <div className="lp-feat">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3z" stroke="currentColor" strokeWidth="1.8" fill="none" />
-              <path d="M9.5 12l1.8 1.8L15 10" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" />
-            </svg>
-            <b>أمن موثوق</b>
-            <span>حماية متقدمة لبيانات المدرسة والطلاب</span>
-          </div>
-          <div className="lp-feat">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 3a9 9 0 109 9h-9V3z" stroke="currentColor" strokeWidth="1.8" fill="none" />
-              <path d="M14 3.5A9 9 0 0120.5 10H14V3.5z" stroke="currentColor" strokeWidth="1.8" fill="none" />
-            </svg>
-            <b>تقارير ذكية</b>
-            <span>تقارير مالية واضحة تساعد على اتخاذ القرار</span>
-          </div>
-          <div className="lp-feat">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="4" y="4" width="6.5" height="6.5" rx="1.5" stroke="currentColor" strokeWidth="1.8" fill="none" />
-              <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5" stroke="currentColor" strokeWidth="1.8" fill="none" />
-              <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" stroke="currentColor" strokeWidth="1.8" fill="none" />
-              <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5" stroke="currentColor" strokeWidth="1.8" fill="none" />
-            </svg>
-            <b>إدارة متكاملة</b>
-            <span>كل العمليات المالية في منصّة واحدة</span>
-          </div>
-          <div className="lp-feat">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="3" y="6" width="18" height="12" rx="2" stroke="currentColor" strokeWidth="1.8" fill="none" />
-              <path d="M3 10h18" stroke="currentColor" strokeWidth="1.8" fill="none" />
-              <path d="M7 15h3" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" />
-            </svg>
-            <b>مدفوعات سهلة</b>
-            <span>تجربة دفع سلسة وآمنة لأولياء الأمور</span>
-          </div>
-        </div>
-      </section>
-
-      {/* ═══ بطاقة الدخول العائمة ═══ */}
+      {/* ═══ بطاقة الدخول — العمود الأول في RTL = اليمين ═══ */}
       <main className="lp-pane">
         <div className="lp-card">
           <div className="lp-brand">
@@ -263,6 +211,61 @@ export default function LoginPage() {
         </div>
       </main>
 
+      {/* ═══ البطل: النص + بطاقات المزايا — العمود الثاني في RTL = اليسار ═══ */}
+      <section className="lp-hero">
+        <div className="lp-hero-copy">
+          <div className="lp-hero-mark"><Logo height={44} /></div>
+          <h1 className="lp-hero-title">
+            النظام المالي والإداري المتكامل
+            <br />
+            <span>للمدارس الخاصة في الخليج</span>
+          </h1>
+          <p className="lp-hero-sub">
+            إدارة الرسوم والمدفوعات والعمليات المالية بكل سهولة وأمان.
+            <br />
+            ضمن منصّة حديثة تساعد المدارس على العمل بكفاءة أعلى.
+          </p>
+        </div>
+
+        <div className="lp-features">
+          <div className="lp-feat">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3z" stroke="currentColor" strokeWidth="1.8" fill="none" />
+              <path d="M9.5 12l1.8 1.8L15 10" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+            </svg>
+            <b>أمن موثوق</b>
+            <span>حماية متقدمة لبيانات المدرسة والطلاب</span>
+          </div>
+          <div className="lp-feat">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3a9 9 0 109 9h-9V3z" stroke="currentColor" strokeWidth="1.8" fill="none" />
+              <path d="M14 3.5A9 9 0 0120.5 10H14V3.5z" stroke="currentColor" strokeWidth="1.8" fill="none" />
+            </svg>
+            <b>تقارير ذكية</b>
+            <span>تقارير مالية واضحة تساعد على اتخاذ القرار</span>
+          </div>
+          <div className="lp-feat">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="4" y="4" width="6.5" height="6.5" rx="1.5" stroke="currentColor" strokeWidth="1.8" fill="none" />
+              <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5" stroke="currentColor" strokeWidth="1.8" fill="none" />
+              <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" stroke="currentColor" strokeWidth="1.8" fill="none" />
+              <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5" stroke="currentColor" strokeWidth="1.8" fill="none" />
+            </svg>
+            <b>إدارة متكاملة</b>
+            <span>كل العمليات المالية في منصّة واحدة</span>
+          </div>
+          <div className="lp-feat">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3" y="6" width="18" height="12" rx="2" stroke="currentColor" strokeWidth="1.8" fill="none" />
+              <path d="M3 10h18" stroke="currentColor" strokeWidth="1.8" fill="none" />
+              <path d="M7 15h3" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+            </svg>
+            <b>مدفوعات سهلة</b>
+            <span>تجربة دفع سلسة وآمنة لأولياء الأمور</span>
+          </div>
+        </div>
+      </section>
+
       {/* ═══ شريط الإحصائيات السفلي ═══ */}
       <footer className="lp-stats" aria-label="مؤشّرات الثقة">
         <div className="lp-stat">
@@ -295,41 +298,63 @@ export default function LoginPage() {
         :global(html), :global(body) { height: 100%; }
 
         .lp-root {
- position: relative;
- min-height: 100dvh;
- display: grid;
- direction: ltr;                                    /* ← أضف هذا السطر */
- grid-template-columns: 1fr minmax(380px, 470px);   /* ← اعكس هذا */
- grid-template-rows: 1fr auto;
- ...
-}
+          position: relative;
+          min-height: 100dvh;
+          display: grid;
+          /* العمود الأول = اليسار (البطل)، الثاني = اليمين (البطاقة) */
+          grid-template-columns: 1fr minmax(380px, 470px);
+          grid-template-rows: 1fr auto;
+          gap: 0 44px;
+          padding: 0 clamp(20px, 4vw, 56px);
+          font-family: 'Cairo', system-ui, -apple-system, sans-serif;
+          background: #F4F7FB;
+          overflow: hidden;
+        }
 
-        /* الصورة الخلفية — تشغل النصف العلوي بعرض الصفحة */
-        .lp-root::before {
-          content: '';
+        /* ═══ الصورة — غير مقلوبة (اسم المدرسة مقروء) ═══
+           تُزاح لليسار بحيث يبقى النصف الأيمن سماءً/فراغاً تحت البطاقة */
+        .lp-bg {
           position: absolute;
           inset: 0 0 128px 0;
-          background-image:
-            linear-gradient(270deg, rgba(244,247,251,.96) 0%, rgba(244,247,251,.55) 22%, transparent 48%),
-            url('/hero-school.jpg');
+          background-image: url('/hero-school.jpg');
           background-size: cover;
-          background-position: center 30%;
+          /* 75% = محاذاة نحو يمين الصورة → المبنى والطلاب يستقرون يساراً، واليمين سماء نظيفة */
+          background-position: 75% 35%;
           z-index: 0;
         }
 
-        /* ═══ مبدّل اللغة ═══ */
+        /* ═══ طبقة التبييض — تغسل الجانب الأيمن كي تجلس البطاقة على مساحة نظيفة ═══ */
+        .lp-wash {
+          position: absolute;
+          inset: 0 0 128px 0;
+          z-index: 1;
+          background:
+            linear-gradient(
+              270deg,
+              rgba(244,247,251,.99) 0%,
+              rgba(244,247,251,.97) 20%,
+              rgba(244,247,251,.80) 32%,
+              rgba(244,247,251,.35) 42%,
+              rgba(244,247,251,.06) 54%,
+              transparent 66%
+            ),
+            linear-gradient(180deg, transparent 72%, rgba(244,247,251,.92) 100%);
+          pointer-events: none;
+        }
+
+        /* ═══ مبدّل اللغة — أعلى اليمين ═══ */
         .lp-lang {
           position: absolute;
           top: 22px;
-          left: 28px;
-          z-index: 3;
+          right: 28px;
+          z-index: 4;
           display: flex;
           align-items: center;
           gap: 7px;
           height: 38px;
           padding: 0 14px;
           border-radius: 999px;
-          background: rgba(255,255,255,.92);
+          background: rgba(255,255,255,.94);
           backdrop-filter: blur(10px);
           -webkit-backdrop-filter: blur(10px);
           border: 1px solid rgba(226,232,240,.9);
@@ -339,127 +364,41 @@ export default function LoginPage() {
           color: #334155;
         }
 
-        /* ═══ البطل ═══ */
-        .lp-hero {
-          position: relative;
-          z-index: 2;
-          grid-column: 1;
-          grid-row: 1;
-          display: flex;
-          flex-direction: column;
-          justify-content: space-between;
-          padding: 72px 0 28px;
-          animation: fadeIn .7s ease .1s both;
-        }
-        @keyframes fadeIn { from { opacity:0; transform: translateY(10px) } to { opacity:1; transform:none } }
-
-        .lp-hero-mark {
-          display: inline-flex;
-          background: rgba(255,255,255,.94);
-          border-radius: 14px;
-          padding: 9px 15px;
-          margin-bottom: 26px;
-          box-shadow: 0 8px 24px -12px rgba(0,0,0,.35);
-        }
-        .lp-hero-copy { max-width: 620px; }
-        .lp-hero-title {
-          font-size: clamp(24px, 2.5vw, 36px);
-          line-height: 1.5;
-          font-weight: 800;
-          color: #0F2744;
-          margin: 0 0 16px;
-          letter-spacing: -.5px;
-          text-shadow: 0 2px 18px rgba(255,255,255,.7);
-        }
-        .lp-hero-title span { color: #1D4ED8; }
-        .lp-hero-sub {
-          font-size: clamp(13px, 1.05vw, 15px);
-          line-height: 2;
-          font-weight: 600;
-          color: #33465F;
-          margin: 0;
-          text-shadow: 0 1px 14px rgba(255,255,255,.85);
-        }
-
-        /* ── بطاقات المزايا ── */
-        .lp-features {
-          display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 14px;
-          max-width: 660px;
-          margin-top: 40px;
-        }
-        .lp-feat {
-          background: rgba(255,255,255,.94);
-          backdrop-filter: blur(14px) saturate(150%);
-          -webkit-backdrop-filter: blur(14px) saturate(150%);
-          border: 1px solid rgba(226,232,240,.9);
-          border-radius: 16px;
-          padding: 16px 14px;
-          text-align: center;
-          box-shadow:
-            0 1px 2px rgba(15,39,68,.04),
-            0 12px 26px -14px rgba(15,39,68,.22);
-          transition: transform .18s ease, box-shadow .22s ease;
-        }
-        .lp-feat:hover {
-          transform: translateY(-3px);
-          box-shadow: 0 2px 4px rgba(15,39,68,.06), 0 18px 34px -16px rgba(15,39,68,.28);
-        }
-        .lp-feat :global(svg) {
-          width: 26px; height: 26px;
-          color: #1D4ED8;
-          margin-bottom: 9px;
-        }
-        .lp-feat b {
-          display: block;
-          font-size: 13.5px; font-weight: 800; color: #0F2744;
-          margin-bottom: 5px;
-        }
-        .lp-feat span {
-          display: block;
-          font-size: 11px; line-height: 1.65; color: #64748B;
-        }
-
-        /* ═══ بطاقة الدخول ═══ */
+        /* ═══ بطاقة الدخول — يمين ═══ */
         .lp-pane {
           position: relative;
-          z-index: 2;
+          z-index: 3;
           grid-column: 2;
           grid-row: 1;
           display: grid;
           place-items: center;
-          padding: 40px 0;
+          padding: 44px 0 28px;
         }
         .lp-card {
           width: 100%;
           background: rgba(255,255,255,.97);
-          backdrop-filter: blur(20px) saturate(160%);
-          -webkit-backdrop-filter: blur(20px) saturate(160%);
-          border: 1px solid rgba(226,232,240,.9);
+          backdrop-filter: blur(22px) saturate(160%);
+          -webkit-backdrop-filter: blur(22px) saturate(160%);
+          border: 1px solid rgba(226,232,240,.95);
           border-radius: 26px;
-          padding: 34px 32px 26px;
+          padding: 32px 30px 24px;
           box-shadow:
             0 1px 2px rgba(15,39,68,.04),
-            0 16px 34px -14px rgba(15,39,68,.14),
-            0 40px 80px -40px rgba(15,39,68,.24);
+            0 16px 34px -14px rgba(15,39,68,.12),
+            0 40px 80px -40px rgba(15,39,68,.20);
           animation: rise .5s cubic-bezier(.22,1,.36,1) both;
         }
         @keyframes rise { from { opacity:0; transform: translateY(14px) } to { opacity:1; transform:none } }
 
-        .lp-brand { text-align: center; margin-bottom: 24px; }
+        .lp-brand { text-align: center; margin-bottom: 22px; }
         .lp-brand h2 {
-          margin: 18px 0 6px;
+          margin: 16px 0 6px;
           font-size: 18px;
           font-weight: 800;
           color: #0F2744;
           letter-spacing: -.3px;
         }
-        .lp-brand p {
-          margin: 0;
-          font-size: 13px;
-          color: #64748B;
-        }
+        .lp-brand p { margin: 0; font-size: 13px; color: #64748B; }
 
         /* ── الحقول ── */
         .lp-form { display: block; }
@@ -475,11 +414,11 @@ export default function LoginPage() {
           position: relative;
           display: flex;
           align-items: center;
-          margin-bottom: 16px;
+          margin-bottom: 15px;
         }
         .lp-field :global(input) {
           width: 100%;
-          height: 48px;
+          height: 47px;
           padding: 0 44px 0 44px;
           border: 1.5px solid #E2E8F0;
           border-radius: 12px;
@@ -520,7 +459,7 @@ export default function LoginPage() {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          margin: 2px 0 18px;
+          margin: 2px 0 17px;
         }
         .lp-remember {
           display: flex; align-items: center; gap: 8px;
@@ -599,7 +538,7 @@ export default function LoginPage() {
         .lp-or {
           position: relative;
           text-align: center;
-          margin: 18px 0;
+          margin: 17px 0;
         }
         .lp-or::before {
           content: '';
@@ -648,18 +587,16 @@ export default function LoginPage() {
         .lp-foot-links {
           display: flex; justify-content: center; gap: 16px;
           flex-wrap: wrap;
-          text-align: center; margin-top: 18px;
+          text-align: center; margin-top: 17px;
           font-size: 12.5px; color: #64748B;
         }
-        .lp-foot-links :global(a) {
-          color: #1D4ED8; font-weight: 700; text-decoration: none;
-        }
+        .lp-foot-links :global(a) { color: #1D4ED8; font-weight: 700; text-decoration: none; }
         .lp-foot-links :global(a:hover) { text-decoration: underline; }
 
         .lp-terms {
           text-align: center;
-          margin: 16px 0 0;
-          padding-top: 14px;
+          margin: 15px 0 0;
+          padding-top: 13px;
           border-top: 1px solid #EEF2F6;
           font-size: 11.5px;
           line-height: 1.9;
@@ -668,10 +605,92 @@ export default function LoginPage() {
         .lp-terms :global(a) { color: #1D4ED8; font-weight: 700; text-decoration: none; }
         .lp-terms :global(a:hover) { text-decoration: underline; }
 
+        /* ═══ البطل — يسار ═══ */
+        .lp-hero {
+          position: relative;
+          z-index: 2;
+          grid-column: 1;
+          grid-row: 1;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          padding: 76px 0 28px;
+          animation: fadeIn .7s ease .1s both;
+        }
+        @keyframes fadeIn { from { opacity:0; transform: translateY(10px) } to { opacity:1; transform:none } }
+
+        .lp-hero-copy { max-width: 620px; }
+        .lp-hero-mark {
+          display: inline-flex;
+          background: rgba(255,255,255,.95);
+          border-radius: 14px;
+          padding: 9px 15px;
+          margin-bottom: 24px;
+          box-shadow: 0 8px 24px -12px rgba(0,0,0,.35);
+        }
+        .lp-hero-title {
+          font-size: clamp(24px, 2.4vw, 35px);
+          line-height: 1.5;
+          font-weight: 800;
+          color: #0F2744;
+          margin: 0 0 16px;
+          letter-spacing: -.5px;
+          text-shadow: 0 2px 18px rgba(255,255,255,.75);
+        }
+        .lp-hero-title span { color: #1D4ED8; }
+        .lp-hero-sub {
+          font-size: clamp(13px, 1.05vw, 15px);
+          line-height: 2;
+          font-weight: 600;
+          color: #33465F;
+          margin: 0;
+          text-shadow: 0 1px 14px rgba(255,255,255,.9);
+        }
+
+        /* ── بطاقات المزايا ── */
+        .lp-features {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 13px;
+          max-width: 660px;
+          margin-top: 40px;
+        }
+        .lp-feat {
+          background: rgba(255,255,255,.95);
+          backdrop-filter: blur(14px) saturate(150%);
+          -webkit-backdrop-filter: blur(14px) saturate(150%);
+          border: 1px solid rgba(226,232,240,.9);
+          border-radius: 16px;
+          padding: 16px 13px;
+          text-align: center;
+          box-shadow:
+            0 1px 2px rgba(15,39,68,.04),
+            0 12px 26px -14px rgba(15,39,68,.24);
+          transition: transform .18s ease, box-shadow .22s ease;
+        }
+        .lp-feat:hover {
+          transform: translateY(-3px);
+          box-shadow: 0 2px 4px rgba(15,39,68,.06), 0 18px 34px -16px rgba(15,39,68,.3);
+        }
+        .lp-feat :global(svg) {
+          width: 26px; height: 26px;
+          color: #1D4ED8;
+          margin-bottom: 9px;
+        }
+        .lp-feat b {
+          display: block;
+          font-size: 13.5px; font-weight: 800; color: #0F2744;
+          margin-bottom: 5px;
+        }
+        .lp-feat span {
+          display: block;
+          font-size: 11px; line-height: 1.65; color: #64748B;
+        }
+
         /* ═══ شريط الإحصائيات ═══ */
         .lp-stats {
           position: relative;
-          z-index: 2;
+          z-index: 3;
           grid-column: 1 / -1;
           grid-row: 2;
           display: grid;
@@ -720,13 +739,13 @@ export default function LoginPage() {
             padding: 0 20px;
             overflow: visible;
           }
-          .lp-root::before { inset: 0 0 auto 0; height: 300px; }
-          .lp-hero { display: none; }
-          .lp-lang { top: 16px; left: 16px; }
-          .lp-pane {
-            grid-column: 1; grid-row: 1;
-            padding: 74px 0 28px;
+          .lp-bg, .lp-wash { inset: 0 0 auto 0; height: 320px; }
+          .lp-wash {
+            background: linear-gradient(180deg, transparent 0%, rgba(244,247,251,.55) 45%, rgba(244,247,251,.98) 100%);
           }
+          .lp-hero { display: none; }
+          .lp-lang { top: 16px; right: 16px; }
+          .lp-pane { grid-column: 1; grid-row: 1; padding: 74px 0 28px; }
           .lp-stats {
             grid-row: 2;
             grid-template-columns: repeat(2, 1fr);
