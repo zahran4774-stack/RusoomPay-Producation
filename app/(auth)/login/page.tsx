@@ -319,7 +319,7 @@ export default function LoginPage() {
           background-image: url('/hero-school.jpg');
           background-size: cover;
           /* 75% = محاذاة نحو يمين الصورة → المبنى والطلاب يستقرون يساراً، واليمين سماء نظيفة */
-          background-position: 35 75%%;
+          background-position: 35% 75%;
           z-index: 0;
         }
 
