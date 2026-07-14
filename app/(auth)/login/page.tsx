@@ -301,6 +301,9 @@ export default function LoginPage() {
           position: relative;
           min-height: 100dvh;
           display: grid;
+          /* الشبكة LTR كي يكون grid-column:1 = يسار فعلاً و 2 = يمين فعلاً.
+             (في RTL تنعكس أعمدة الشبكة، وهذا مصدر الالتباس) */
+          direction: ltr;
           /* العمود الأول = اليسار (البطل)، الثاني = اليمين (البطاقة) */
           grid-template-columns: 1fr minmax(380px, 470px);
           grid-template-rows: 1fr auto;
@@ -311,6 +314,11 @@ export default function LoginPage() {
           overflow: hidden;
         }
 
+        /* إعادة الاتجاه العربي لكل المحتوى داخل الشبكة */
+        .lp-pane, .lp-hero, .lp-stats, .lp-lang {
+          direction: rtl;
+        }
+
         /* ═══ الصورة — غير مقلوبة (اسم المدرسة مقروء) ═══
            تُزاح لليسار بحيث يبقى النصف الأيمن سماءً/فراغاً تحت البطاقة */
         .lp-bg {
@@ -319,7 +327,7 @@ export default function LoginPage() {
           background-image: url('/hero-school.jpg');
           background-size: cover;
           /* 75% = محاذاة نحو يمين الصورة → المبنى والطلاب يستقرون يساراً، واليمين سماء نظيفة */
-          background-position: 35% 75%;
+          background-position: 75% 35%;
           z-index: 0;
         }
 
