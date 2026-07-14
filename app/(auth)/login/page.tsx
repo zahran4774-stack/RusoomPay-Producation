@@ -298,7 +298,7 @@ export default function LoginPage() {
           position: relative;
           min-height: 100dvh;
           display: grid;
-          grid-template-columns: 1fr minmax(380px, 460px);
+          grid-template-columns: minmax(380px, 460px) 1fr;
           grid-template-rows: 1fr auto;
           gap: 0 40px;
           padding: 0 clamp(20px, 4vw, 56px);
@@ -317,6 +317,8 @@ export default function LoginPage() {
             url('/hero-school.jpg');
           background-size: cover;
           background-position: center 30%;
+          /* قلب أفقي: التلاشي الأبيض في الصورة ينتقل لليمين ليقع تحت بطاقة الدخول */
+          transform: scaleX(-1);
           z-index: 0;
         }
 
@@ -324,7 +326,7 @@ export default function LoginPage() {
         .lp-lang {
           position: absolute;
           top: 22px;
-          left: 28px;
+          right: 28px;
           z-index: 3;
           display: flex;
           align-items: center;
@@ -346,7 +348,7 @@ export default function LoginPage() {
         .lp-hero {
           position: relative;
           z-index: 2;
-          grid-column: 1;
+          grid-column: 2;
           grid-row: 1;
           display: flex;
           flex-direction: column;
@@ -428,7 +430,7 @@ export default function LoginPage() {
         .lp-pane {
           position: relative;
           z-index: 2;
-          grid-column: 2;
+          grid-column: 1;
           grid-row: 1;
           display: grid;
           place-items: center;
@@ -725,7 +727,7 @@ export default function LoginPage() {
           }
           .lp-root::before { inset: 0 0 auto 0; height: 300px; }
           .lp-hero { display: none; }
-          .lp-lang { top: 16px; left: 16px; }
+          .lp-lang { top: 16px; right: 16px; }
           .lp-pane {
             grid-column: 1; grid-row: 1;
             padding: 74px 0 28px;
