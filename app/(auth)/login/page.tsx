@@ -295,17 +295,14 @@ export default function LoginPage() {
         :global(html), :global(body) { height: 100%; }
 
         .lp-root {
-          position: relative;
-          min-height: 100dvh;
-          display: grid;
-          grid-template-columns: 1fr minmax(380px, 460px);
-          grid-template-rows: 1fr auto;
-          gap: 0 40px;
-          padding: 0 clamp(20px, 4vw, 56px);
-          font-family: 'Cairo', system-ui, -apple-system, sans-serif;
-          background: #F4F7FB;
-          overflow: hidden;
-        }
+ position: relative;
+ min-height: 100dvh;
+ display: grid;
+ direction: ltr;                                    /* ← أضف هذا السطر */
+ grid-template-columns: 1fr minmax(380px, 470px);   /* ← اعكس هذا */
+ grid-template-rows: 1fr auto;
+ ...
+}
 
         /* الصورة الخلفية — تشغل النصف العلوي بعرض الصفحة */
         .lp-root::before {
