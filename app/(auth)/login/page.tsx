@@ -294,12 +294,11 @@ export default function LoginPage() {
       <style jsx>{`
         :global(html), :global(body) { height: 100%; }
 
-        .lp-root {
+   .lp-root {
  position: relative;
  min-height: 100dvh;
  display: grid;
- direction: ltr;                                    /* ← أضف هذا السطر */
- grid-template-columns: 1fr minmax(380px, 470px);   /* ← اعكس هذا */
+ grid-template-columns: 1fr minmax(380px, 470px);
  grid-template-rows: 1fr auto;
  ...
 }
