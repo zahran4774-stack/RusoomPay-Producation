@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
+import { GRADES, SECTIONS, isValidGrade, isValidSection } from '@/lib/academic'
 
 export type StudentEditable = {
   id: string
@@ -36,6 +37,11 @@ export default function EditStudent({ student }: { student: StudentEditable }) {
   })
   const set = (k: string, v: string) => setF((p) => ({ ...p, [k]: v }))
 
+  // حماية: لو حمل الطالب قيمة قديمة غير معتمدة، اعرضها كخيار مؤقت
+  // كي لا تختفي القائمة فارغة — يراها المستخدم ويصحّحها.
+  const gradeOptions = f.grade && !isValidGrade(f.grade) ? [f.grade, ...GRADES] : [...GRADES]
+  const sectionOptions = f.section && !isValidSection(f.section) ? [f.section, ...SECTIONS] : [...SECTIONS]
+
   async function submit() {
     setErr(null)
     if (!f.full_name.trim()) { setErr('اسم الطالب مطلوب'); return }
@@ -61,6 +67,7 @@ export default function EditStudent({ student }: { student: StudentEditable }) {
 
   const label: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: '#0F2744', marginBottom: 5, display: 'block' }
   const input: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 9, border: '1px solid #E3E8EE', fontSize: 14, fontFamily: 'inherit' }
+  const select: React.CSSProperties = { ...input, background: '#fff', cursor: 'pointer' }
   const cell: React.CSSProperties = { flex: '1 1 190px' }
 
   if (!open) {
@@ -90,14 +97,25 @@ export default function EditStudent({ student }: { student: StudentEditable }) {
             <label style={label}>الاسم الكامل *</label>
             <input style={input} value={f.full_name} onChange={(e) => set('full_name', e.target.value)} />
           </div>
+
+          {/* قائمة ثابتة — تمنع تكرار الصفوف بصيغ مختلفة */}
           <div style={cell}>
             <label style={label}>الصف / المرحلة *</label>
-            <input style={input} value={f.grade} onChange={(e) => set('grade', e.target.value)} />
+            <select style={select} value={f.grade} onChange={(e) => set('grade', e.target.value)}>
+              <option value="">— اختر الصف —</option>
+              {gradeOptions.map((g) => <option key={g} value={g}>{g}</option>)}
+            </select>
           </div>
+
+          {/* قائمة ثابتة — عشر شعب بالترتيب الأبجدي */}
           <div style={cell}>
             <label style={label}>الشعبة</label>
-            <input style={input} value={f.section} onChange={(e) => set('section', e.target.value)} />
+            <select style={select} value={f.section} onChange={(e) => set('section', e.target.value)}>
+              <option value="">— اختر الشعبة —</option>
+              {sectionOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
           </div>
+
           <div style={cell}>
             <label style={label}>اسم ولي الأمر</label>
             <input style={input} value={f.guardian_name} onChange={(e) => set('guardian_name', e.target.value)} />
@@ -116,7 +134,7 @@ export default function EditStudent({ student }: { student: StudentEditable }) {
           </div>
           <div style={cell}>
             <label style={label}>الجنس</label>
-            <select style={input} value={f.gender} onChange={(e) => set('gender', e.target.value)}>
+            <select style={select} value={f.gender} onChange={(e) => set('gender', e.target.value)}>
               <option value="">—</option>
               <option value="male">ذكر</option>
               <option value="female">أنثى</option>
