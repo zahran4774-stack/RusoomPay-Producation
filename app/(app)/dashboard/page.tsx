@@ -58,11 +58,11 @@ export default async function DashboardPage() {
         <div style={{ padding: '24px 24px 0', maxWidth: 1280, margin: '0 auto' }}>
           {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
          <SchoolCopilot
-           data={copilot as any}
-           sym={curSymbol(currency)}
-           firstName={(profile?.full_name ?? '').split(' ')[0]}
-           schoolName={(school?.name ?? '') + (school?.branch ? ` — ${school.branch}` : '')}
-         />
+ data={copilot as any}
+ sym={curSymbol(currency)}
+ firstName={(profile?.full_name ?? '').split(' ')[0]}
+ schoolName={(school?.name ?? '') + (school?.branch ? ` — ${school.branch}` : '')}
+/>
         </div>
       )}
       <DashboardClient
