@@ -191,7 +191,7 @@ function CollectionChart({ months, thisYear, lastYear, sym }: {
   const fmt = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: 0 })
   const growth = lastYear > 0 ? Math.round(((thisYear - lastYear) / lastYear) * 100) : null
   const monthLabel = (ym: string) => {
-    const names = ['ينا', 'فبر', 'مار', 'أبر', 'ماي', 'يون', 'يول', 'أغس', 'سبت', 'أكت', 'نوف', 'ديس']
+    const names = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر']
     const mi = parseInt(ym.slice(5, 7), 10) - 1
     return names[mi] ?? ym.slice(5)
   }
