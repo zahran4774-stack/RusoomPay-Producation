@@ -19,7 +19,7 @@ type CopilotData = {
 const num = (n: number) => new Intl.NumberFormat('en', { maximumFractionDigits: 0 }).format(n || 0)
 const num3 = (n: number) => new Intl.NumberFormat('en', { minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(n || 0)
 
-export default function SchoolCopilot({ data, sym, firstName }: { data: CopilotData; sym: string; firstName: string }) {
+export default function SchoolCopilot({ data, sym, firstName, schoolName }: { data: CopilotData; sym: string; firstName: string; schoolName?: string }) {
   const [greeting] = useState(() => {
     const h = new Date().getHours()
     return h < 12 ? 'صباح الخير' : h < 18 ? 'مساء الخير' : 'مساء الخير'
@@ -46,13 +46,16 @@ export default function SchoolCopilot({ data, sym, firstName }: { data: CopilotD
       {/* الترويسة */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.5, color: '#6B7A90', textTransform: 'uppercase' }}>School Copilot</span>
-            <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#067647' }} />
-          </div>
-          <h2 style={{ fontSize: '1.35rem', fontWeight: 700, color: '#0F1B2D', margin: 0, letterSpacing: '-0.01em' }}>
-            {greeting}{firstName ? `، ${firstName}` : ''}
-          </h2>
+         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+<span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.5, color: '#6B7A90', textTransform: 'uppercase' }}>School Copilot</span>
+<span style={{ width: 5, height: 5, borderRadius: '50%', background: '#067647' }} />
+</div>
+         {schoolName && (
+<div style={{ fontSize: 13, fontWeight: 700, color: '#1E5C4E', marginBottom: 2 }}>{schoolName}</div>
+         )}
+<h2 style={{ fontSize: '1.35rem', fontWeight: 700, color: '#0F1B2D', margin: 0, letterSpacing: '-0.01em' }}>
+           {greeting}{firstName ? `، ${firstName}` : ''}
+</h2>
           <p style={{ fontSize: 13.5, color: '#6B7A90', margin: '3px 0 0' }}>مساعدك التنفيذي — ملخّص اليوم التشغيلي</p>
         </div>
         {/* درجة صحّة المدرسة */}
