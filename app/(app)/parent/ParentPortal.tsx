@@ -85,7 +85,12 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
   const card_: React.CSSProperties = { background: '#fff', border: '1px solid #E6EBF1', borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,.05)', marginBottom: 14 }
   const input: React.CSSProperties = { width: '100%', padding: 11, borderRadius: 10, border: '1.5px solid #DDE3EC', fontFamily: 'inherit', fontSize: 14, marginBottom: 10 }
   const tabBtn = (k: string): React.CSSProperties => ({
-  const childPill = (active: boolean): React.CSSProperties => ({
+   flex: 1, padding: '11px 8px', border: 'none', background: 'none', cursor: 'pointer',
+   fontWeight: 700, fontSize: 13.5, fontFamily: 'inherit',
+   color: tab === k ? '#0A1D33' : '#8A94A6',
+   borderBottom: tab === k ? '2.5px solid #D4A017' : '2.5px solid transparent',
+ })
+ const childPill = (active: boolean): React.CSSProperties => ({
    flexShrink: 0, padding: '8px 16px', borderRadius: 99, cursor: 'pointer',
    fontFamily: 'inherit', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap',
    border: active ? '1.5px solid #1E5C4E' : '1.5px solid #DDE3EC',
