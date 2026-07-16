@@ -22,6 +22,9 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
 }) {
   const supabase = createClient()
   const [tab, setTab] = useState<'overview' | 'fees' | 'receipts' | 'certificates' | 'notifications'>('overview')
+  // فلترة حسب الطفل المختار — تعمل على أي عنصر يحمل student_name
+ const byChild = <T extends { student_name: string }>(items: T[]) =>
+   selectedChild === 'all' ? items : items.filter((i) => i.student_name === selectedChild)
   const [payFee, setPayFee] = useState<Fee | null>(null)
   const [method, setMethod] = useState('card')
   const [amount, setAmount] = useState('')
@@ -82,6 +85,14 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
   const card_: React.CSSProperties = { background: '#fff', border: '1px solid #E6EBF1', borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,.05)', marginBottom: 14 }
   const input: React.CSSProperties = { width: '100%', padding: 11, borderRadius: 10, border: '1.5px solid #DDE3EC', fontFamily: 'inherit', fontSize: 14, marginBottom: 10 }
   const tabBtn = (k: string): React.CSSProperties => ({
+  const childPill = (active: boolean): React.CSSProperties => ({
+   flexShrink: 0, padding: '8px 16px', borderRadius: 99, cursor: 'pointer',
+   fontFamily: 'inherit', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap',
+   border: active ? '1.5px solid #1E5C4E' : '1.5px solid #DDE3EC',
+   background: active ? '#1E5C4E' : '#fff',
+   color: active ? '#fff' : '#556',
+   transition: 'all .2s ease',
+ })
     flex: 1, padding: '11px 8px', border: 'none', background: 'none', cursor: 'pointer',
     fontWeight: 700, fontSize: 13.5, fontFamily: 'inherit',
     color: tab === k ? '#0A1D33' : '#8A94A6',
@@ -137,7 +148,17 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
           <button style={tabBtn('certificates')} onClick={() => setTab('certificates')}>الشهادات</button>
           <button style={tabBtn('notifications')} onClick={() => setTab('notifications')}>الإشعارات</button>
         </div>
-
+        {/* محدد الطفل — يظهر فقط عند وجود أكثر من ابن */}
+       {children_.length > 1 && (
+<div style={{ display: 'flex', gap: 8, overflowX: 'auto', marginBottom: 14, paddingBottom: 2 }}>
+<button style={childPill(selectedChild === 'all')} onClick={() => setSelectedChild('all')}>الكل</button>
+           {children_.map((c) => (
+<button key={c.student_id} style={childPill(selectedChild === c.student_name)} onClick={() => setSelectedChild(c.student_name)}>
+               {c.student_name}
+</button>
+           ))}
+</div>
+       )}
         {/* أبنائي */}
         {tab === 'overview' && (children_.length ? children_.map((c) => (
           <div key={c.student_id} style={card_}>
@@ -164,7 +185,7 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
         )) : <div style={card_}>لا يوجد أبناء مرتبطون بحسابك. تواصل مع المدرسة لربط أبنائك.</div>)}
 
         {/* الرسوم + الدفع */}
-        {tab === 'fees' && (fees.length ? fees.map((f) => (
+        {tab === 'fees' && (byChild(fees).length ? byChild(fees).map((f) => (
           <div key={f.fee_id} style={card_}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
               <div><b style={{ color: '#0F2744' }}>{f.description}</b>
@@ -183,7 +204,7 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
         )) : <div style={card_}>لا توجد رسوم مستحقّة 🎉</div>)}
 
         {/* الإيصالات */}
-        {tab === 'receipts' && (receipts.length ? receipts.map((r) => (
+        {tab === 'receipts' && (byChild(receipts).length ? byChild(receipts).map((r) => (
           <div key={r.payment_id} style={card_}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
               <div><b style={{ color: '#0F2744' }}>{r.description}</b>
@@ -206,7 +227,7 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
         )) : <div style={card_}>لا توجد إيصالات بعد</div>)}
 
         {/* الشهادات */}
-        {tab === 'certificates' && (certificates.length ? certificates.map((c) => (
+        {tab === 'certificates' && (byChild(certificates).length ? byChild(certificates).map((c) => (
           <div key={c.id} style={card_}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
               <div><b style={{ color: '#0F2744' }}>{c.title}</b>
