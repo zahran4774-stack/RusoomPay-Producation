@@ -43,15 +43,30 @@ export default function SchoolCopilot({ data, sym, firstName, schoolName }: { da
         padding: '24px 26px', marginBottom: 22, boxShadow: '0 1px 3px rgba(16,24,40,.04)',
       }}
       dir="rtl">
-      {/* الترويسة */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+      {/* اسم المدرسة — شريط ممركز بارز */}
+      {schoolName && (
+        <div style={{ textAlign: 'center', marginBottom: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 8 }}>
             <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.5, color: '#6B7A90', textTransform: 'uppercase' }}>School Copilot</span>
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#067647' }} />
           </div>
-          {schoolName && (
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#1E5C4E', marginBottom: 2 }}>{schoolName}</div>
+          <h1 style={{
+            fontSize: 'clamp(1.6rem, 4vw, 2.4rem)', fontWeight: 800, color: '#0F1B2D',
+            margin: 0, letterSpacing: '-0.02em', lineHeight: 1.15,
+          }}>
+            {schoolName}
+          </h1>
+        </div>
+      )}
+
+      {/* الترويسة — التحية + درجة الصحة */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
+        <div>
+          {!schoolName && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.5, color: '#6B7A90', textTransform: 'uppercase' }}>School Copilot</span>
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#067647' }} />
+            </div>
           )}
           <h2 style={{ fontSize: '1.35rem', fontWeight: 700, color: '#0F1B2D', margin: 0, letterSpacing: '-0.01em' }}>
             {greeting}{firstName ? `، ${firstName}` : ''}
