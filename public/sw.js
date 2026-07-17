@@ -1,18 +1,17 @@
-// RusoomPay Service Worker — دعم العمل دون اتصال (اطّلاع على آخر بيانات)
-// استراتيجية: Network-first للصفحات (أحدث بيانات أولاً، وعند الانقطاع يعرض المخزّن)
-//             Cache-first للأصول الثابتة (خطوط، أيقونات، JS/CSS)
-const CACHE = 'edupay-v1'
+ً
+// RusoomPay Service Worker — (اﻃّﻼع ﻋﻠﻰ آﺧﺮ ﺑﯿﺎﻧﺎت) دﻋﻢ اﻟﻌﻤﻞ دون اﺗﺼﺎل.ﻟﻸﺻﻮل اﻟﺜﺎﺑﺘﺔ Cache-first ،ﻟﻠﺼﻔﺤﺎت Network-first :اﺳﺘﺮاﺗﯿﺠﯿﺔ //
+— اﻟﺪﯾﻨﺎﻣﯿﻜﯿﺔ ﺗﻤﺎﻣﺎً Next وﺑﯿﺎﻧﺎت RSC (?_rsc) ﻣﮭﻢ: ﻧﺘﺠﺎھﻞ ﻃﻠﺒﺎت //
+
+//      .اﻋﺘﺮاﺿﮭﺎ ﻛﺎن ﯾﺒﻄّﺊ ﻛﻞ ﺗﻨﻘّﻞ وﯾﺨﺰّن ﺑﯿﺎﻧﺎت دﯾﻨﺎﻣﯿﻜﯿﺔ ﺧﻄ
+ﺄ
+const CACHE = 'edupay-v2'   // رﻓﻌﻨﺎ اﻹﺻﺪار ﻟﯿُﻤﺴﺢ اﻟﻜﺎش اﻟﻘﺪﯾﻢ اﻟﻤﻠﻮّث
 const OFFLINE_URL = '/offline'
-
-// أصول أساسية تُخزّن عند التثبيت
 const PRECACHE = [OFFLINE_URL, '/manifest.webmanifest']
-
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)).then(() => self.skipWaiting())
   )
 })
-
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
@@ -20,18 +19,26 @@ self.addEventListener('activate', (event) => {
     ).then(() => self.clients.claim())
   )
 })
-
 self.addEventListener('fetch', (event) => {
   const { request } = event
-  // فقط GET — لا نخزّن عمليات الكتابة (POST/PUT) أبداً
   if (request.method !== 'GET') return
-
-  const url = new URL(request.url)
-  // لا نعترض طلبات Supabase/API — البيانات الحيّة تتطلب اتصالاً
+  const url = new URL(request.url)ﻻ ﻧﻌﺘﺮض — API ﺧﺎرج اﻷﺻﻞ، أو // 
+ 
   if (url.origin !== self.location.origin) return
-  if (url.pathname.startsWith('/api')) return
-
-  // التنقّل بين الصفحات: network-first مع fallback للصفحة المخزّنة ثم offline
+  if (url.pathname.startsWith('/api')) return═══ اﻟﺪﯾﻨﺎﻣﯿﻜﯿﺔ ﺗﻤﺎﻣﺎً Next وﺑﯿﺎﻧﺎت RSC ﺣﺮج: ﺗﺠﺎھﻞ ﻃﻠﺒﺎت ═══ // 
+ .ﻣﺒﺎﺷﺮة ﺑﻼ اﻋﺘﺮاض Next ﯾﺠﺐ أن ﺗﺼﻞ — React Server Components ھﺬه ﺗﻨﻘّﻼت // 
+ .اﻋﺘﺮاﺿﮭﺎ ﻛﺎن ﯾﺒﻄّﺊ ﻛﻞ ﻧﻘﺮة وﯾﺨﺰّن ﺑﯿﺎﻧﺎت ﻣﺘﻐﯿّﺮة ﻛﺄﻧﮭﺎ ﺛﺎﺑﺘﺔ // 
+ 
+  if (
+    url.searchParams.has('_rsc') ||
+    url.pathname.startsWith('/_next/data') ||
+    request.headers.get('RSC') === '1' ||
+    request.headers.get('Next-Router-Prefetch') === '1'
+  ) {
+    return // ًاﺗﺮك اﻟﻤﺘﺼﻔﺢ ﯾﺘﻮﻻّھﺎ ﻃﺒﯿﻌﯿﺎ
+  }
+network-first :)HTML ﺗﺤﻤﯿﻞ ﺻﻔﺤﺔ( اﻟﺘﻨﻘّﻞ اﻟﻜﺎﻣﻞ // 
+ 
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
@@ -45,9 +52,8 @@ self.addEventListener('fetch', (event) => {
         )
     )
     return
-  }
-
-  // الأصول الثابتة: cache-first
+  }cache-first :اﻷﺻﻮل اﻟﺜﺎﺑﺘﺔ ﻓﻘﻂ // 
+ 
   if (/\.(?:js|css|woff2?|png|jpg|jpeg|svg|webp|ico)$/.test(url.pathname) || url.pathname.startsWith('/_next/static')) {
     event.respondWith(
       caches.match(request).then((cached) =>
