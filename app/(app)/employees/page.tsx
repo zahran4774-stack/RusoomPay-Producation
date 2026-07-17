@@ -1,10 +1,8 @@
 // صفحة الموظفين والرواتب — مكوّن خادم
 // يجلب الموظفين وطلبات تعديل الرواتب، ويمرّرها لمكوّنات العميل التفاعلية
+// تحسين الأداء: الاستعلامات المستقلّة تُنفَّذ متوازية (Promise.all).
 import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
-<div style={{ marginBottom: 18 }}>
-<AddEmployee />
-</div>
 import EmployeesTable from './EmployeesTable'
 import AddEmployee from './AddEmployee'
 import OrgChart from './OrgChart'
@@ -20,17 +18,26 @@ export default async function EmployeesPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // الدور الحالي (يحدّد: محاسب يطلب / مدير يعتمد)
-  const { data: profile } = await supabase
-    .from('profiles').select('role').eq('id', user.id).single()
+  // ═══ كل الاستعلامات المستقلّة معاً — بدل أربع رحلات متتابعة ═══
+  const [
+    { data: profile },
+    { data: school },
+    { data: employees },
+    { data: requests },
+  ] = await Promise.all([
+    supabase.from('profiles').select('role').eq('id', user.id).single(),
+    supabase.from('schools')
+      .select('name, vat_number, country, ins_emp_rate, ins_er_rate, ins_cap, ins_expat_exempt, ins_configured')
+      .single(),
+    supabase.from('employees').select('*').order('code'),
+    supabase.from('salary_requests').select('*').eq('status', 'pending').order('created_at', { ascending: false }),
+  ])
+
   const role = profile?.role ?? 'admin'
 
   // الرواتب لطاقم المدرسة فقط — لا ولي الأمر أو الطالب
   if (!isStaff(role as Role)) redirect('/dashboard')
 
-  // نسب التأمينات الخاصة بالمدرسة (عُمان افتراضياً، قابلة للتخصيص لباقي الخليج)
-  const { data: school } = await supabase
-    .from('schools').select('name, vat_number, country, ins_emp_rate, ins_er_rate, ins_cap, ins_expat_exempt, ins_configured').single()
   const rates: InsRates = {
     emp: school?.ins_emp_rate ?? 0.08,
     er: school?.ins_er_rate ?? 0.125,
@@ -38,14 +45,6 @@ export default async function EmployeesPage() {
     expatExempt: school?.ins_expat_exempt ?? true,
   }
   const needsConfig = school && !school.ins_configured
-
-  // الموظفون (RLS يقصرها على المدرسة، والصلاحية للمدير والمحاسب)
-  const { data: employees } = await supabase
-    .from('employees').select('*').order('code')
-
-  // طلبات تعديل الرواتب المعلّقة
-  const { data: requests } = await supabase
-    .from('salary_requests').select('*').eq('status', 'pending').order('created_at', { ascending: false })
 
   const total = (employees ?? []).reduce(
     (acc, e) => {
@@ -133,8 +132,8 @@ export default async function EmployeesPage() {
 
       {/* جدول الموظفين التفاعلي */}
       <div style={{ marginBottom: 18 }}>
-<AddEmployee />
-</div>
+        <AddEmployee />
+      </div>
       <EmployeesTable employees={employees ?? []} role={role} rates={rates} />
 
       {/* الهيكل التنظيمي (شجرة الموظفين) */}
