@@ -1,5 +1,6 @@
 // صفحة الرسوم والفواتير — مكوّن خادم
 // يجلب الطلاب مع بنود رسومهم + هوية المدرسة (للفواتير)
+// تحسين الأداء: الاستعلامات المستقلّة تُنفَّذ متوازية (Promise.all).
 import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import FeesManager from './FeesManager'
@@ -15,24 +16,24 @@ export default async function FeesPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // الدور (لإظهار إعدادات الحساب البنكي للمدير فقط)
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  // ═══ كل الاستعلامات المستقلّة معاً — بدل أربع رحلات متتابعة ═══
+  const [
+    { data: profile },
+    { data: school },
+    { data: students },
+    { data: pending },
+  ] = await Promise.all([
+    supabase.from('profiles').select('role').eq('id', user.id).single(),
+    supabase.from('schools')
+      .select('name, branch, currency, cr_number, moe_license, vat_number, phone, email, address, logo_url, color, bank_name, bank_account, bank_iban, bank_holder, bank_enabled')
+      .single(),
+    supabase.from('students')
+      .select('id, code, full_name, grade, section, student_fees(id, description, total, paid, due_date)')
+      .order('code'),
+    supabase.rpc('pending_payments_list'),
+  ])
+
   const role = profile?.role ?? 'admin'
-
-  // هوية المدرسة + الحساب البنكي (تظهر في الفواتير — لا شعار المنصة)
-  const { data: school } = await supabase
-    .from('schools')
-    .select('name, branch, currency, cr_number, moe_license, vat_number, phone, email, address, logo_url, color, bank_name, bank_account, bank_iban, bank_holder, bank_enabled')
-    .single()
-
-  // الطلاب مع بنود الرسوم (RLS يقصرها على المدرسة)
-  const { data: students } = await supabase
-    .from('students')
-    .select('id, code, full_name, grade, section, student_fees(id, description, total, paid, due_date)')
-    .order('code')
-
-  // الدفعات المعلّقة بانتظار اعتماد المحاسب
-  const { data: pending } = await supabase.rpc('pending_payments_list')
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }} dir="rtl">
