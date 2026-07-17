@@ -1,60 +1,96 @@
 'use client'
-// ربط ولي أمر بطالب — يستخدمه الطاقم لربط حساب ولي أمر (مسجّل) بالطالب
+// ربط ولي الأمر بطالب — بالهاتف (يتّسق مع نظام التسجيل التلقائي)
+// الطاقم يختار طالباً، والنظام يبحث عن ولي أمر مسجّل بنفس رقم هاتف الطالب.
+// أداة احتياطية: تُستخدم لو سجّل ولي الأمر قبل إضافة الطالب،
+// فيدوياً يعيد الطاقم تشغيل الربط.
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
 
 type Student = { id: string; full_name: string; code: string }
 
 export default function LinkParent({ students }: { students: Student[] }) {
+  const router = useRouter()
   const supabase = createClient()
   const [open, setOpen] = useState(false)
   const [studentId, setStudentId] = useState('')
-  const [email, setEmail] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState('')
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [loading, setLoading] = useState(false)
 
   async function link() {
-    if (!studentId || !email.trim()) { setMsg('اختر الطالب وأدخل بريد ولي الأمر'); return }
-    setBusy(true); setMsg('')
-    const { data, error } = await supabase.rpc('link_parent_by_email', {
-      p_email: email.trim(), p_student_id: studentId,
+    if (!studentId) { setMsg({ ok: false, text: 'اختر الطالب أولاً' }); return }
+    setLoading(true); setMsg(null)
+
+    const { data, error } = await supabase.rpc('link_parent_by_student', {
+      p_student_id: studentId,
     })
-    if (error) { setMsg('تعذّر الربط: ' + error.message); setBusy(false); return }
-    setMsg(`✓ تم ربط ${data} بالطالب بنجاح`); setEmail(''); setStudentId(''); setBusy(false)
+    setLoading(false)
+
+    if (error) { setMsg({ ok: false, text: error.message }); return }
+
+    const res = (data ?? {}) as { ok?: boolean; reason?: string; phone?: string }
+    if (res.ok) {
+      setMsg({ ok: true, text: '✓ تم ربط ولي الأمر بالطالب بنجاح' })
+      setStudentId('')
+      router.refresh()
+    } else if (res.reason === 'no_parent_account') {
+      setMsg({
+        ok: false,
+        text: `لا يوجد حساب ولي أمر مسجّل بالرقم ${res.phone ?? ''}. اطلب من ولي الأمر التسجيل بنفس الرقم أولاً عبر صفحة "حساب ولي أمر".`,
+      })
+    } else if (res.reason === 'student_not_found_or_no_phone') {
+      setMsg({ ok: false, text: 'الطالب غير موجود أو لا يحمل رقم ولي أمر.' })
+    } else {
+      setMsg({ ok: false, text: 'تعذّر الربط. حاول مجدداً.' })
+    }
   }
 
-  const input: React.CSSProperties = {
-    width: '100%', padding: 11, borderRadius: 10, border: '1.5px solid #DDE3EC',
-    fontFamily: 'inherit', fontSize: 14, marginBottom: 10,
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)}
+        style={{ background: '#F2F5F8', color: '#0F2744', border: '1px solid #E3E8EE', padding: '10px 18px', borderRadius: 11, fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
+        👪 ربط ولي أمر بطالب
+      </button>
+    )
   }
 
   return (
-    <div style={{ marginBottom: 16 }} dir="rtl">
-      <button onClick={() => setOpen(!open)} style={{
-        background: '#fff', color: '#0F2744', border: '1.5px solid #DDE3EC', borderRadius: 10,
-        padding: '9px 16px', fontWeight: 600, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit',
-      }}>
-        👨‍👩‍👧 {open ? 'إخفاء' : 'ربط ولي أمر بطالب'}
-      </button>
-      {open && (
-        <div style={{ background: '#fff', border: '1px solid #E6EBF1', borderRadius: 14, padding: 18, marginTop: 10, boxShadow: '0 1px 4px rgba(0,0,0,.05)' }}>
-          <p style={{ fontSize: 13, color: '#667', margin: '0 0 14px' }}>
-            ربط حساب ولي أمر <b>مسجّل مسبقاً</b> بطالب. إن لم يكن لديه حساب، اطلب منه التسجيل بدور "ولي أمر" أولاً.
-          </p>
-          <label style={{ fontSize: 13, fontWeight: 600, color: '#445', display: 'block', marginBottom: 6 }}>الطالب</label>
-          <select style={input} value={studentId} onChange={(e) => setStudentId(e.target.value)}>
-            <option value="">اختر الطالب</option>
-            {students.map((s) => <option key={s.id} value={s.id}>{s.code} — {s.full_name}</option>)}
-          </select>
-          <label style={{ fontSize: 13, fontWeight: 600, color: '#445', display: 'block', marginBottom: 6 }}>بريد ولي الأمر</label>
-          <input style={input} type="email" dir="ltr" placeholder="parent@email.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-          {msg && <div style={{ fontSize: 13, marginBottom: 10, color: msg.startsWith('✓') ? '#1A7A45' : '#C0392B' }}>{msg}</div>}
-          <button onClick={link} disabled={busy} style={{
-            background: '#D4A017', color: '#08172B', border: 'none', borderRadius: 10,
-            padding: '11px 20px', fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit',
-          }}>{busy ? 'جارٍ الربط...' : 'ربط'}</button>
+    <div style={{ background: '#fff', border: '1px solid #E3E8EE', borderRadius: 16, padding: 20, marginBottom: 16, boxShadow: '0 8px 24px -16px rgba(10,37,64,.25)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+        <b style={{ color: '#0F2744', fontSize: 15 }}>ربط ولي أمر بطالب</b>
+        <button onClick={() => { setOpen(false); setMsg(null) }} style={{ background: 'none', border: 0, fontSize: 20, cursor: 'pointer', color: '#667' }}>×</button>
+      </div>
+      <p style={{ color: '#667', fontSize: 13, margin: '0 0 16px', lineHeight: 1.8 }}>
+        اختر الطالب، وسيبحث النظام عن حساب ولي أمر مسجّل <b>بنفس رقم هاتف ولي أمر الطالب</b> ويربطه تلقائياً.
+        عادةً يتم الربط تلقائياً عند تسجيل ولي الأمر — استخدم هذه الأداة فقط إن لزم.
+      </p>
+
+      <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#0F2744', marginBottom: 6 }}>الطالب</label>
+      <select
+        value={studentId} onChange={(e) => setStudentId(e.target.value)}
+        style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #E3E8EE', fontSize: 14, fontFamily: 'inherit', background: '#fff', cursor: 'pointer', marginBottom: 14 }}
+      >
+        <option value="">— اختر الطالب —</option>
+        {students.map((s) => (
+          <option key={s.id} value={s.id}>{s.full_name} — {s.code}</option>
+        ))}
+      </select>
+
+      {msg && (
+        <div style={{
+          borderRadius: 10, padding: '11px 14px', fontSize: 13.5, fontWeight: 600, lineHeight: 1.7, marginBottom: 14,
+          background: msg.ok ? '#EAF7F0' : '#FDECEA',
+          border: `1px solid ${msg.ok ? '#BFE5D0' : '#F3C9C2'}`,
+          color: msg.ok ? '#1A7A45' : '#A5331F',
+        }}>
+          {msg.text}
         </div>
       )}
+
+      <button onClick={link} disabled={loading}
+        style={{ background: loading ? '#8AA' : '#163B68', color: '#fff', border: 0, padding: '11px 24px', borderRadius: 10, fontWeight: 800, fontSize: 14.5, cursor: loading ? 'default' : 'pointer', fontFamily: 'inherit' }}>
+        {loading ? 'جارٍ الربط…' : 'ربط تلقائي بالهاتف'}
+      </button>
     </div>
   )
 }
