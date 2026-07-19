@@ -7,6 +7,13 @@ import { useState } from 'react'
 
 type Alert = { severity: 'high' | 'medium'; title: string; detail: string; action: string; action_label: string; href: string }
 type Reco = { title: string; reason: string; benefit: string; action_label: string; href: string }
+// توصية ذكية قابلة للتنفيذ — من smart_recommendations()
+type SmartRec = {
+  type: string; priority: number; title: string; reason: string
+  action_label: string; action: string
+  target_count: number | null; expected_amount: number | null
+}
+type ImpactData = { actions_this_month?: number; collected_this_month?: number } | null
 type CopilotData = {
   ok?: boolean
   summary: { today_collected: number; outstanding: number; collection_rate: number; pending_approvals: number; students: number; employees: number; revenue: number; expense: number }
@@ -19,7 +26,18 @@ type CopilotData = {
 const num = (n: number) => new Intl.NumberFormat('en', { maximumFractionDigits: 0 }).format(n || 0)
 const num3 = (n: number) => new Intl.NumberFormat('en', { minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(n || 0)
 
-export default function SchoolCopilot({ data, sym, firstName, schoolName }: { data: CopilotData; sym: string; firstName: string; schoolName?: string }) {
+export default function SchoolCopilot({
+  data, sym, firstName, schoolName,
+  smartRecs = [], impact = null, onAct,
+}: {
+  data: CopilotData; sym: string; firstName: string; schoolName?: string
+  // التوصيات الذكية القابلة للتنفيذ (من smart_recommendations)
+  smartRecs?: SmartRec[]
+  // أثر التوصيات هذا الشهر (من recommendations_impact)
+  impact?: ImpactData
+  // يُستدعى عند تنفيذ توصية — يسجّلها ثم ينتقل لمكان الإجراء
+  onAct?: (rec: SmartRec) => void
+}) {
   const [greeting] = useState(() => {
     const h = new Date().getHours()
     return h < 12 ? 'صباح الخير' : h < 18 ? 'مساء الخير' : 'مساء الخير'
@@ -32,7 +50,8 @@ export default function SchoolCopilot({ data, sym, firstName, schoolName }: { da
   const recommendations = data.recommendations ?? []
   const kpis = data.kpis ?? { collection_rate: 0, outstanding: 0, overdue_count: 0, pending_payments: 0, low_stock: 0 }
   const health = data.health ?? { score: 0, status: '—', breakdown: {} }
-  const nothingUrgent = alerts.length === 0 && recommendations.length === 0
+  const sorted = [...smartRecs].sort((a, b) => a.priority - b.priority)
+  const nothingUrgent = alerts.length === 0 && recommendations.length === 0 && sorted.length === 0
 
   const healthColor = health.score >= 85 ? '#067647' : health.score >= 70 ? '#1E5C4E' : health.score >= 50 ? '#B54708' : '#B42318'
 
@@ -129,8 +148,70 @@ export default function SchoolCopilot({ data, sym, firstName, schoolName }: { da
         </div>
       )}
 
-      {/* اقتراحات — الذكاء يقترح، والقرار لك */}
-      {recommendations.length > 0 && (
+      {/* ═══ توصيات ذكية — قابلة للتنفيذ، بأثر مقيس ═══ */}
+      {sorted.length > 0 && (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', margin: '0 0 4px' }}>
+            <h3 style={{ fontSize: 12, fontWeight: 700, color: '#6B7A90', textTransform: 'uppercase', letterSpacing: 0.4, margin: 0 }}>
+              الإجراءات الموصى بها
+            </h3>
+            {impact && (impact.actions_this_month ?? 0) > 0 && (
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: '#067647', background: '#F0FAF4', border: '1px solid #CDECD9', padding: '3px 11px', borderRadius: 99 }}>
+                نفّذت {num(impact.actions_this_month ?? 0)} توصية هذا الشهر · حُصّل {num3(impact.collected_this_month ?? 0)} {sym}
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: 12, color: '#8A94A6', margin: '0 0 10px' }}>
+            مرتّبة حسب الأثر المتوقّع — لا يُنفَّذ أي إجراء مالي إلا بقرارك.
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+            {sorted.slice(0, 4).map((r) => {
+              const top = r.priority === 1
+              return (
+                <div key={r.type} style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 13,
+                  padding: '14px 16px', background: '#fff',
+                  border: '1px solid ' + (top ? '#F3C9C2' : '#E7EBF0'),
+                  borderInlineStart: '4px solid ' + (top ? '#D92D20' : '#0F1B2D'),
+                  borderRadius: 13,
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 700, fontSize: 14.5, color: '#0F1B2D' }}>{r.title}</span>
+                      {top && (
+                        <span style={{ fontSize: 10.5, fontWeight: 700, color: '#D92D20', background: '#FEF0F0', padding: '2px 8px', borderRadius: 99 }}>
+                          الأهم الآن
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 12.5, color: '#6B7A90', lineHeight: 1.75, marginTop: 3 }}>{r.reason}</div>
+                    {r.expected_amount != null && (
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#067647', marginTop: 5 }}>
+                        الأثر المتوقّع: {num3(r.expected_amount)} {sym}
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => onAct?.(r)}
+                    style={{
+                      flexShrink: 0, alignSelf: 'center', cursor: 'pointer', fontFamily: 'inherit',
+                      fontSize: 12.5, fontWeight: 600, color: '#fff',
+                      background: top ? '#D92D20' : '#0F1B2D',
+                      border: 0, borderRadius: 8, padding: '8px 15px', whiteSpace: 'nowrap',
+                    }}>
+                    {r.action_label}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* اقتراحات محرّك القواعد (احتياطي — تظهر فقط إن لم تتوفّر توصيات ذكية) */}
+      {sorted.length === 0 && recommendations.length > 0 && (
         <div>
           <h3 style={{ fontSize: 12, fontWeight: 700, color: '#6B7A90', textTransform: 'uppercase', letterSpacing: 0.4, margin: '0 0 4px' }}>اقتراحات</h3>
           <div style={{ fontSize: 12, color: '#8A94A6', margin: '0 0 10px' }}>
