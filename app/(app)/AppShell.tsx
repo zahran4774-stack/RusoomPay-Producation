@@ -10,7 +10,7 @@ import WhatsAppSupport from './WhatsAppSupport'
 import { LogoMark } from '../Logo'
 import {
   LayoutDashboard, GraduationCap, ReceiptText, Users, Apple, Bus,
-  Package, BarChart3, ClipboardList, Gem, MessageCircle, Settings,Wallets,type LucideIcon,
+  Package, BarChart3, ClipboardList, Gem, MessageCircle, Settings,Wallet,type LucideIcon,
 } from 'lucide-react'
 
 type NavItem = { href: string; icon: LucideIcon; label: string; show: (r: Role) => boolean }
