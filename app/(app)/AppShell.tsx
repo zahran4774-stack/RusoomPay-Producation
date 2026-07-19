@@ -1,5 +1,6 @@
 'use client'
 // قشرة التطبيق — لوحي+: شريط جانبي ثابت · جوال: درج منزلق مع همبرغر وخلفية معتمة
+// هوية المدرسة: لون brandColor يُحقن كمتغيّرات CSS فيلوّن الرابط النشط والشعار.
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -29,7 +30,36 @@ const NAV: NavItem[] = [
   { href: '/settings', icon: Settings, label: 'الإعدادات والأمان', show: () => true },
 ]
 
-export default function AppShell({ role, children }: { role: Role; children: React.ReactNode }) {
+const DEFAULT_BRAND = '#0F9D74'
+
+// تحويل #RRGGBB إلى "r,g,b" — لبناء درجات شفافة
+function toRgb(hex: string): string | null {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
+  if (!m) return null
+  const n = parseInt(m[1], 16)
+  return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`
+}
+
+// درجة أفتح من اللون — لنصّ الرابط النشط فوق خلفية داكنة (تباين مقروء)
+function lighten(hex: string, amount = 0.45): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
+  if (!m) return '#6FE0B8'
+  const n = parseInt(m[1], 16)
+  const mix = (c: number) => Math.round(c + (255 - c) * amount)
+  const r = mix((n >> 16) & 255), g = mix((n >> 8) & 255), b = mix(n & 255)
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`
+}
+
+export default function AppShell({ role, brandColor, schoolLogo, schoolName, children }: {
+  role: Role
+  /** لون هوية المدرسة من الإعدادات (#RRGGBB) — يُستخدم للتمييز */
+  brandColor?: string | null
+  /** شعار المدرسة المرفوع من الإعدادات */
+  schoolLogo?: string | null
+  /** اسم المدرسة — يظهر تحت الشعار */
+  schoolName?: string | null
+  children: React.ReactNode
+}) {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const items = NAV.filter((n) => n.show(role))
@@ -43,12 +73,22 @@ export default function AppShell({ role, children }: { role: Role; children: Rea
     return () => { document.body.style.overflow = '' }
   }, [open])
 
+  // بناء متغيّرات اللون — تتجاوز قيم :root الافتراضية
+  const brand = (brandColor && toRgb(brandColor)) ? brandColor.trim() : DEFAULT_BRAND
+  const rgb = toRgb(brand) ?? '15,157,116'
+  const brandVars = {
+    '--brand': brand,
+    '--brand-soft': lighten(brand),
+    '--brand-tint-22': `rgba(${rgb},.22)`,
+    '--brand-tint-08': `rgba(${rgb},.08)`,
+  } as React.CSSProperties
+
   return (
-    <div className="layout">
+    <div className="layout" style={brandVars}>
       {/* شريط علوي للجوال */}
       <header className="app-header">
         <div className="topbar">
-          <div className="brand"><LogoMark size={30} /> <span>Rusoom<span style={{ color: '#0F9D74' }}>Pay</span></span></div>
+          <div className="brand"><LogoMark size={30} /> <span>Rusoom<span style={{ color: 'var(--brand)' }}>Pay</span></span></div>
           <button className="menu-btn" onClick={() => setOpen(true)} aria-label="فتح القائمة">☰</button>
         </div>
       </header>
@@ -59,7 +99,22 @@ export default function AppShell({ role, children }: { role: Role; children: Rea
       {/* الشريط الجانبي / الدرج */}
       <aside className={`app-sidebar ${open ? 'open' : ''}`}>
         <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
-          <div className="side-brand"><LogoMark size={32} /> <span>Rusoom<span style={{ color: '#0F9D74' }}>Pay</span></span></div>
+          <div className="side-brand"><LogoMark size={32} /> <span>Rusoom<span style={{ color: 'var(--brand)' }}>Pay</span></span></div>
+
+          {/* هوية المدرسة — شعارها واسمها، حاضران في كل صفحة */}
+          {(schoolLogo || schoolName) && (
+            <div className="school-identity">
+              {schoolLogo
+                ? <img src={schoolLogo} alt="" className="school-logo" />
+                : (
+                  <span className="school-logo school-logo-fallback" style={{ background: 'var(--brand)' }}>
+                    {(schoolName ?? '').trim().charAt(0) || '؟'}
+                  </span>
+                )}
+              {schoolName && <span className="school-name" title={schoolName}>{schoolName}</span>}
+            </div>
+          )}
+
           <nav className="side-nav">
             {items.map((n) => (
               <Link key={n.href} href={n.href} className={`side-link ${isActive(n.href) ? 'active' : ''}`}>
