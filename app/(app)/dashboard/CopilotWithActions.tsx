@@ -17,7 +17,7 @@ const ROUTES: Record<string, string> = {
   send_overdue_reminders: '/fees#overdue',
   view_partial: '/fees',
   view_nofee: '/students',
-  invite_parents: '/students',
+  invite_parents: '/students#invite-parents',
 }
 
 export default function CopilotWithActions({
