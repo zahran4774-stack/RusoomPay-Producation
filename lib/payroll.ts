@@ -8,7 +8,7 @@ export type InsRates = { emp: number; er: number; cap: number | null; expatExemp
 export function payslip(basic: number, allow: number, nat: string, rates: InsRates) {
   const gross = basic + allow
   const base = rates.cap != null ? Math.min(gross, rates.cap) : gross
-  const exempt = nat !== 'om' && rates.expatExempt
+  const exempt =  nat?.toUpperCase() !== 'OM'&& rates.expatExempt
   const empContrib = exempt ? 0 : Math.round(base * rates.emp * 1000) / 1000
   const erContrib = exempt ? 0 : Math.round(base * rates.er * 1000) / 1000
   const net = Math.round((gross - empContrib) * 1000) / 1000
