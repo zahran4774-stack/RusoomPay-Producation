@@ -11,7 +11,7 @@ import {
 type Data = Record<string, number>
 
 export default function DashboardClient({
-  userName, roleLabel, role, schoolName, sym, canFinance, isStaff, data, analytics, recent,
+  roleLabel, role, sym, canFinance, isStaff, data, analytics, recent,
 }: {
   userName: string; roleLabel: string; role: string; schoolName: string
   currency?: string; sym: string; canFinance: boolean; isStaff: boolean; data: Data
@@ -21,8 +21,6 @@ export default function DashboardClient({
   const fmt = (n: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
   const int = (n: number) => (n ?? 0).toLocaleString('en-US')
   const collection = data.collection_rate ?? 100
-  const hour = new Date().getHours()
-  const greet = hour < 12 ? 'صباح الخير' : 'مساء الخير'
 
   // التنبيهات التشغيلية (تحتاج إجراءً الآن) — دائماً أول ما يُرى
   const alerts: { icon: LucideIcon; text: string; href: string; tone: 'amber' | 'red' }[] = []
@@ -45,12 +43,8 @@ export default function DashboardClient({
         @media(prefers-reduced-motion:reduce){.ep-quicklink,.ep-alert,.ep-kpi,.ep-tl-item{transition:none}}
       `}</style>
 
-      {/* ═══ الترويسة — مضغوطة، الاسم هو البطل ═══ */}
-      <div style={{ marginBottom: 20, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-        <div>
-          <div style={{ fontSize: 13, color: '#8A94A6' }}>{schoolName}</div>
-          <h1 style={{ color: '#0F2744', fontSize: 25, margin: '3px 0 0', lineHeight: 1.3 }}>{greet}، {userName}</h1>
-        </div>
+      {/* شارة الدور فقط — التحية واسم المدرسة يعرضهما Copilot أعلاه (تفادي التكرار) */}
+      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-start' }}>
         <span style={{ fontSize: 12.5, color: '#fff', background: '#163B68', padding: '3px 12px', borderRadius: 99, fontWeight: 600 }}>{roleLabel}</span>
       </div>
 
