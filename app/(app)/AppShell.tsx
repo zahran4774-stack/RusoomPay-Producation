@@ -10,7 +10,7 @@ import WhatsAppSupport from './WhatsAppSupport'
 import { LogoMark } from '../Logo'
 import {
   LayoutDashboard, GraduationCap, ReceiptText, Users, Apple, Bus,
-  Package, BarChart3, ClipboardList, Gem, MessageCircle, Settings, type LucideIcon,
+  Package, BarChart3, ClipboardList, Gem, MessageCircle, Settings,Wallets,type LucideIcon,
 } from 'lucide-react'
 
 type NavItem = { href: string; icon: LucideIcon; label: string; show: (r: Role) => boolean }
@@ -20,6 +20,7 @@ const NAV: NavItem[] = [
   { href: '/students', icon: GraduationCap, label: 'الطلاب', show: (r) => isStaff(r) },
   { href: '/fees', icon: ReceiptText, label: 'الرسوم والفواتير', show: (r) => isStaff(r) },
   { href: '/employees', icon: Users, label: 'الموظفون والرواتب', show: (r) => isStaff(r) },
+  { href: '/payroll', icon: Wallet, label: 'دورات الرواتب', show: (r) => canAccessFinance(r) },
   { href: '/cafeteria', icon: Apple, label: 'التغذية المدرسية', show: (r) => isStaff(r) },
   { href: '/transport', icon: Bus, label: 'النقل المدرسي', show: (r) => isStaff(r) },
   { href: '/inventory', icon: Package, label: 'المخزون', show: (r) => isStaff(r) },
