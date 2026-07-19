@@ -3,12 +3,14 @@
 // تحسين الأداء: الاستعلامات المستقلّة تُنفَّذ متوازية (Promise.all).
 import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
-import { isStaff, type Role } from '@/lib/roles'
+import { isStaff, isOwner, type Role } from '@/lib/roles'
 import PrintButton from '../PrintButton'
 import LinkParent from './LinkParent'
 import StudentsByClass from './StudentsByClass'
 import AddStudent from './AddStudent'
 import ImportStudents from './ImportStudents'
+import PromoteStudents from './PromoteStudents'
+import InviteParents from './InviteParents'
 
 export default async function StudentsPage() {
   const supabase = await createClient()
@@ -32,7 +34,8 @@ export default async function StudentsPage() {
   ])
 
   // التحقّق من الصلاحية بعد الجلب (الجلب المتوازي أسرع من التحقّق المتسلسل)
-  if (!isStaff((myRole ?? profile?.role) as Role)) redirect('/dashboard')
+  const role = (myRole ?? profile?.role) as Role
+  if (!isStaff(role)) redirect('/dashboard')
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }} dir="rtl">
@@ -70,6 +73,17 @@ export default async function StudentsPage() {
       <div style={{ marginBottom: 18, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         <AddStudent />
         <ImportStudents />
+        <div id="invite-parents" style={{ scrollMarginTop: 80 }}>
+          <InviteParents schoolName={school?.name ?? undefined} />
+        </div>
+        {isOwner(role) && (
+          <PromoteStudents
+            students={(students ?? []).map((s) => ({
+              id: s.id, code: s.code, full_name: s.full_name,
+              grade: s.grade, section: s.section, status: s.status,
+            }))}
+          />
+        )}
       </div>
 
       <LinkParent students={(students ?? []).map((s) => ({ id: s.id, full_name: s.full_name, code: s.code }))} />
