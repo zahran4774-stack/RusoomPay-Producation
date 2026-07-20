@@ -40,7 +40,13 @@ export default async function PayrollPage() {
             توليد الرواتب الشهرية، اعتمادها محاسبياً، وتصدير ملف حماية الأجور
           </p>
         </div>
-        <NewRunButton />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+<Link href="/payroll/settings"
+               style={{ color: '#1B4F8A', fontSize: 14, fontWeight: 600, textDecoration: 'none' }}>
+           ⚙ إعدادات حماية الأجور
+</Link>
+<NewRunButton />
+</div>
       </div>
 
       {(!runs || runs.length === 0) ? (
