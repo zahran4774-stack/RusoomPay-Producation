@@ -80,7 +80,7 @@ export default function EmployeesTable({ employees, role, rates }: { employees: 
                 <tr key={e.id} style={{ borderBottom: '1px solid #EEF2F1' }}>
                   <td style={{ padding: 12, fontWeight: 700 }}>{e.code}</td>
                   <td style={{ padding: 12 }}>{e.full_name}</td>
-                  <td style={{ padding: 12 }}>{e.nationality === 'om' ? 'عُماني' : 'وافد'}</td>
+                  <td style={{ padding: 12 }}>{e.nationality?.toUpperCase() === 'OM' ? 'مواطن' : 'وافد'}</td>
                   <td style={{ padding: 12 }}>{fmt(e.basic)}</td>
                   <td style={{ padding: 12 }}>{fmt(e.allowance)}</td>
                   <td style={{ padding: 12 }}>{fmt(p.emp)}</td>
