@@ -1,5 +1,6 @@
 'use client'
-// مكوّن النقل المدرسي — باصات (جهة دفع) + اشتراكات + فوترة
+// مكوّن النقل المدرسي — باصات (جهة دفع) + اشتراكات
+// رسوم النقل تدرج ضمن الرسوم الدراسية السنوية عند تسجيل الطالب — لا فوترة شهرية منفصلة
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import { printReport, type SchoolHeader } from '@/lib/print-report'
@@ -49,7 +50,10 @@ export default function TransportClient({ initialBuses, initialSubscribers, stud
 
   const [selStudent, setSelStudent] = useState('')
   const [selBus, setSelBus] = useState('')
-  const [month, setMonth] = useState('2026-06')
+
+  const schoolRevenue = buses
+    .filter((b) => b.pay_to === 'school')
+    .reduce((a, b) => a + Number(b.fee ?? 0) * Number(b.subscribers ?? 0), 0)
 
   async function refresh() {
     const [{ data: b }, { data: s }] = await Promise.all([
@@ -79,21 +83,25 @@ export default function TransportClient({ initialBuses, initialSubscribers, stud
   }
 
   async function removeSub(studentId: string) {
-    setBusy(true); await supabase.rpc('unsubscribe_bus', { p_student: studentId }); await refresh(); setBusy(false)
-  }
-
-  async function bill() {
     setBusy(true); setMsg('')
-    const { data, error } = await supabase.rpc('bill_transport', { p_month: month })
+    const { error } = await supabase.rpc('unsubscribe_bus', { p_student: studentId })
     if (error) { setMsg('خطأ: ' + error.message); setBusy(false); return }
-    await refresh(); setMsg(`⚡ صدرت ${data} فاتورة نقل لشهر ${month}`); setBusy(false)
+    await refresh(); setBusy(false)
   }
 
   return (
     <>
-      {msg && <div style={{ ...card, padding: 12, marginBottom: 12, color: msg.startsWith('✓') || msg.startsWith('⚡') ? '#1A7A45' : '#C0392B' }}>{msg}</div>}
+      {msg && <div style={{ ...card, padding: 12, marginBottom: 12, color: msg.startsWith('✓') ? '#1A7A45' : '#C0392B' }}>{msg}</div>}
 
-      {/* الباصات */}
+      <div style={{ background: '#EEF3F9', border: '1px solid #DDE5EF', borderRadius: 12,
+                    padding: '12px 14px', marginBottom: 16, fontSize: 13, color: '#37506F' }}>
+        <b style={{ color: '#0F2744' }}>آلية تحصيل رسوم النقل</b>
+        <div style={{ marginTop: 4 }}>
+          رسم النقل يُدرج ضمن إجمالي الرسوم الدراسية السنوية عند تسجيل الطالب — يُحدَّد نوع النقل من شاشة الطلاب.
+          لا توجد فوترة شهرية منفصلة للنقل.
+        </div>
+      </div>
+
       <div style={card}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <h3 style={{ margin: 0, color: '#0F2744', fontSize: 16 }}>الباصات</h3>
@@ -112,12 +120,13 @@ export default function TransportClient({ initialBuses, initialSubscribers, stud
             })} style={{ background: '#fff', color: '#0F2744', border: '1.5px solid #DDE3EC', borderRadius: 9, padding: '7px 14px', fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>🖨 طباعة</button>
           )}
         </div>
+
         {buses.length > 0 && (
           <div style={{ overflowX: 'auto', marginBottom: 16 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 620 }}>
               <thead>
                 <tr style={{ background: '#F7F9FC', textAlign: 'right' }}>
-                  {['المسار', 'السائق', 'السعة', 'الرسم', 'المشتركون', 'جهة الدفع'].map((h) => (
+                  {['المسار', 'السائق', 'السعة', 'الرسم', 'المشتركون', 'الإيراد الشهري', 'جهة الدفع'].map((h) => (
                     <th key={h} style={{ padding: '10px 12px', fontSize: 13, color: '#69757F' }}>{h}</th>
                   ))}
                 </tr>
@@ -125,13 +134,23 @@ export default function TransportClient({ initialBuses, initialSubscribers, stud
               <tbody>
                 {buses.map((b) => {
                   const p = PAY_LABEL[b.pay_to] || PAY_LABEL.school
+                  const rev = Number(b.fee ?? 0) * Number(b.subscribers ?? 0)
+                  const full = b.subscribers >= b.capacity
                   return (
                     <tr key={b.id} style={{ borderTop: '1px solid #F2F5F8' }}>
                       <td style={{ padding: '10px 12px', fontWeight: 600, color: '#0F2744' }}>{b.route}</td>
                       <td style={{ padding: '10px 12px' }}>{b.driver}</td>
                       <td style={{ padding: '10px 12px' }}>{b.capacity}</td>
                       <td style={{ padding: '10px 12px' }}>{fmt(b.fee)}</td>
-                      <td style={{ padding: '10px 12px' }}>{b.subscribers}</td>
+                      <td style={{ padding: '10px 12px' }}>
+                        <span style={{ color: full ? '#8A2B2B' : '#334', fontWeight: full ? 700 : 400 }}>
+                          {b.subscribers}
+                        </span>
+                        {full && <span style={{ fontSize: 11, color: '#8A2B2B', marginInlineStart: 5 }}>مكتمل</span>}
+                      </td>
+                      <td style={{ padding: '10px 12px', fontWeight: 600 }}>
+                        {b.pay_to === 'school' ? fmt(rev) : '—'}
+                      </td>
                       <td style={{ padding: '10px 12px' }}>
                         <span style={{ background: p.bg, color: p.c, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 99 }}>{p.t}</span>
                       </td>
@@ -140,8 +159,17 @@ export default function TransportClient({ initialBuses, initialSubscribers, stud
                 })}
               </tbody>
             </table>
+
+            {schoolRevenue > 0 && (
+              <div style={{ marginTop: 10, padding: '10px 12px', background: '#F7F9FC', borderRadius: 10,
+                            display: 'flex', justifyContent: 'space-between', fontSize: 13.5 }}>
+                <span style={{ color: '#556' }}>إيراد النقل عبر المدرسة</span>
+                <b style={{ color: '#0F2744' }}>{fmt(schoolRevenue)} شهرياً</b>
+              </div>
+            )}
           </div>
         )}
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <div><label style={lbl}>المسار</label><input style={input} value={route} onChange={(e) => setRoute(e.target.value)} placeholder="مسار الخوض — الموالح" /></div>
           <div><label style={lbl}>اسم السائق</label><input style={input} value={driver} onChange={(e) => setDriver(e.target.value)} placeholder="اسم السائق" /></div>
@@ -149,19 +177,18 @@ export default function TransportClient({ initialBuses, initialSubscribers, stud
           <div><label style={lbl}>الرسم الشهري</label><input style={input} type="number" step="0.001" value={fee} onChange={(e) => setFee(e.target.value)} placeholder="25.000" /></div>
           <div style={{ gridColumn: '1 / -1' }}><label style={lbl}>جهة تحصيل رسوم النقل</label>
             <select style={input} value={payTo} onChange={(e) => setPayTo(e.target.value)}>
-              <option value="school">المدرسة (يدخل كإيراد للمدرسة)</option>
+              <option value="school">المدرسة (ضمن الرسوم الدراسية)</option>
               <option value="driver">السائق مباشرةً (لا يدخل حسابات المدرسة)</option>
-              <option value="private">يتوفر توصيل خاص (ترتيب خاص — خارج فوترة المدرسة)</option>
+              <option value="private">توصيل خاص (ترتيب خاص — خارج حسابات المدرسة)</option>
             </select>
           </div>
         </div>
         <div style={{ fontSize: 12, color: '#8A94A6', margin: '10px 0' }}>
-          💡 "السائق مباشرة" و"توصيل خاص" لا تُفوتران ضمن إيرادات المدرسة.
+          💡 "السائق مباشرة" و"توصيل خاص" لا تدخلان إيرادات المدرسة.
         </div>
         <button style={btnGold} onClick={addBus} disabled={busy}>＋ إضافة باص</button>
       </div>
 
-      {/* اشتراك طالب */}
       <div style={card}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <h3 style={{ margin: 0, color: '#0F2744', fontSize: 16 }}>تسجيل اشتراك طالب</h3>
@@ -210,23 +237,6 @@ export default function TransportClient({ initialBuses, initialSubscribers, stud
             </table>
           </div>
         )}
-      </div>
-
-      {/* الفوترة */}
-      <div style={card}>
-        <h3 style={{ margin: '0 0 14px', color: '#0F2744', fontSize: 16 }}>الفوترة الشهرية</h3>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'end', flexWrap: 'wrap' }}>
-          <div><label style={lbl}>شهر الفوترة</label>
-            <select style={input} value={month} onChange={(e) => setMonth(e.target.value)}>
-              <option value="2026-06">يونيو 2026</option>
-              <option value="2026-09">سبتمبر 2026</option>
-              <option value="2026-10">أكتوبر 2026</option>
-            </select></div>
-          <button style={btnGold} onClick={bill} disabled={busy}>⚡ فوترة النقل لكل المشتركين</button>
-        </div>
-        <p style={{ fontSize: 12, color: '#8A94A6', marginTop: 10 }}>
-          💡 تُفوتر باصات "المدرسة" فقط (إيراد 4210). باصات السائق المباشر والتوصيل الخاص لا تُفوتر.
-        </p>
       </div>
     </>
   )
