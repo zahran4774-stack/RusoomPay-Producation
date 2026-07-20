@@ -79,7 +79,7 @@ export default async function EmployeesPage() {
             ]}
             rows={(employees ?? []).map((e) => ({
               code: e.code, name: e.full_name, title: e.job_title ?? '—',
-              nationality: e.nationality === 'expat' ? 'وافد' : 'مواطن',
+              nationality: e.nationality?.toUpperCase() === 'OM' ? 'مواطن' : 'وافد',
               basic: (e.basic ?? 0).toFixed(3), allowance: (e.allowance ?? 0).toFixed(3),
               iban: e.iban ?? '—',
             }))}
