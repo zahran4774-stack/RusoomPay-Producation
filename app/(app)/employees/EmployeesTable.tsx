@@ -14,7 +14,7 @@ type Emp = {
 
 function payslip(basic: number, allow: number, nat: string, rates: InsRates) {
   const base = rates.cap != null ? Math.min(basic + allow, rates.cap) : basic + allow
-  const exempt = nat !== 'om' && rates.expatExempt
+  const exempt = nat?.toUpperCase() !== 'OM' && rates.expatExempt
   return {
     emp: exempt ? 0 : Math.round(base * rates.emp * 1000) / 1000,
     er: exempt ? 0 : Math.round(base * rates.er * 1000) / 1000,
@@ -53,7 +53,7 @@ export default function EmployeesTable({ employees, role, rates }: { employees: 
       // المدير: تعديل مباشر معتمد
       await supabase.from('employees').update({
         full_name: form.full_name, job_title: form.job_title, nationality: form.nationality,
-        basic: form.basic, allowance: form.allowance, iban: form.iban,
+        basic_salary: form.basic, other_allowance: form.allowance, iban: form.iban,
       }).eq('id', form.id)
       setMsg('✓ تم تحديث بيانات الموظف')
     }
@@ -82,7 +82,7 @@ export default function EmployeesTable({ employees, role, rates }: { employees: 
                 <tr key={e.id} style={{ borderBottom: '1px solid #EEF2F1' }}>
                   <td style={{ padding: 12, fontWeight: 700 }}>{e.code}</td>
                   <td style={{ padding: 12 }}>{e.full_name}</td>
-                  <td style={{ padding: 12 }}>{e.nationality === 'om' ? 'عُماني' : 'وافد'}</td>
+                  <td style={{ padding: 12 }}>{e.nationality?.toUpperCase() === 'OM' ? 'عُماني' : 'وافد'}</td>
                   <td style={{ padding: 12 }}>{fmt(e.basic)}</td>
                   <td style={{ padding: 12 }}>{fmt(e.allowance)}</td>
                   <td style={{ padding: 12 }}>{fmt(p.emp)}</td>
@@ -133,8 +133,8 @@ function EditModal({ emp, role, onSave, onClose }: { emp: Emp; role: string; onS
         <input value={form.full_name} onChange={(e) => set('full_name', e.target.value)} style={inp} />
 
         <label style={{ fontSize: 13, fontWeight: 600 }}>الجنسية</label>
-        <select value={form.nationality} onChange={(e) => set('nationality', e.target.value)} style={inp}>
-          <option value="om">عُماني</option><option value="expat">وافد</option>
+        <select value={form.nationality?.toUpperCase() === 'OM' ? 'OM' : 'NON_OM'} onChange={(e) => set('nationality', e.target.value)} style={inp}>
+          <option value="OM">عُماني</option><option value="NON_OM">وافد</option>
         </select>
 
         <label style={{ fontSize: 13, fontWeight: 600 }}>الراتب الأساسي</label>
