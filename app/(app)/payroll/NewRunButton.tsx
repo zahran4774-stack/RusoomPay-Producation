@@ -7,13 +7,7 @@ import { createClient } from '@/lib/supabase-client'
 const MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو',
                 'يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر']
 
-<div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-<Link href="/payroll/settings"
-               style={{ color: '#1B4F8A', fontSize: 14, fontWeight: 600, textDecoration: 'none' }}>
-           ⚙ إعدادات حماية الأجور
-</Link>
-<NewRunButton />
-</div>
+export default function NewRunButton() {
   const router = useRouter()
   const now = new Date()
   const [open, setOpen] = useState(false)
