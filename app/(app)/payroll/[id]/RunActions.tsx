@@ -74,7 +74,16 @@ export default function RunActions({
           {busy === 'pay_payroll_run' ? 'جارٍ…' : '💸 تسجيل الصرف'}
         </button>
       )}
-
+{(status === 'approved' || status === 'paid') && role === 'owner' && (
+<button onClick={() => {
+                 const reason = prompt('سبب الإلغاء:')
+                 if (reason === null) return
+                 call('cancel_payroll_run', { p_run_id: runId, p_reason: reason }, 'إلغاء الدورة')
+               }}
+               disabled={busy !== null} style={btn('#8A2B2B')}>
+         {busy === 'cancel_payroll_run' ? 'جارٍ…' : '↺ إلغاء بقيد عكسي'}
+</button>
+     )}
       <button onClick={exportWps} disabled={busy !== null || hasIssues}
               title={hasIssues ? 'أكمل البيانات الناقصة أولاً' : ''}
               style={btn(hasIssues ? '#B4BCC8' : '#1B4F8A')}>
