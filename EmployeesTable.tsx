@@ -12,7 +12,7 @@ type Emp = {
 
 function payslip(basic: number, allow: number, nat: string, rates: InsRates) {
   const base = rates.cap != null ? Math.min(basic + allow, rates.cap) : basic + allow
-  const exempt = nat !== 'om' && rates.expatExempt
+  const exempt = nat?.toUpperCase() !== 'OM' && rates.expatExempt
   return {
     emp: exempt ? 0 : Math.round(base * rates.emp * 1000) / 1000,
     er: exempt ? 0 : Math.round(base * rates.er * 1000) / 1000,
