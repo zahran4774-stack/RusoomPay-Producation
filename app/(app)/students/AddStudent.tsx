@@ -15,7 +15,7 @@ export default function AddStudent() {
   const [f, setF] = useState({
     full_name: '', grade: '', section: '', guardian_name: '',
     country_code: DEFAULT_COUNTRY, guardian_phone: '', guardian_email: '',
-    birth_date: '', gender: '', code: '', annual_fee: '',
+    birth_date: '', gender: '', code: '', annual_fee: '', transport_type: 'none',
   })
 
   const set = (k: string, v: string) => setF((p) => ({ ...p, [k]: v }))
@@ -49,11 +49,16 @@ export default function AddStudent() {
       p_gender: f.gender || null,
       p_code: f.code || null,
       p_annual_fee: f.annual_fee ? Number(f.annual_fee) : 0,
+      p_transport_type: f.transport_type,
     })
     setSaving(false)
     if (error) { setErr(error.message); return }
     setOk(true)
-    setF({ full_name: '', grade: '', section: '', guardian_name: '', country_code: DEFAULT_COUNTRY, guardian_phone: '', guardian_email: '', birth_date: '', gender: '', code: '', annual_fee: '' })
+    setF({
+      full_name: '', grade: '', section: '', guardian_name: '',
+      country_code: DEFAULT_COUNTRY, guardian_phone: '', guardian_email: '',
+      birth_date: '', gender: '', code: '', annual_fee: '', transport_type: 'none',
+    })
     router.refresh()
     setTimeout(() => { setOk(false); setOpen(false) }, 1200)
   }
@@ -146,10 +151,12 @@ export default function AddStudent() {
           <label style={label}>بريد ولي الأمر</label>
           <input style={input} value={f.guardian_email} onChange={(e) => set('guardian_email', e.target.value)} placeholder="parent@email.com" dir="ltr" />
         </div>
+
         <div style={cell}>
           <label style={label}>تاريخ الميلاد</label>
           <input type="date" style={input} value={f.birth_date} onChange={(e) => set('birth_date', e.target.value)} dir="ltr" />
         </div>
+
         <div style={cell}>
           <label style={label}>الجنس</label>
           <select style={select} value={f.gender} onChange={(e) => set('gender', e.target.value)}>
@@ -158,9 +165,25 @@ export default function AddStudent() {
             <option value="female">أنثى</option>
           </select>
         </div>
+
         <div style={cell}>
           <label style={label}>الرسوم السنوية (ر.ع)</label>
           <input type="number" style={input} value={f.annual_fee} onChange={(e) => set('annual_fee', e.target.value)} placeholder="0" dir="ltr" />
+        </div>
+
+        <div style={cell}>
+          <label style={label}>نوع النقل</label>
+          <select style={select} value={f.transport_type} onChange={(e) => set('transport_type', e.target.value)}>
+            <option value="none">لا يستخدم نقلاً</option>
+            <option value="school">نقل المدرسة</option>
+            <option value="driver">يدفع للسائق مباشرة</option>
+            <option value="private">توصيل خاص</option>
+          </select>
+          {f.transport_type === 'school' && (
+            <div style={{ fontSize: 12, color: '#8A6D0F', marginTop: 5 }}>
+              ⚠️ تأكد أن الرسوم السنوية أعلاه تشمل رسم النقل
+            </div>
+          )}
         </div>
       </div>
 
