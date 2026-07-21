@@ -1,5 +1,5 @@
 'use client'
-// منح موظف صلاحية دخول للنظام — ينشئ دعوة ببريده تلقائياً
+// منح موظف صلاحية دخول للنظام — ينشئ دعوة ببريده ويرسلها عبر Resend
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
@@ -16,6 +16,7 @@ export default function GrantAccess({
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const [ok, setOk] = useState(false)
+  const [mailFailed, setMailFailed] = useState(false)
 
   // بلا بريد → لا يمكن منح الدخول
   if (!email || !email.trim()) {
@@ -28,11 +29,27 @@ export default function GrantAccess({
       p_employee_id: employeeId,
       p_role: role,
     })
+
+    if (error) { setBusy(false); setErr(error.message); return }
+
+    // إرسال بريد الدعوة — الصلاحية مُنحت بنجاح حتى لو فشل البريد
+    let mailed = true
+    try {
+      const res = await fetch('/api/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, name: employeeName, role }),
+      })
+      if (!res.ok) mailed = false
+    } catch {
+      mailed = false
+    }
+
     setBusy(false)
-    if (error) { setErr(error.message); return }
     setOk(true)
+    setMailFailed(!mailed)
     router.refresh()
-    setTimeout(() => { setOk(false); setOpen(false) }, 2200)
+    setTimeout(() => { setOk(false); setMailFailed(false); setOpen(false) }, 3000)
   }
 
   const input: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 9, border: '1px solid #E3E8EE', fontSize: 14, fontFamily: 'inherit' }
@@ -65,14 +82,22 @@ export default function GrantAccess({
           <option value="admin">إداري — الطلاب والموظفون</option>
         </select>
 
-                <div style={{ background: '#F7FAFC', border: '1px solid #E3E8EE', borderRadius: 10, padding: '12px 14px', margin: '14px 0', fontSize: 12.5, color: '#667', lineHeight: 1.8 }}>
-          بعد المنح، أخبر الموظف بالتسجيل في المنصة بنفس هذا البريد —
-          سيُربَط بمدرستك ودوره تلقائياً عند أول دخول.
+        <div style={{ background: '#F7FAFC', border: '1px solid #E3E8EE', borderRadius: 10, padding: '12px 14px', margin: '14px 0', fontSize: 12.5, color: '#667', lineHeight: 1.8 }}>
+          ستُرسَل دعوة على بريد الموظف. عليه التسجيل بنفس البريد،
+          فيُربَط بمدرستك ودوره تلقائياً عند أول دخول.
         </div>
 
-
         {err && <div style={{ color: '#C0392B', marginBottom: 12, fontWeight: 600, fontSize: 13 }}>⚠ {err}</div>}
-        {ok && <div style={{ color: '#067647', marginBottom: 12, fontWeight: 700, fontSize: 13 }}>✓ مُنحت الصلاحية — أخبره بالتسجيل بنفس البريد</div>}
+        {ok && !mailFailed && (
+          <div style={{ color: '#067647', marginBottom: 12, fontWeight: 700, fontSize: 13 }}>
+            ✓ مُنحت الصلاحية وأُرسلت الدعوة على بريده
+          </div>
+        )}
+        {ok && mailFailed && (
+          <div style={{ color: '#8A6D0F', marginBottom: 12, fontWeight: 700, fontSize: 13, lineHeight: 1.7 }}>
+            ✓ مُنحت الصلاحية — لكن تعذّر إرسال البريد، أخبره بالتسجيل يدوياً بنفس بريده
+          </div>
+        )}
 
         <div style={{ display: 'flex', gap: 10 }}>
           <button onClick={grant} disabled={busy}
