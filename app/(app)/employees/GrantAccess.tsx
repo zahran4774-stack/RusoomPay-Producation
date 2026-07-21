@@ -65,10 +65,11 @@ export default function GrantAccess({
           <option value="admin">إداري — الطلاب والموظفون</option>
         </select>
 
-        <div style={{ background: '#F7FAFC', border: '1px solid #E3E8EE', borderRadius: 10, padding: '12px 14px', margin: '14px 0', fontSize: 12.5, color: '#667', lineHeight: 1.8 }}>
-          سيُرسَل دعوة لهذا البريد. على الموظف تسجيل حساب بنفس البريد،
-          فيُربَط بمدرستك ودوره تلقائياً عند أول دخول.
+                <div style={{ background: '#F7FAFC', border: '1px solid #E3E8EE', borderRadius: 10, padding: '12px 14px', margin: '14px 0', fontSize: 12.5, color: '#667', lineHeight: 1.8 }}>
+          بعد المنح، أخبر الموظف بالتسجيل في المنصة بنفس هذا البريد —
+          سيُربَط بمدرستك ودوره تلقائياً عند أول دخول.
         </div>
+
 
         {err && <div style={{ color: '#C0392B', marginBottom: 12, fontWeight: 600, fontSize: 13 }}>⚠ {err}</div>}
         {ok && <div style={{ color: '#067647', marginBottom: 12, fontWeight: 700, fontSize: 13 }}>✓ مُنحت الصلاحية — أخبره بالتسجيل بنفس البريد</div>}
