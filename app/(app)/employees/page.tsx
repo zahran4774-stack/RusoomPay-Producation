@@ -137,8 +137,9 @@ export default async function EmployeesPage() {
       <EmployeesTable employees={employees ?? []} role={role} rates={rates} />
 
       {/* الهيكل التنظيمي (شجرة الموظفين) */}
-      <div style={{ marginTop: 18 }}>
-        employees={(employees ?? []).map((e) => ({
+     <div style={{ marginTop: 18 }}>
+        <OrgChart
+          employees={(employees ?? []).map((e) => ({
             id: e.id, code: e.code, full_name: e.full_name,
             job_title: e.job_title ?? null, photo_url: e.photo_url ?? null, manager_id: e.manager_id ?? null,
             department: e.department ?? null, org_level: e.org_level ?? null,
