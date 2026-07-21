@@ -21,16 +21,6 @@ const DEPTS = [
 
 const VISIBLE = 3
 
-function initials(name: string) {
-  const t = (name ?? '').trim()
-  if (!t) return '؟'
-  const parts = t.split(/\s+/)
-  if (/[a-zA-Z]/.test(t)) {
-    return (parts[0]?.[0] ?? '').concat(parts[1]?.[0] ?? '').toLowerCase() || t[0].toLowerCase()
-  }
-  return t.slice(0, 2)
-}
-
 export default function OrgChart({ employees, canEdit }: { employees: Emp[]; canEdit?: boolean }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
@@ -65,7 +55,7 @@ export default function OrgChart({ employees, canEdit }: { employees: Emp[]; can
         <>
           <div style={{ display: 'flex', justifyContent: 'center' }}>
             <div style={chiefCard}>
-              <Avatar emp={chief} size={32} bg="#D4A017" fg="#08172B" />
+              {chief.photo_url && <Photo src={chief.photo_url} size={32} />}
               <div>
                 <div style={{ fontWeight: 700, fontSize: 13.5 }}>{chief.full_name}</div>
                 <div style={{ fontSize: 10.5, opacity: 0.75 }}>{chief.job_title ?? 'مدير المدرسة'}</div>
@@ -98,8 +88,8 @@ export default function OrgChart({ employees, canEdit }: { employees: Emp[]; can
               </div>
               <div style={{ padding: 8 }}>
                 {d.lead && (
-                  <div style={leadCard}>
-                    <Avatar emp={d.lead} size={24} bg={d.color} fg="#fff" />
+                  <div style={{ ...leadCard, borderInlineStartWidth: 3, borderInlineStartColor: d.color, borderInlineStartStyle: 'solid' }}>
+                    {d.lead.photo_url && <Photo src={d.lead.photo_url} size={24} />}
                     <div style={{ minWidth: 0 }}>
                       <div style={leadName}>{d.lead.full_name}</div>
                       <div style={leadRole}>{d.lead.job_title ?? '—'}</div>
@@ -111,7 +101,7 @@ export default function OrgChart({ employees, canEdit }: { employees: Emp[]; can
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                     {shown.map((m) => (
                       <div key={m.id} style={memberCard}>
-                        <Avatar emp={m} size={21} bg="#EEF3F9" fg="#5A6B80" />
+                        {m.photo_url && <Photo src={m.photo_url} size={21} />}
                         <div style={{ minWidth: 0 }}>
                           <div style={memberName}>{m.full_name}</div>
                           <div style={memberRole}>{m.job_title ?? '—'}</div>
@@ -163,21 +153,11 @@ export default function OrgChart({ employees, canEdit }: { employees: Emp[]; can
   )
 }
 
-function Avatar({ emp, size, bg, fg }: { emp: Emp; size: number; bg: string; fg: string }) {
-  if (emp.photo_url) {
-    return (
-      <img src={emp.photo_url} alt=""
-        style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-    )
-  }
+// الصورة الشخصية — تظهر فقط لمن رفع صورة، ولا بديل نصّي
+function Photo({ src, size }: { src: string; size: number }) {
   return (
-    <span style={{
-      width: size, height: size, borderRadius: '50%', background: bg, color: fg,
-      display: 'grid', placeItems: 'center', fontWeight: 700,
-      fontSize: Math.round(size * 0.42), flexShrink: 0,
-    }}>
-      {initials(emp.full_name)}
-    </span>
+    <img src={src} alt=""
+      style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
   )
 }
 
@@ -187,7 +167,7 @@ const box: React.CSSProperties = {
 }
 const chiefCard: React.CSSProperties = {
   background: '#0F2744', color: '#fff', borderRadius: 11,
-  padding: '9px 16px', display: 'flex', alignItems: 'center', gap: 9,
+  padding: '10px 20px', display: 'flex', alignItems: 'center', gap: 9,
 }
 const stem: React.CSSProperties = { width: 2, height: 14, background: '#DDE3EC', margin: '0 auto' }
 const bar: React.CSSProperties = { height: 2, background: '#DDE3EC', width: '66.66%', margin: '0 auto' }
@@ -208,7 +188,7 @@ const countPill: React.CSSProperties = {
 }
 const leadCard: React.CSSProperties = {
   background: '#fff', border: '1px solid #DDE5EF', borderRadius: 8,
-  padding: '6px 8px', display: 'flex', alignItems: 'center', gap: 7, marginBottom: 7,
+  padding: '7px 9px', display: 'flex', alignItems: 'center', gap: 7, marginBottom: 7,
 }
 const leadName: React.CSSProperties = {
   fontWeight: 700, fontSize: 12, lineHeight: 1.25,
@@ -220,7 +200,7 @@ const leadRole: React.CSSProperties = {
 }
 const memberCard: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 6,
-  padding: '4px 7px', borderRadius: 7, background: '#fff', border: '1px solid #EEF2F7',
+  padding: '6px 9px', borderRadius: 7, background: '#fff', border: '1px solid #EEF2F7',
 }
 const memberName: React.CSSProperties = {
   fontSize: 11.5, fontWeight: 600,
