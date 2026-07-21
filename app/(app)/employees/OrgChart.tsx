@@ -51,6 +51,12 @@ export default function OrgChart({ employees, canEdit }: { employees: Emp[]; can
 
   return (
     <div style={box}>
+      {!chief && (
+        <div style={{ background: '#FBF3D5', border: '1px solid #EAD9A0', borderRadius: 10,
+                      padding: '10px 12px', marginBottom: 12, fontSize: 12.5, color: '#8A6D0F' }}>
+          لم يُحدَّد مدير المدرسة بعد — اختر الموظف المناسب واضبط مستواه على «مدير المدرسة» من زر التعديل
+        </div>
+      )}
       {chief && (
         <>
           <div style={{ display: 'flex', justifyContent: 'center' }}>
