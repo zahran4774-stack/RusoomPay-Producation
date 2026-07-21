@@ -253,7 +253,7 @@ export default function ControlCenter({ overview, revenue, subscriptions, pendin
         <div>
           <SecLabel>صحّة خدمات المنصة</SecLabel>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 12, marginBottom: 20 }}>
-            {[['الواجهة الأمامية', 'ok'], ['الخادم (API)', 'ok'], ['قاعدة البيانات', 'ok'], ['بوابة الدفع', 'pending'], ['خدمة البريد', 'pending'], ['الإشعارات', 'pending']].map(([name, st]) => (
+            {[['الواجهة الأمامية', 'ok'], ['الخادم (API)', 'ok'], ['قاعدة البيانات', 'ok'], ['بوابة الدفع', 'pending'], ['خدمة البريد', 'ok'], ['الإشعارات', 'pending']].map(([name, st]) => (
               <div key={name} style={{ background: '#fff', borderRadius: 13, padding: 16, boxShadow: '0 1px 4px rgba(0,0,0,.07)', display: 'flex', alignItems: 'center', gap: 11 }}>
                 <span style={{ width: 11, height: 11, borderRadius: '50%', background: st === 'ok' ? '#27AE60' : '#D4A017', flexShrink: 0 }} />
                 <div>
