@@ -10,6 +10,8 @@ type Emp = {
   id: string; code: string; full_name: string; job_title: string | null
   nationality: string; basic: number; allowance: number; iban: string | null
   email?: string | null
+  department?: string | null
+  org_level?: number | null
 }
 
 function payslip(basic: number, allow: number, nat: string, rates: InsRates) {
@@ -44,6 +46,8 @@ export default function EmployeesTable({ employees, role, rates }: { employees: 
         p_job_title: form.job_title,
         p_nationality: form.nationality,
         p_iban: form.iban,
+        p_department: form.department,
+        p_org_level: form.org_level,
       })
       if (e1) { setErr(e1.message); return }
 
@@ -67,6 +71,8 @@ export default function EmployeesTable({ employees, role, rates }: { employees: 
         p_basic: form.basic,
         p_allowance: form.allowance,
         p_iban: form.iban,
+        p_department: form.department,
+        p_org_level: form.org_level,
       })
       if (error) { setErr(error.message); return }
       setMsg('✓ تم تحديث بيانات الموظف')
@@ -132,10 +138,13 @@ function EditModal({ emp, role, onSave, onClose }: { emp: Emp; role: string; onS
   const [form, setForm] = useState<Emp>({
     ...emp,
     nationality: emp.nationality?.toUpperCase() === 'OM' ? 'OM' : 'NON_OM',
+    department: emp.department ?? 'teaching',
+    org_level: emp.org_level ?? 3,
   })
   const [saving, setSaving] = useState(false)
   const set = (k: keyof Emp, v: string | number) => setForm({ ...form, [k]: v })
-  const inp = { width: '100%', padding: 10, margin: '5px 0 12px', borderRadius: 9, border: '1.5px solid #DDE3EC' }
+  const inp: React.CSSProperties = { width: '100%', padding: 10, margin: '5px 0 12px', borderRadius: 9, border: '1.5px solid #DDE3EC', fontFamily: 'inherit', fontSize: 14 }
+  const lbl: React.CSSProperties = { fontSize: 13, fontWeight: 600 }
 
   async function submit() {
     setSaving(true)
@@ -145,7 +154,7 @@ function EditModal({ emp, role, onSave, onClose }: { emp: Emp; role: string; onS
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,39,68,.5)', display: 'grid', placeItems: 'center', padding: 16, zIndex: 100 }} dir="rtl">
-      <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: 'min(92vw, 440px)' }}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: 'min(92vw, 460px)', maxHeight: '90vh', overflowY: 'auto' }}>
         <h3 style={{ color: '#0F2744', marginBottom: 14 }}>تعديل: {emp.full_name}</h3>
 
         {role === 'accountant' && (
@@ -154,24 +163,49 @@ function EditModal({ emp, role, onSave, onClose }: { emp: Emp; role: string; onS
           </div>
         )}
 
-        <label style={{ fontSize: 13, fontWeight: 600 }}>الاسم</label>
+        <label style={lbl}>الاسم</label>
         <input value={form.full_name} onChange={(e) => set('full_name', e.target.value)} style={inp} />
 
-        <label style={{ fontSize: 13, fontWeight: 600 }}>الجنسية</label>
+        <label style={lbl}>المسمّى الوظيفي</label>
+        <input value={form.job_title ?? ''} onChange={(e) => set('job_title', e.target.value)} style={inp} placeholder="معلّم رياضيات" />
+
+        <div style={{ background: '#F7F9FC', borderRadius: 10, padding: '12px 12px 2px', margin: '0 0 12px' }}>
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: '#1B4F8A', marginBottom: 8 }}>الهيكل التنظيمي</div>
+
+          <label style={lbl}>القسم</label>
+          <select value={form.department ?? 'teaching'} onChange={(e) => set('department', e.target.value)} style={inp}>
+            <option value="management">الإدارة العليا</option>
+            <option value="admin">إداري ومالي</option>
+            <option value="teaching">الهيئة التدريسية</option>
+            <option value="support">خدمات مساندة</option>
+          </select>
+
+          <label style={lbl}>المستوى</label>
+          <select value={form.org_level ?? 3} onChange={(e) => set('org_level', Number(e.target.value))} style={inp}>
+            <option value={1}>مدير المدرسة</option>
+            <option value={2}>رئيس قسم</option>
+            <option value={3}>موظف</option>
+          </select>
+          <p style={{ fontSize: 11.5, color: '#8A94A6', margin: '-6px 0 10px' }}>
+            مدير المدرسة يظهر في قمة الهيكل — واحد فقط لكل مدرسة
+          </p>
+        </div>
+
+        <label style={lbl}>الجنسية</label>
         <select value={form.nationality} onChange={(e) => set('nationality', e.target.value)} style={inp}>
           <option value="OM">عُماني</option>
           <option value="NON_OM">وافد</option>
         </select>
 
-        <label style={{ fontSize: 13, fontWeight: 600 }}>الراتب الأساسي</label>
+        <label style={lbl}>الراتب الأساسي</label>
         <input type="number" value={form.basic} onChange={(e) => set('basic', parseFloat(e.target.value) || 0)} style={inp} />
 
-        <label style={{ fontSize: 13, fontWeight: 600 }}>البدلات</label>
+        <label style={lbl}>البدلات</label>
         <input type="number" value={form.allowance} onChange={(e) => set('allowance', parseFloat(e.target.value) || 0)} style={inp} />
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
-          <button onClick={onClose} disabled={saving} style={{ padding: '10px 18px', background: '#F0F3F8', border: 'none', borderRadius: 9, cursor: 'pointer' }}>إلغاء</button>
-          <button onClick={submit} disabled={saving} style={{ padding: '10px 18px', background: saving ? '#8AA' : '#163B68', color: '#fff', border: 'none', borderRadius: 9, cursor: saving ? 'default' : 'pointer', fontWeight: 700 }}>
+          <button onClick={onClose} disabled={saving} style={{ padding: '10px 18px', background: '#F0F3F8', border: 'none', borderRadius: 9, cursor: 'pointer', fontFamily: 'inherit' }}>إلغاء</button>
+          <button onClick={submit} disabled={saving} style={{ padding: '10px 18px', background: saving ? '#8AA' : '#163B68', color: '#fff', border: 'none', borderRadius: 9, cursor: saving ? 'default' : 'pointer', fontWeight: 700, fontFamily: 'inherit' }}>
             {saving ? 'جارٍ الحفظ…' : role === 'accountant' ? 'إرسال للاعتماد' : 'حفظ'}
           </button>
         </div>
