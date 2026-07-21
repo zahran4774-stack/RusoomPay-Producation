@@ -1,8 +1,8 @@
 'use client'
-// مدير الرسوم — يعرض بنود كل طالب، وزر فاتورة منفصلة لكل بند
+// مدير الرسوم — بحث وتصفية + بنود كل طالب، وزر فاتورة منفصلة لكل بند
 // الفاتورة تحمل هوية المدرسة (لا المنصة) · المتبقي يُخفى عند الطباعة/التنزيل
-import { useState } from 'react'
-import { generateInvoice } from  '@/lib/invoice-pdf'
+import { useState, useMemo } from 'react'
+import { generateInvoice } from '@/lib/invoice-pdf'
 import CashPayment from './CashPayment'
 const CUR_DEC: Record<string, number> = { OMR: 3, KWD: 3, BHD: 3, SAR: 2, AED: 2, QAR: 2 }
 const CUR_SYM: Record<string, string> = { OMR: 'ر.ع', SAR: 'ر.س', AED: 'د.إ', QAR: 'ر.ق', KWD: 'د.ك', BHD: 'د.ب' }
@@ -19,21 +19,139 @@ type School = {
 
 export default function FeesManager({ students, school, currency }: { students: Student[]; school: School; currency: string }) {
   const [invoice, setInvoice] = useState<{ student: Student; fee: Fee } | null>(null)
+  const [q, setQ] = useState('')
+  const [grade, setGrade] = useState('')
+  const [overdueOnly, setOverdueOnly] = useState(false)
+
   const dec = CUR_DEC[currency] ?? 3
   const sym = CUR_SYM[currency] ?? 'ر.ع'
   const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec })
 
+  // قائمة الصفوف الفريدة للتصفية
+  const grades = useMemo(
+    () => Array.from(new Set(students.map((s) => s.grade).filter(Boolean))).sort(),
+    [students]
+  )
+
+  // التصفية: الاسم/الرقم · الصف · المتأخرات فقط
+  const filtered = useMemo(() => {
+    const term = q.trim().toLowerCase()
+    return students.filter((s) => {
+      if (grade && s.grade !== grade) return false
+
+      if (term) {
+        const hay = `${s.full_name} ${s.code} ${s.section ?? ''}`.toLowerCase()
+        if (!hay.includes(term)) return false
+      }
+
+      if (overdueOnly) {
+        const fees = s.student_fees ?? []
+        const remain = fees.reduce((a, f) => a + ((f.total ?? 0) - (f.paid ?? 0)), 0)
+        if (remain <= 0.0005) return false
+      }
+
+      return true
+    })
+  }, [students, q, grade, overdueOnly])
+
+  // ملخص النتائج المعروضة
+  const summary = useMemo(() => {
+    let tot = 0, paid = 0
+    filtered.forEach((s) => (s.student_fees ?? []).forEach((f) => {
+      tot += f.total ?? 0; paid += f.paid ?? 0
+    }))
+    return { tot, paid, remain: tot - paid }
+  }, [filtered])
+
+  const active = q.trim() !== '' || grade !== '' || overdueOnly
+
+  const inp: React.CSSProperties = {
+    padding: '10px 12px', borderRadius: 10, border: '1.5px solid #DDE3EC',
+    fontSize: 14, fontFamily: 'inherit', background: '#fff',
+  }
+
   return (
     <div>
-      {students.map((s) => {
+      {/* شريط البحث والتصفية */}
+      <div style={{ background: '#fff', borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="🔍 ابحث بالاسم أو الرقم المدرسي أو الشعبة"
+            style={{ ...inp, flex: '1 1 260px' }}
+          />
+
+          <select value={grade} onChange={(e) => setGrade(e.target.value)}
+                  style={{ ...inp, flex: '0 1 180px', cursor: 'pointer' }}>
+            <option value="">كل الصفوف</option>
+            {grades.map((g) => <option key={g} value={g}>{g}</option>)}
+          </select>
+
+          <button
+            onClick={() => setOverdueOnly((v) => !v)}
+            style={{
+              ...inp, cursor: 'pointer', fontWeight: 700,
+              border: `1.5px solid ${overdueOnly ? '#C0392B' : '#DDE3EC'}`,
+              background: overdueOnly ? '#FBE9E9' : '#fff',
+              color: overdueOnly ? '#8A2B2B' : '#445',
+            }}>
+            {overdueOnly ? '✓ ' : ''}المتأخرات فقط
+          </button>
+
+          {active && (
+            <button
+              onClick={() => { setQ(''); setGrade(''); setOverdueOnly(false) }}
+              style={{ ...inp, cursor: 'pointer', color: '#667', border: '1.5px solid #EEF2F7' }}>
+              ✕ مسح
+            </button>
+          )}
+        </div>
+
+        {active && (
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #EEF2F7',
+                        display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap',
+                        gap: 8, fontSize: 13.5 }}>
+            <span style={{ color: '#556' }}>
+              {filtered.length} من {students.length} طالب
+            </span>
+            <span style={{ color: '#556' }}>
+              الإجمالي <b style={{ color: '#0F2744' }}>{fmt(summary.tot)}</b> ·
+              {' '}المحصّل <b style={{ color: '#1A7A45' }}>{fmt(summary.paid)}</b> ·
+              {' '}المتبقي <b style={{ color: summary.remain > 0.0005 ? '#C0392B' : '#1A7A45' }}>{fmt(summary.remain)}</b> {sym}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* لا نتائج */}
+      {filtered.length === 0 && (
+        <div style={{ background: '#fff', borderRadius: 14, padding: 32, textAlign: 'center',
+                      color: '#8A94A6', boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
+          {students.length === 0 ? 'لا يوجد طلاب بعد' : 'لا نتائج مطابقة — جرّب تعديل البحث'}
+        </div>
+      )}
+
+      {filtered.map((s) => {
         const fees = s.student_fees ?? []
         const tot = fees.reduce((a, f) => a + f.total, 0)
         const paid = fees.reduce((a, f) => a + f.paid, 0)
+        const remain = tot - paid
         return (
           <div key={s.id} style={{ background: '#fff', borderRadius: 14, padding: 18, marginBottom: 14, boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
-            <div style={{ fontWeight: 700, color: '#0F2744' }}>{s.full_name}</div>
-            <div style={{ fontSize: 13, color: '#667', marginBottom: 12 }}>
-              {s.code} · الصف {s.grade}{s.section ? ` - ${s.section}` : ''}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontWeight: 700, color: '#0F2744' }}>{s.full_name}</div>
+                <div style={{ fontSize: 13, color: '#667', marginBottom: 12 }}>
+                  {s.code} · الصف {s.grade}{s.section ? ` - ${s.section}` : ''}
+                </div>
+              </div>
+              {remain > 0.0005 && (
+                <span style={{ background: '#FBE9E9', color: '#8A2B2B', fontSize: 12,
+                               fontWeight: 700, padding: '4px 10px', borderRadius: 20 }}>
+                  متبقٍ {fmt(remain)} {sym}
+                </span>
+              )}
             </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
               <thead>
@@ -52,17 +170,17 @@ export default function FeesManager({ students, school, currency }: { students: 
                       <td style={{ padding: '8px' }}>{f.description}</td>
                       <td style={{ padding: '8px' }}>{fmt(f.total)}</td>
                       <td style={{ padding: '8px' }}>{fmt(f.paid)}</td>
-                      <td style={{ padding: '8px' }}>{fmt(due)}</td>
+                      <td style={{ padding: '8px', color: due > 0.0005 ? '#C0392B' : '#1A7A45', fontWeight: due > 0.0005 ? 600 : 400 }}>{fmt(due)}</td>
                       <td style={{ padding: '8px' }}>
                         <button onClick={() => setInvoice({ student: s, fee: f })}
                           title="طباعة فاتورة هذا البند"
                           style={{ background: '#FBF3D5', border: '1px solid #E8D9A4', borderRadius: 8, padding: '4px 9px', cursor: 'pointer' }}>
                           🧾
-                        </button> 
+                        </button>
                       </td>
                       <td style={{ padding: '8px' }}>
-<CashPayment fee={f} studentName={s.full_name} currency={currency} sym={sym} dec={dec} />
-</td>
+                        <CashPayment fee={f} studentName={s.full_name} currency={currency} sym={sym} dec={dec} />
+                      </td>
                     </tr>
                   )
                 })}
@@ -101,7 +219,7 @@ function InvoiceModal({ student, fee, school, sym, fmt, onClose }: {
   async function downloadPDF() {
     setPdfBusy(true)
     try {
-  generateInvoice({
+      generateInvoice({
         school: { name: scName, vat: school?.vat_number, address: school?.address, phone: school?.phone },
         invoiceNo: ref,
         paidAt: new Date().toISOString(),
