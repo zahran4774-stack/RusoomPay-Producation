@@ -80,7 +80,7 @@ export async function POST(req: Request) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: `${schoolName} <no-reply@rusoompay.com>`,
+        from: 'RusoomPay <onboarding@resend.dev>',
         to: [email],
         subject: `دعوة للانضمام إلى نظام ${schoolName}`,
         html,
@@ -90,7 +90,7 @@ export async function POST(req: Request) {
     if (!res.ok) {
       const detail = await res.text()
       console.error('Resend error:', detail)
-      return NextResponse.json({ error: 'تعذّر إرسال البريد' }, { status: 502 })
+      return NextResponse.json({ error: 'تعذّر إرسال البريد', detail }, { status: 502 })
     }
 
     return NextResponse.json({ ok: true })
