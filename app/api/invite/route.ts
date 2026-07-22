@@ -1,5 +1,4 @@
 // إرسال بريد دعوة موظف عبر Resend
-// يُستدعى من GrantAccess بعد نجاح منح الصلاحية في قاعدة البيانات
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 
@@ -10,7 +9,6 @@ const ROLE_AR: Record<string, string> = {
 
 export async function POST(req: Request) {
   try {
-    // التحقق من الهوية — المدير فقط
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
@@ -34,12 +32,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'خدمة البريد غير مُهيّأة' }, { status: 500 })
     }
 
-    // اسم المدرسة للترويسة
     const { data: school } = await supabase
       .from('schools').select('name').eq('id', profile.school_id).single()
     const schoolName = school?.name ?? 'مدرستك'
 
-    const signupUrl = 'https://rusoompay.com/signup'
+    const signupUrl = 'https://rusoompay.com'
     const roleAr = ROLE_AR[role] ?? 'موظف'
 
     const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
@@ -51,30 +48,25 @@ export async function POST(req: Request) {
       <div style="font-size:19px;font-weight:800">${schoolName}</div>
       <div style="font-size:12.5px;opacity:.75;margin-top:3px">دعوة للانضمام إلى نظام إدارة المدرسة</div>
     </div>
-
     <div style="padding:26px 24px">
       <p style="font-size:15px;margin:0 0 14px">مرحباً ${name}،</p>
       <p style="font-size:14px;line-height:1.9;color:#445;margin:0 0 18px">
         تمت دعوتك للانضمام إلى نظام <b>${schoolName}</b> بصلاحية <b>${roleAr}</b>.
         لتفعيل حسابك، سجّل في المنصة باستخدام هذا البريد بالذات:
       </p>
-
       <div style="background:#F7F9FC;border:1px solid #E3E8EE;border-radius:10px;padding:13px 16px;margin-bottom:20px;text-align:center">
         <div style="font-size:11.5px;color:#8A94A6;margin-bottom:4px">بريد التسجيل</div>
         <div style="font-size:15px;font-weight:700;color:#0F2744;direction:ltr">${email}</div>
       </div>
-
       <div style="text-align:center;margin-bottom:20px">
         <a href="${signupUrl}" style="display:inline-block;background:#163B68;color:#fff;text-decoration:none;padding:13px 34px;border-radius:11px;font-size:15px;font-weight:800">
-          إنشاء الحساب
+          الدخول إلى المنصة
         </a>
       </div>
-
       <div style="background:#FBF3D5;border:1px solid #EAD9A0;border-radius:10px;padding:13px 16px;font-size:12.5px;color:#8A6D0F;line-height:1.8">
         ⚠️ استخدم نفس البريد أعلاه عند التسجيل — سيُربط حسابك بالمدرسة وصلاحيتك تلقائياً عند أول دخول.
       </div>
     </div>
-
     <div style="border-top:1px solid #EEF2F7;padding:16px 24px;font-size:11.5px;color:#9AA7B8;text-align:center">
       صادر عن نظام RusoomPay لإدارة المدارس
     </div>
