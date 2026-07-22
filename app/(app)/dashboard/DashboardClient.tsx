@@ -31,17 +31,31 @@ export default function DashboardClient({
 
   return (
     <div style={{ maxWidth: 1080, margin: '0 auto' }} dir="rtl">
-      <style>{`
-        .ep-quicklink{transition:border-color .15s,transform .15s,box-shadow .15s}
-        .ep-quicklink:hover{border-color:#163B68;transform:translateY(-2px);box-shadow:0 8px 20px -8px rgba(15,39,68,.25)}
-        .ep-alert{transition:transform .15s,box-shadow .15s}
-        .ep-alert:hover{transform:translateX(-3px);box-shadow:0 6px 18px -8px rgba(15,39,68,.18)}
-        .ep-kpi{transition:transform .15s,box-shadow .15s}
-        .ep-kpi:hover{transform:translateY(-3px);box-shadow:0 10px 26px -12px rgba(15,39,68,.2)}
-        .ep-tl-item{transition:background .15s}
-        .ep-tl-item:hover{background:#F8FAFC}
-        @media(prefers-reduced-motion:reduce){.ep-quicklink,.ep-alert,.ep-kpi,.ep-tl-item{transition:none}}
-      `}</style>
+
+     <style>{`
+  .ep-quicklink{transition:border-color .15s,transform .15s,box-shadow .15s}
+  .ep-quicklink:hover{border-color:#163B68;transform:translateY(-2px);box-shadow:0 8px 20px -8px rgba(15,39,68,.25)}
+  .ep-alert{transition:transform .15s,box-shadow .15s}
+  .ep-alert:hover{transform:translateX(-3px);box-shadow:0 6px 18px -8px rgba(15,39,68,.18)}
+  .ep-kpi{transition:transform .15s,box-shadow .15s}
+  .ep-kpi:hover{transform:translateY(-3px);box-shadow:0 10px 26px -12px rgba(15,39,68,.2)}
+  .ep-tl-item{transition:background .15s}
+  .ep-tl-item:hover{background:#F8FAFC}
+
+  /* نبضة للتنبيه العاجل فقط — لطيفة، تلفت النظر بلا إزعاج */
+  .ep-alert-urgent{animation:epPulse 2s ease-in-out infinite}
+  @keyframes epPulse{
+    0%,100%{box-shadow:0 0 0 0 rgba(165,51,31,.30)}
+    50%{box-shadow:0 0 0 6px rgba(165,51,31,0)}
+  }
+  .ep-alert-urgent .ep-alert-ico{animation:epIcoPulse 2s ease-in-out infinite}
+  @keyframes epIcoPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
+
+  @media(prefers-reduced-motion:reduce){
+    .ep-quicklink,.ep-alert,.ep-kpi,.ep-tl-item{transition:none}
+    .ep-alert-urgent,.ep-alert-urgent .ep-alert-ico{animation:none}
+  }
+`}</style>
 
       {/* شارة الدور فقط — التحية واسم المدرسة يعرضهما Copilot أعلاه (تفادي التكرار) */}
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-start' }}>
@@ -53,21 +67,24 @@ export default function DashboardClient({
         <div style={{ display: 'grid', gap: 8, marginBottom: 20 }}>
           {alerts.map((a, i) => {
             const AlertIcon = a.icon
-            return (
-              <Link key={i} href={a.href} className="ep-alert" style={{
-                display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none',
-                background: a.tone === 'red' ? '#FDECEA' : '#FBF3D5',
-                border: `1px solid ${a.tone === 'red' ? '#F3C9C2' : '#EAD9A0'}`,
-                borderRadius: 12, padding: '12px 16px',
-              }}>
-                <AlertIcon size={20} strokeWidth={2} color={a.tone === 'red' ? '#A5331F' : '#7A5C0A'} />
-                <span style={{ flex: 1, color: a.tone === 'red' ? '#A5331F' : '#7A5C0A', fontWeight: 600, fontSize: 14.5 }}>{a.text}</span>
-                <span style={{ color: '#8A94A6', fontSize: 18 }}>‹</span>
-              </Link>
+            return (>
             )
           })}
         </div>
       )}
+<Link key={i} href={a.href}
+  className={`ep-alert${a.tone === 'red' ? ' ep-alert-urgent' : ''}`}
+  style={{
+    display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none',
+    background: a.tone === 'red' ? '#FDECEA' : '#FBF3D5',
+    border: `1px solid ${a.tone === 'red' ? '#F3C9C2' : '#EAD9A0'}`,
+    borderRadius: 12, padding: '12px 16px',
+  }}>
+  <AlertIcon className="ep-alert-ico" size={20} strokeWidth={2}
+    color={a.tone === 'red' ? '#A5331F' : '#7A5C0A'} />
+  <span style={{ flex: 1, color: a.tone === 'red' ? '#A5331F' : '#7A5C0A', fontWeight: 600, fontSize: 14.5 }}>{a.text}</span>
+  <span style={{ color: '#8A94A6', fontSize: 18 }}>‹</span>
+</Link>
 
       {/* ═══ 2) مؤشرات الأداء — أرقام أكبر، هي مركز اللوحة ═══ */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 12, marginBottom: 12 }}>
