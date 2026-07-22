@@ -29,7 +29,7 @@ export default function DashboardClient({
   if (isStaff && (data.overdue_count ?? 0) > 0)
     alerts.push({ icon: TriangleAlert, text: `${data.overdue_count} فاتورة متأخّرة عن موعد السداد`, href: '/fees', tone: 'red' })
 
-  return (
+  returnث (
     <div style={{ maxWidth: 1080, margin: '0 auto' }} dir="rtl">
 
      <style>{`
@@ -67,24 +67,25 @@ export default function DashboardClient({
         <div style={{ display: 'grid', gap: 8, marginBottom: 20 }}>
           {alerts.map((a, i) => {
             const AlertIcon = a.icon
-            return (>
-            )
-          })}
-        </div>
-      )}
-<Link key={i} href={a.href}
-  className={`ep-alert${a.tone === 'red' ? ' ep-alert-urgent' : ''}`}
-  style={{
-    display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none',
-    background: a.tone === 'red' ? '#FDECEA' : '#FBF3D5',
-    border: `1px solid ${a.tone === 'red' ? '#F3C9C2' : '#EAD9A0'}`,
-    borderRadius: 12, padding: '12px 16px',
-  }}>
-  <AlertIcon className="ep-alert-ico" size={20} strokeWidth={2}
-    color={a.tone === 'red' ? '#A5331F' : '#7A5C0A'} />
-  <span style={{ flex: 1, color: a.tone === 'red' ? '#A5331F' : '#7A5C0A', fontWeight: 600, fontSize: 14.5 }}>{a.text}</span>
-  <span style={{ color: '#8A94A6', fontSize: 18 }}>‹</span>
-</Link>
+            {alerts.map((a, i) => {
+  const AlertIcon = a.icon
+  return (
+    <Link key={i} href={a.href}
+      className={`ep-alert${a.tone === 'red' ? ' ep-alert-urgent' : ''}`}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none',
+        background: a.tone === 'red' ? '#FDECEA' : '#FBF3D5',
+        border: `1px solid ${a.tone === 'red' ? '#F3C9C2' : '#EAD9A0'}`,
+        borderRadius: 12, padding: '12px 16px',
+      }}>
+      <AlertIcon className="ep-alert-ico" size={20} strokeWidth={2}
+        color={a.tone === 'red' ? '#A5331F' : '#7A5C0A'} />
+      <span style={{ flex: 1, color: a.tone === 'red' ? '#A5331F' : '#7A5C0A', fontWeight: 600, fontSize: 14.5 }}>{a.text}</span>
+      <span style={{ color: '#8A94A6', fontSize: 18 }}>‹</span>
+    </Link>
+  )
+})}
+
 
       {/* ═══ 2) مؤشرات الأداء — أرقام أكبر، هي مركز اللوحة ═══ */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 12, marginBottom: 12 }}>
