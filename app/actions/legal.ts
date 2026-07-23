@@ -1,7 +1,7 @@
 'use server';
 
 import { headers } from 'next/headers';
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase-server';
 import { LEGAL_VERSIONS } from '@/lib/legal';
 
 export async function recordConsent(schoolId?: string | null) {
