@@ -1,5 +1,24 @@
 'use client'
 // تسجيل مدرسة جديدة — ينشئ مستخدم Auth ثم يستدعي دالة الخادم register_school
+'use client';
+import { useState } from 'react';
+import ConsentCheckbox from '@/components/legal/ConsentCheckbox';
+import { recordConsent } from '@/app/actions/legal';
+
+// داخل الكومبوننت:
+const [agreed, setAgreed] = useState(false);
+
+// داخل الـ JSX قبل زر الإرسال:
+<ConsentCheckbox checked={agreed} onChange={setAgreed} />
+
+<button
+  type="submit"
+  disabled={!agreed || loading}
+  className="w-full rounded-lg bg-[var(--brand)] py-2 text-white disabled:opacity-50"
+>
+  إنشاء الحساب
+</button>
+
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
