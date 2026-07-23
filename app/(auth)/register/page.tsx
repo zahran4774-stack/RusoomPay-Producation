@@ -1,27 +1,10 @@
 'use client'
 // تسجيل مدرسة جديدة — ينشئ مستخدم Auth ثم يستدعي دالة الخادم register_school
-'use client';
-import { useState } from 'react';
-import ConsentCheckbox from '@/components/legal/ConsentCheckbox';
-import { recordConsent } from '@/app/actions/legal';
-
-// داخل الكومبوننت:
-const [agreed, setAgreed] = useState(false);
-
-// داخل الـ JSX قبل زر الإرسال:
-<ConsentCheckbox checked={agreed} onChange={setAgreed} />
-
-<button
-  type="submit"
-  disabled={!agreed || loading}
-  className="w-full rounded-lg bg-[var(--brand)] py-2 text-white disabled:opacity-50"
->
-  إنشاء الحساب
-</button>
-
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
+import ConsentCheckbox from '@/components/legal/ConsentCheckbox'
+import { recordConsent } from '@/app/actions/legal'
 
 const COUNTRY_CUR: Record<string, { cur: string; label: string }> = {
   OM: { cur: 'OMR', label: 'ريال عُماني' }, SA: { cur: 'SAR', label: 'ريال سعودي' },
@@ -40,7 +23,8 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
   const [crAlert, setCrAlert] = useState(false)
-  // الدول المفعّلة من مالك المنصّة (افتراضياً عُمان حتى تُحمّل القائمة)
+  const [agreed, setAgreed] = useState(false)
+  // الدول المفعّلة من مالك المنصّة (افتراضياً عمان حتى تُحمّل القائمة)
   const [allowed, setAllowed] = useState<string[]>(['OM'])
   useEffect(() => {
     supabase.from('platform_countries').select('code').eq('enabled', true).then(({ data }) => {
@@ -75,13 +59,14 @@ export default function RegisterPage() {
   // تنسيق IBAN لحظياً: تنظيف + منع تجاوز طول الدولة + مجموعات من 4
   function formatIbanInput(raw: string, country: string): string {
     const expected = IBAN_LEN[country] || 23
-    let v = raw.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, expected)
+    const v = raw.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, expected)
     return v.replace(/(.{4})/g, '$1 ').trim()
   }
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+    if (!agreed) return setError('يجب الموافقة على شروط الخدمة وسياسة الخصوصية')
     const pwIssue = passwordIssue(f.password)
     if (pwIssue) return setError(pwIssue)
     if (f.password !== f.password2) return setError('كلمتا المرور غير متطابقتين')
@@ -102,10 +87,17 @@ export default function RegisterPage() {
           currency: COUNTRY_CUR[f.country].cur, cr: f.cr, license: f.license,
           vat: f.vat, phone: f.phone, address: f.address, owner_name: f.ownerName,
           bank_iban: f.iban.replace(/\s/g, '').toUpperCase(),
+          terms_accepted: true,
+          terms_accepted_at: new Date().toISOString(),
         },
       },
     })
     if (authErr) { setError('تعذّر إنشاء الحساب: ' + authErr.message); setLoading(false); return }
+
+    // تسجيل الموافقة (يعمل فقط إذا وُجدت جلسة — أي عند تعطيل تأكيد البريد)
+    if (data.session) {
+      await recordConsent(null)
+    }
 
     // إن كان تأكيد البريد مفعّلاً، لا توجد جلسة بعد → اعرض شاشة "أكّد بريدك"
     if (data.user && !data.session) {
@@ -194,10 +186,14 @@ export default function RegisterPage() {
         <label style={{ fontSize: 13, fontWeight: 600 }}>تأكيد كلمة المرور *</label>
         <input type="password" value={f.password2} onChange={(e) => set('password2', e.target.value)} required style={inp} />
 
+        <div style={{ margin: '4px 0 16px' }}>
+          <ConsentCheckbox checked={agreed} onChange={setAgreed} disabled={loading} />
+        </div>
+
         {error && <div style={{ color: '#C0392B', fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
-        <button type="submit" disabled={loading}
-          style={{ width: '100%', padding: 13, background: '#163B68', color: '#fff', border: 'none', borderRadius: 11, fontWeight: 700, cursor: 'pointer' }}>
+        <button type="submit" disabled={loading || !agreed}
+          style={{ width: '100%', padding: 13, background: '#163B68', color: '#fff', border: 'none', borderRadius: 11, fontWeight: 700, cursor: loading || !agreed ? 'not-allowed' : 'pointer', opacity: loading || !agreed ? 0.55 : 1 }}>
           {loading ? 'جارٍ التسجيل…' : 'تسجيل المدرسة'}
         </button>
       </form>
