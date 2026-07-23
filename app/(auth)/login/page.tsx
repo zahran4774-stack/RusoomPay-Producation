@@ -37,7 +37,7 @@ export default function LoginPage() {
     if (!user) { setError('انتهت الجلسة، أعد المحاولة'); setLoading(false); setMfaStep(false); return }
     // قراءة الدور عبر my_role() — موثوقة (لا تتأثّر بـRLS)، تمنع تكرار إنشاء المدرسة
     const { data: myRole } = await supabase.rpc('my_role')
-    // ربط دعوة طاقم إن وُجدت (بلا دور بعد)
+    // ربط دعوة طاقم إن وجدت (بلا دور بعد)
     if (!myRole) {
       const { data: accepted } = await supabase.rpc('accept_staff_invite')
       if (accepted && (accepted as { ok?: boolean }).ok) { router.push('/dashboard'); router.refresh(); return }
@@ -278,7 +278,7 @@ export default function LoginPage() {
           <span className="lp-stat-ic slate">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10l9-5 9 5" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 19h18" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round"/></svg>
           </span>
-          <div><b>+500 مدرسة</b><span>تثق في RusoomPay</span></div>
+          <div><b>عربية بالكامل</b><span>مصمّمة للمدارس الخليجية</span></div>
         </div>
         <div className="lp-stat">
           <span className="lp-stat-ic blue">
