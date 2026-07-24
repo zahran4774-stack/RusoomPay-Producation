@@ -2,10 +2,10 @@
 // استراتيجية: Network-first للصفحات، Cache-first للأصول الثابتة.
 // مهم: نتجاهل طلبات RSC (?_rsc) وبيانات Next الديناميكية تماماً —
 //      اعتراضها كان يبطّئ كل تنقّل ويخزّن بيانات ديناميكية خطأً.
-const CACHE = 'edupay-v3'   // رفعنا الإصدار ليُمسح الكاش القديم الملوّث
+const CACHE = 'edupay-v4'   // رفعنا الإصدار ليُمسح الكاش القديم الملوّث
 const OFFLINE_URL = '/offline'
 
-const PRECACHE = [OFFLINE_URL, '/manifest.webmanifest']
+const PRECACHE = ['/manifest.webmanifest']  // لا نُخزّن أي HTML مسبقاً — يمنع خدمة صفحة قديمة
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -15,9 +15,13 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    (async () => {
+      // احذف كل الكاشات القديمة (v2, v3...) تماماً
+      const keys = await caches.keys()
+      await Promise.all(keys.map((k) => caches.delete(k)))
+      // تفعيل فوري على كل التبويبات المفتوحة
+      await self.clients.claim()
+    })()
   )
 })
 
