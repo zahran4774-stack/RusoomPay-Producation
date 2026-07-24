@@ -2,7 +2,7 @@
 // استراتيجية: Network-first للصفحات، Cache-first للأصول الثابتة.
 // مهم: نتجاهل طلبات RSC (?_rsc) وبيانات Next الديناميكية تماماً —
 //      اعتراضها كان يبطّئ كل تنقّل ويخزّن بيانات ديناميكية خطأً.
-const CACHE = 'edupay-v2'   // رفعنا الإصدار ليُمسح الكاش القديم الملوّث
+const CACHE = 'edupay-v3'   // رفعنا الإصدار ليُمسح الكاش القديم الملوّث
 const OFFLINE_URL = '/offline'
 
 const PRECACHE = [OFFLINE_URL, '/manifest.webmanifest']
@@ -43,19 +43,10 @@ self.addEventListener('fetch', (event) => {
     return // اترك المتصفح يتولّاها طبيعياً
   }
 
-  // التنقّل الكامل (تحميل صفحة HTML): network-first
+  // ═══ التنقّل الكامل: لا نعترضه إطلاقاً ═══
+  // اعتراضه بـnetwork-first كان يسبّب ومضة صفحة offline/تحميل على الشبكة البطيئة.
+  // نترك المتصفح يحمّل الصفحات مباشرة — أسرع وبلا ومضة.
   if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request)
-        .then((res) => {
-          const copy = res.clone()
-          caches.open(CACHE).then((c) => c.put(request, copy))
-          return res
-        })
-        .catch(() =>
-          caches.match(request).then((cached) => cached || caches.match(OFFLINE_URL))
-        )
-    )
     return
   }
 
