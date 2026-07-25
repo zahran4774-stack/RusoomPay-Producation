@@ -13,9 +13,21 @@ const cairo = Cairo({
 })
 
 export const metadata: Metadata = {
-  title: 'RusoomPay — منظومة المدارس الذكية',
-  description: 'نظام إدارة مالية للمدارس الخاصة في الخليج',
+  title: 'RusoomPay — منصة إدارة رسوم المدارس الذكية',
+  description:
+    'RusoomPay — منصة ذكية لإدارة رسوم المدارس مدعومة بالذكاء الاصطناعي تساعد إدارة المدرسة على اتخاذ القرارات الذكية وتحصيل الرسوم بشكل منظم وأسرع',
   manifest: '/manifest.webmanifest',
+  robots: {
+    index: true,
+    follow: true,
+  },
+  openGraph: {
+    title: 'RusoomPay — إدارة المدرسة بذكاء',
+    description:
+      'منصة مدعومة بالذكاء الاصطناعي لإدارة رسوم المدارس واتخاذ القرارات المالية الذكية في سلطنة عُمان ودول الخليج.',
+    locale: 'ar_OM',
+    type: 'website',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
