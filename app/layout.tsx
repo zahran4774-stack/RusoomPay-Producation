@@ -4,7 +4,6 @@ import './globals.css'
 import PWARegister from './PWARegister'
 import ClickSound from './ClickSound'
 
-// خط Cairo عبر next/font — يُحمّل بلا وميض ويحجز مساحته مسبقاً (لا قفزة، لا FOUT)
 const cairo = Cairo({
   subsets: ['arabic', 'latin'],
   weight: ['400', '500', '600', '700', '800'],
@@ -48,7 +47,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="ar" dir="rtl" className={cairo.variable}>
       <head>
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-        <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
       </head>
       <body style={{ fontFamily: 'var(--font-cairo), system-ui, sans-serif' }}>
         <PWARegister />
