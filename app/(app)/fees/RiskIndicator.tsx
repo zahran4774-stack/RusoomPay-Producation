@@ -82,7 +82,8 @@ export default function RiskIndicator({ currency }: { currency: string }) {
   onClick={async () => {
     if (!r.phone) { alert('لا يوجد رقم لولي الأمر'); return }
     const to = r.phone.startsWith('+') ? r.phone : `+${r.phone}`
-    const body = `عزيزنا ولي الأمر، نذكّركم بمتابعة رسوم الطالب ${r.student ?? ''} المستحقة. شكراً لتعاونكم — RusoomPay`
+    const body = `رسالة من إدارة المدرسة عبر RusoomPay:\nعزيزنا ولي الأمر، نذكّركم بمتابعة الرسوم المستحقة. شكراً لتعاونكم.`
+
     try {
       const res = await fetch('/api/send-whatsapp', {
         method: 'POST',
