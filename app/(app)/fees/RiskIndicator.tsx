@@ -78,9 +78,28 @@ export default function RiskIndicator({ currency }: { currency: string }) {
                 </td>
                 <td style={td}>
                   {r.phone ? (
-                    <a href={`tel:${r.phone}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 600, color: '#1E5C4E', textDecoration: 'none' }}>
-                      <Phone size={13} /> {r.action}
-                    </a>
+                    <button
+  onClick={async () => {
+    if (!r.phone) { alert('لا يوجد رقم لولي الأمر'); return }
+    const to = r.phone.startsWith('+') ? r.phone : `+${r.phone}`
+    const body = `عزيزنا ولي الأمر، نذكّركم بمتابعة رسوم الطالب ${r.student ?? ''} المستحقة. شكراً لتعاونكم — RusoomPay`
+    try {
+      const res = await fetch('/api/send-whatsapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, body }),
+      })
+      const data = await res.json()
+      alert(data.success ? 'تم إرسال التذكير عبر واتساب ✅' : 'فشل الإرسال: ' + (data.error || 'خطأ'))
+    } catch (e) {
+      alert('خطأ في الإرسال')
+    }
+  }}
+  style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13, background: 'none', border: 'none', color: '#0F9D74', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+>
+  💬 إرسال تذكير ودّي
+</button>
+
                   ) : (
                     <span style={{ fontSize: 12.5, color: '#667' }}>{r.action}</span>
                   )}
