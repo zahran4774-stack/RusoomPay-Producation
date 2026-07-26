@@ -92,17 +92,26 @@ export default function RiskIndicator({ currency }: { currency: string }) {
   const body = `رسالة من ${school} عبر RusoomPay:\nعزيزنا ${r.guardian || 'ولي الأمر'}، نذكّركم برسوم الطالب ${r.student_name} المستحقة بمبلغ ${fmt(r.outstanding)} ${sym}. شكراً لتعاونكم.`
 
   try {
-    const res = await fetch('/api/send-whatsapp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to, body }),
-    })
-    const data = await res.json()
-    alert(data.success ? 'تم إرسال التذكير عبر واتساب ✅' : 'فشل الإرسال: ' + (data.error || 'خطأ'))
-  } catch (e) {
-    alert('خطأ في الإرسال')
-  }
-}}
+onClick={async () => {
+    if (!r.phone) { alert('لا يوجد رقم لولي الأمر'); return }
+    let school = 'مدرستكم'
+    const { data: sch } = await supabase.from('schools').select('name').limit(1).single()
+    if (sch?.name) school = sch.name
+    const to = r.phone.startsWith('+') ? r.phone : `+${r.phone}`
+    const body = `رسالة من ${school} عبر RusoomPay:\nعزيزنا ${r.guardian || 'ولي الأمر'}، نذكّركم برسوم الطالب ${r.student_name} المستحقة بمبلغ ${fmt(r.outstanding)} ${sym}. شكراً لتعاونكم.`
+    try {
+      const res = await fetch('/api/send-whatsapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, body }),
+      })
+      const data = await res.json()
+      alert(data.success ? 'تم إرسال التذكير عبر واتساب ✅' : 'فشل الإرسال: ' + (data.error || 'خطأ'))
+    } catch (e) {
+      alert('خطأ في الإرسال')
+    }
+  }}
+
 
     try {
       const res = await fetch('/api/send-whatsapp', {
