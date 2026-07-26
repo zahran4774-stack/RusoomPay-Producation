@@ -20,6 +20,7 @@ export default function RiskIndicator({ currency }: { currency: string }) {
   const supabase = createClient()
   const [items, setItems] = useState<RiskItem[] | null>(null)
   const [disabled, setDisabled] = useState(false)
+  const [schoolName, setSchoolName] = useState<string>('مدرستكم')
   const sym = currency === 'OMR' ? 'ر.ع' : currency
   const fmt = (n: number) => new Intl.NumberFormat('en', { minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(n || 0)
 
