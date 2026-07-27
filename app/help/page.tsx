@@ -7,7 +7,7 @@
 // ============================================================================
 
 import { useState, useEffect, useMemo } from 'react'
-import { createClient } from '../../lib/supabase/client'
+import { createClient } from '../../lib/supabase-client'
 
 type Article = {
   slug: string
