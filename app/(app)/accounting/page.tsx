@@ -62,7 +62,7 @@ export default async function AccountingPage() {
     <div style={{ maxWidth: 1100, margin: '0 auto' }} dir="rtl">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
         <div>
-          <h1 style={{ color: '#0F2744', marginBottom: 4 }}>المحاسبة</h1>
+          <h1 style={{ color: '#0F2744', marginBottom: 4 }}>المحاسبة والتقارير</h1>
           <p style={{ color: '#667', fontSize: 14, marginBottom: 20 }}>قيد مزدوج · ميزان مراجعة · قائمة الدخل</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
