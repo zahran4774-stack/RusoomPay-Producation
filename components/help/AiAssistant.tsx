@@ -200,25 +200,55 @@ export default function AiAssistant() {
   )
 }
 
+// ---------- تحويل **نص** إلى خطّ عريض فعلي ----------
+function renderInline(text: string) {
+  // نقسم على **...** ونجعل الأجزاء المحاطة عريضة
+  const parts = text.split(/(\*\*[^*]+\*\*)/g)
+  return parts.map((part, i) => {
+    const m = part.match(/^\*\*([^*]+)\*\*$/)
+    if (m) {
+      return (
+        <strong key={i} style={{ fontWeight: 700, color: '#095a4e' }}>
+          {m[1]}
+        </strong>
+      )
+    }
+    return <span key={i}>{part}</span>
+  })
+}
+
 // ---------- عرض المحتوى مع دعم أسطر وقوائم بسيطة ----------
 function renderContent(text: string) {
-  const lines = text.split('\n').filter((l) => l.trim().length > 0)
+  // نتجاهل خطوط الفصل --- ونحوّل ## عناوين لأسطر عادية عريضة
+  const lines = text
+    .split('\n')
+    .filter((l) => l.trim().length > 0 && l.trim() !== '---')
   return lines.map((line, i) => {
+    // عنوان ## → سطر عريض
+    const heading = line.match(/^\s*#{1,4}\s+(.*)$/)
+    if (heading) {
+      return (
+        <p key={i} style={{ margin: '8px 0 4px', fontWeight: 700, color: '#095a4e' }}>
+          {renderInline(heading[1])}
+        </p>
+      )
+    }
     const numbered = /^\s*\d+[.)]\s+/.test(line)
     const bullet = /^\s*[-•]\s+/.test(line)
     if (numbered || bullet) {
+      const content = line.replace(/^\s*(\d+[.)]|[-•])\s+/, '')
       return (
         <div key={i} style={{ display: 'flex', gap: 8, margin: '4px 0' }}>
           <span style={{ color: '#0d7d6b', fontWeight: 700 }}>
             {numbered ? line.match(/^\s*(\d+)/)?.[1] : '•'}
           </span>
-          <span>{line.replace(/^\s*(\d+[.)]|[-•])\s+/, '')}</span>
+          <span>{renderInline(content)}</span>
         </div>
       )
     }
     return (
       <p key={i} style={{ margin: '4px 0' }}>
-        {line}
+        {renderInline(line)}
       </p>
     )
   })
