@@ -3,7 +3,7 @@ import { Cairo } from 'next/font/google'
 import './globals.css'
 import PWARegister from './PWARegister'
 import ClickSound from './ClickSound'
-import AiAssistant from '@/components/help/AiAssistant' // ← جديد: المساعد الذكي
+import AiAssistant from '../components/help/AiAssistant' // ← المساعد الذكي (مسار نسبي)
 
 const cairo = Cairo({
   subsets: ['arabic', 'latin'],
@@ -55,10 +55,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <PWARegister />
         <ClickSound />
         {children}
-        {/* المساعد الذكي: زر عائم يظهر في كل الصفحات.
-            يُحقن هنا بعد children ليطفو فوق كل المحتوى.
-            يتحقق داخلياً من جلسة المستخدم عبر /api/assistant،
-            فلا يُظهر ردوداً لغير المسجّلين. */}
+        {/* المساعد الذكي: زر عائم يظهر في كل الصفحات */}
         <AiAssistant />
       </body>
     </html>
