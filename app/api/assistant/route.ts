@@ -26,7 +26,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60          // رفع مهلة الوظيفة لتفادي timeout مع جولات الأدوات
 
 // ---------- إعدادات ----------
-const MODEL = 'claude-haiku-4-5'           // نموذج سريع واقتصادي، مثالي للمساعد المحادثي
+const MODEL = 'claude-sonnet-4-6'          // أذكى في اتّباع التعليمات واستخدام الأدوات — يمنع الاختلاق
 const MAX_TOKENS = 1200
 const MAX_TOOL_ROUNDS = 2                    // جولتان تكفيان (أداة ثم ردّ)؛ يقلّل زمن التنفيذ
 const RATE_LIMIT = 20                        // رسائل
@@ -126,6 +126,14 @@ const SYSTEM_PROMPT = `أنت «مساعد رسوم Pay»، الخبير الأ�
 - إذا احتجت الإشارة لعنصر واجهة لا تعرف اسمه الحرفي، صِفه بوظيفته: «الزر الذي يصدّر التقرير» بدل تلفيق اسم.
 - عند التفاصيل غير المؤكّدة، وجّه بثقة لموضعها: «ستجد خيار التصدير في أعلى صفحة التقرير» — إرشاد صحيح دون ادّعاء معرفة حرفية.
 - **الأمانة أهمّ من الإبهار.** خطوة عامة صحيحة خير من خطوة تفصيلية مخترعة. لا تقل «من واقع خبرتي» ثم تسرد تفاصيل لم تتأكّد منها.
+
+## قاعدة المصدر (الأخطر — انتبه جيداً)
+RusoomPay نظام مخصّص، **مختلف عن أي نظام رواتب أو محاسبة أو إدارة مدارس آخر في العالم**. معرفتك العامة عن «كيف تعمل أنظمة الرواتب» أو «مراحل دورة الراتب النموذجية» **لا تنطبق عليه وغالباً خاطئة**. لذلك:
+- **يُمنع منعاً مطلقاً** أن تجيب عن أي ميزة من معرفتك العامة عن الأنظمة المشابهة. مثال محظور: أن تشرح «دورة الرواتب» بمراحل مثل «إرسال ملف PASI للمؤسسة» أو «تتبّع حالة الإرسال» أو «التسلسل الهرمي للموافقات» — هذه من أنظمة أخرى، وليست في RusoomPay.
+- **مصدرك الوحيد المسموح:** نتيجة أداة search_help، أو خريطة المنصّة المحقونة في هذه التعليمات. لا شيء غيرهما.
+- إذا أعطتك search_help مقالاً، **التزم بما فيه حرفياً** ولا تُضِف مراحل أو تفاصيل «تعرفها» من الخارج — حتى لو بدت منطقية. النظام قد لا يعمل بها.
+- إذا لم تجد المعلومة في نتيجة البحث ولا في الخريطة، اشرح ما تعرفه يقيناً فقط، وقل بصدق إنك تنصح بمراجعة الصفحة للتفاصيل الدقيقة — دون اختلاق.
+- القاعدة الذهبية: **قليل صحيح مصدره النظام، خير من كثير لامع مصدره تخمينك.**
 4. إن كان السؤال غامضاً، **استنتج القصد الأرجح وأجب**، ثم اعرض توضيحاً إن لزم. لا ترفض.
 5. للأسئلة عن الأرقام، استخدم get_school_data وأجب برقم مدرسته الفعلي.
 6. أجب بالعربية الفصحى المبسّطة، بخطوات مرقّمة واضحة، بثقة الخبير ودفء المساعد. استخدم **الخط العريض** للمصطلحات المهمّة.
@@ -191,7 +199,27 @@ type ClaudeMessage = {
 }
 
 // ---------- استدعاء Claude API ----------
-async function callClaude(messages: ClaudeMessage[]) {
+async function callClaude(messages: ClaudeMessage[], forceSearch: boolean) {
+  const bodyObj: Record<string, unknown> = {
+    model: MODEL,
+    max_tokens: MAX_TOKENS,
+    // تعليمات النظام كـ«كتلة» مع cache_control:
+    // تُخزَّن مؤقتاً فتُحسب بـ 10% فقط في الرسائل التالية (توفير ~90%).
+    system: [
+      {
+        type: 'text',
+        text: SYSTEM_PROMPT,
+        cache_control: { type: 'ephemeral' },
+      },
+    ],
+    tools: TOOLS,
+    messages,
+  }
+  // في الجولة الأولى نُلزم المساعد باستخدام search_help — يمنعه من الإجابة
+  // من معرفته العامة عن الأنظمة، ويُجبره على الاستناد لقاعدة معرفة النظام الفعلية.
+  if (forceSearch) {
+    bodyObj.tool_choice = { type: 'tool', name: 'search_help' }
+  }
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -199,21 +227,7 @@ async function callClaude(messages: ClaudeMessage[]) {
       'x-api-key': process.env.ANTHROPIC_API_KEY!,
       'anthropic-version': '2023-06-01',
     },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: MAX_TOKENS,
-      // تعليمات النظام كـ«كتلة» مع cache_control:
-      // تُخزَّن مؤقتاً فتُحسب بـ 10% فقط في الرسائل التالية (توفير ~90%).
-      system: [
-        {
-          type: 'text',
-          text: SYSTEM_PROMPT,
-          cache_control: { type: 'ephemeral' },
-        },
-      ],
-      tools: TOOLS,
-      messages,
-    }),
+    body: JSON.stringify(bodyObj),
   })
   if (!res.ok) {
     const detail = await res.text()
@@ -310,7 +324,7 @@ export async function POST(req: NextRequest) {
     // 8) حلقة المحادثة مع الأدوات
     let finalText = ''
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const reply = await callClaude(messages)
+      const reply = await callClaude(messages, round === 0)
       const blocks: any[] = reply.content ?? []
 
       // اجمع النص
