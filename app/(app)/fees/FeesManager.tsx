@@ -4,6 +4,7 @@
 import { useState, useMemo } from 'react'
 import { generateInvoice } from '@/lib/invoice-pdf'
 import CashPayment from './CashPayment'
+import RefundButton from './RefundButton'
 const CUR_DEC: Record<string, number> = { OMR: 3, KWD: 3, BHD: 3, SAR: 2, AED: 2, QAR: 2 }
 const CUR_SYM: Record<string, string> = { OMR: 'ر.ع', SAR: 'ر.س', AED: 'د.إ', QAR: 'ر.ق', KWD: 'د.ك', BHD: 'د.ب' }
 
@@ -179,7 +180,10 @@ export default function FeesManager({ students, school, currency }: { students: 
                         </button>
                       </td>
                       <td style={{ padding: '8px' }}>
-                        <CashPayment fee={f} studentName={s.full_name} currency={currency} sym={sym} dec={dec} />
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                          <CashPayment fee={f} studentName={s.full_name} currency={currency} sym={sym} dec={dec} />
+                          <RefundButton fee={f} studentName={s.full_name} currency={currency} sym={sym} dec={dec} />
+                        </div>
                       </td>
                     </tr>
                   )
