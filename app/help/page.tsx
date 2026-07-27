@@ -35,7 +35,7 @@ export default function HelpCenterPage() {
           .order('category', { ascending: true })
           .order('sort_order', { ascending: true })
         setArticles(
-          (data ?? []).map((a) => ({
+          (data ?? []).map((a: { slug: string; category: string; title: string; summary: string; body: string; steps: unknown }) => ({
             ...a,
             steps: Array.isArray(a.steps) ? (a.steps as string[]) : [],
           })),
