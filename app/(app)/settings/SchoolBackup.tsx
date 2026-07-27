@@ -1,14 +1,31 @@
 'use client'
 // نسخة احتياطية لبيانات المدرسة — تحميل كل البيانات كملف JSON.
 // للمالك فقط. قراءة فقط — لا يعدّل شيئاً.
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase-client'
-import { Download, ShieldCheck } from 'lucide-react'
+import { Download, ShieldCheck, Clock } from 'lucide-react'
 
 export default function SchoolBackup({ schoolName }: { schoolName?: string }) {
   const supabase = createClient()
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [reminder, setReminder] = useState<{ text: string; days: number | null } | null>(null)
+  const [lastBackup, setLastBackup] = useState<string | null>(null)
+
+  // جلب حالة النسخة الاحتياطية (هل نُذكّر؟)
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      const { data } = await supabase.rpc('backup_status')
+      if (!alive) return
+      const st = (data ?? {}) as { ok?: boolean; should_remind?: boolean; message?: string; days_since?: number | null; last_backup?: string; ever?: boolean }
+      if (st.ok && st.should_remind && st.message) {
+        setReminder({ text: st.message, days: st.days_since ?? null })
+      }
+      if (st.ok && st.ever && st.last_backup) setLastBackup(st.last_backup)
+    })()
+    return () => { alive = false }
+  }, [supabase])
 
   async function download() {
     setBusy(true); setMsg(null)
@@ -41,6 +58,13 @@ export default function SchoolBackup({ schoolName }: { schoolName?: string }) {
       const d = data as any
       const counts = `${d.students?.length ?? 0} طالب · ${d.student_fees?.length ?? 0} فاتورة · ${d.journal_entries?.length ?? 0} قيد`
       setMsg({ ok: true, text: `تم تنزيل النسخة بنجاح (${counts}). احفظها في مكان آمن.` })
+
+      // سجّل النسخة — يُصفّر التنبيه ويحدّث آخر تاريخ
+      try {
+        await supabase.rpc('record_backup')
+        setReminder(null)
+        setLastBackup(new Date().toISOString())
+      } catch { /* التسجيل ثانوي — لا يوقف النجاح */ }
     } catch (e) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       setMsg({ ok: false, text: `حدث خطأ: ${(e as any)?.message ?? 'غير معروف'}` })
@@ -58,6 +82,26 @@ export default function SchoolBackup({ schoolName }: { schoolName?: string }) {
         نزّل نسخة كاملة من بيانات مدرستك (الطلاب، الرسوم، أولياء الأمور، الموظفون، القيود المحاسبية)
         كملف واحد تحتفظ به لديك. ننصح بأخذ نسخة دورياً — بداية كل شهر مثلاً.
       </p>
+
+      {/* تنبيه: مضى وقت على آخر نسخة */}
+      {reminder && (
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: 10,
+          background: '#FBF3D5', border: '1px solid #EAD9A0', borderRadius: 11,
+          padding: '12px 14px', marginBottom: 16,
+        }}>
+          <Clock size={18} color="#7A5C0A" style={{ flexShrink: 0, marginTop: 1 }} />
+          <div style={{ fontSize: 13, lineHeight: 1.75, color: '#7A5C0A', fontWeight: 600 }}>{reminder.text}</div>
+        </div>
+      )}
+
+      {/* تاريخ آخر نسخة (إن وُجد ولا تنبيه) */}
+      {lastBackup && !reminder && (
+        <div style={{ fontSize: 12.5, color: '#15803D', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <ShieldCheck size={14} strokeWidth={2} />
+          آخر نسخة: {new Date(lastBackup).toLocaleDateString('ar', { year: 'numeric', month: 'long', day: 'numeric' })}
+        </div>
+      )}
 
       <button onClick={download} disabled={busy}
         style={{
