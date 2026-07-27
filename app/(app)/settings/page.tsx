@@ -6,6 +6,7 @@ import SchoolBranding from './SchoolBranding'
 import VatSetting from './VatSetting'
 import IntelligencePanel from './IntelligencePanel'
 import StaffInvites from './StaffInvites'
+import SchoolBackup from './SchoolBackup'
 export default async function SettingsPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -16,10 +17,12 @@ export default async function SettingsPage() {
   const isOwner = profile?.role === 'owner'
   let logo: string | null = null
   let color: string | null = null
+  let schoolName: string | null = null
   if (isOwner && profile?.school_id) {
-    const { data: school } = await supabase.from('schools').select('logo_url, color').eq('id', profile.school_id).maybeSingle()
+    const { data: school } = await supabase.from('schools').select('logo_url, color, name').eq('id', profile.school_id).maybeSingle()
     logo = school?.logo_url ?? null
     color = school?.color ?? null
+    schoolName = school?.name ?? null
   }
 
   // إعداد الضريبة حسب قانون الدولة (لكل المستخدمين للعرض، التعديل للمدير)
@@ -47,6 +50,7 @@ export default async function SettingsPage() {
       {engines && engines.length > 0 && (
         <IntelligencePanel initial={engines} canEdit={isOwner} />
       )}
+    {isOwner && <div style={{ marginTop: 18 }}><SchoolBackup schoolName={schoolName ?? undefined} /></div>}
     {isOwner && <StaffInvites />}</div> 
 
   )
