@@ -28,7 +28,7 @@ export const maxDuration = 60          // رفع مهلة الوظيفة لتف�
 // ---------- إعدادات ----------
 const MODEL = 'claude-sonnet-4-6'          // أذكى في اتّباع التعليمات واستخدام الأدوات — يمنع الاختلاق
 const MAX_TOKENS = 1200
-const MAX_TOOL_ROUNDS = 2                    // جولتان تكفيان (أداة ثم ردّ)؛ يقلّل زمن التنفيذ
+const MAX_TOOL_ROUNDS = 3                    // جولة للبحث الإجباري + جولة للأدوات + جولة للصياغة
 const RATE_LIMIT = 20                        // رسائل
 const RATE_WINDOW_MIN = 5                    // خلال 5 دقائق لكل مستخدم
 
@@ -236,6 +236,31 @@ async function callClaude(messages: ClaudeMessage[], forceSearch: boolean) {
   return res.json()
 }
 
+// استدعاء بلا أدوات — يُجبر المساعد على صياغة رد نصّي نهائي من السياق المتوفّر.
+async function callClaudeNoTools(messages: ClaudeMessage[]) {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.ANTHROPIC_API_KEY!,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: MAX_TOKENS,
+      system: [
+        { type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
+      ],
+      messages,
+    }),
+  })
+  if (!res.ok) {
+    const detail = await res.text()
+    throw new Error(`claude_api_error:${res.status}:${detail.slice(0, 300)}`)
+  }
+  return res.json()
+}
+
 // ============================================================================
 // المعالج الرئيسي
 // ============================================================================
@@ -352,6 +377,18 @@ export async function POST(req: NextRequest) {
         })
       }
       messages.push({ role: 'user', content: toolResults })
+    }
+
+    // ضمان أخير: لو انتهت الجولات بلا نصّ (آخر ردّ كان طلب أداة)،
+    // نطلب صياغة نهائية بلا أدوات — يُجبر المساعد على الرد من نتائج البحث.
+    if (!finalText) {
+      try {
+        const finalReply = await callClaudeNoTools(messages)
+        const fb: any[] = finalReply.content ?? []
+        finalText = fb.filter((b) => b.type === 'text').map((b) => b.text).join('\n')
+      } catch {
+        // نتجاهل — يعالجها الشرط التالي
+      }
     }
 
     if (!finalText) {
