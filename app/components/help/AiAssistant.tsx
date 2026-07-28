@@ -6,9 +6,11 @@
 // يفتح كلوحة جانبية، يتصل بـ /api/assistant، ويعرض المحادثة بدعم RTL.
 // يعتمد على متغيّر الخط --font-cairo المعرّف في layout.
 // لا يعتمد أي مكتبة خارجية — أيقونات SVG مضمّنة.
+// يُخفى تلقائياً في صفحات المصادقة (تسجيل الدخول/الإنشاء) — لا يظهر إلا بعد الدخول.
 // ============================================================================
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { usePathname } from 'next/navigation'
 
 type Msg = { role: 'user' | 'assistant'; content: string }
 
@@ -19,7 +21,11 @@ const SUGGESTIONS = [
   'اشرح لي نسبة التحصيل',
 ]
 
+// المسارات التي لا يظهر فيها المساعد (صفحات عامة/مصادقة قبل الدخول)
+const HIDDEN_PATHS = ['/', '/login', '/signup', '/register', '/forgot-password', '/reset-password', '/auth']
+
 export default function AiAssistant() {
+  const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<Msg[]>([])
   const [input, setInput] = useState('')
@@ -55,22 +61,37 @@ export default function AiAssistant() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: clean, conversationId }),
         })
-        const data = await res.json()
+        // قد تكون الاستجابة ليست JSON (مثل صفحة خطأ 504/502 عند تجاوز المهلة)
+        let data: { message?: string; reply?: string; conversationId?: string; error?: string } = {}
+        const raw = await res.text()
+        try {
+          data = raw ? JSON.parse(raw) : {}
+        } catch {
+          // استجابة غير JSON — الوظيفة انهارت أو تجاوزت المهلة
+          data = {}
+        }
         if (!res.ok) {
           const msg =
             data?.message ||
             (res.status === 429
               ? 'وصلت الحدّ المسموح مؤقتاً. حاول بعد قليل.'
-              : 'حدث خطأ. حاول مرة أخرى.')
+              : res.status === 504 || res.status === 502
+                ? 'الطلب استغرق وقتاً طويلاً. حاول بسؤال أقصر.'
+                : `حدث خطأ (${res.status}). حاول مرة أخرى.`)
           setMessages((m) => [...m, { role: 'assistant', content: msg }])
+        } else if (!data.reply) {
+          setMessages((m) => [
+            ...m,
+            { role: 'assistant', content: 'لم يصل ردّ صالح. حاول مرة أخرى.' },
+          ])
         } else {
           if (data.conversationId) setConversationId(data.conversationId)
-          setMessages((m) => [...m, { role: 'assistant', content: data.reply }])
+          setMessages((m) => [...m, { role: 'assistant', content: data.reply as string }])
         }
       } catch {
         setMessages((m) => [
           ...m,
-          { role: 'assistant', content: 'تعذّر الاتصال. تحقّق من الشبكة وحاول مجدداً.' },
+          { role: 'assistant', content: 'تعذّر الاتصال بالخادم. حاول مجدداً بعد لحظات.' },
         ])
       } finally {
         setLoading(false)
@@ -86,6 +107,9 @@ export default function AiAssistant() {
       send(input)
     }
   }
+
+  // إخفاء المساعد في صفحات المصادقة/العامة — بعد كل الـ hooks (قاعدة React)
+  if (HIDDEN_PATHS.includes(pathname || '')) return null
 
   return (
     <>
@@ -200,25 +224,55 @@ export default function AiAssistant() {
   )
 }
 
+// ---------- تحويل **نص** إلى خطّ عريض فعلي ----------
+function renderInline(text: string) {
+  // نقسم على **...** ونجعل الأجزاء المحاطة عريضة
+  const parts = text.split(/(\*\*[^*]+\*\*)/g)
+  return parts.map((part, i) => {
+    const m = part.match(/^\*\*([^*]+)\*\*$/)
+    if (m) {
+      return (
+        <strong key={i} style={{ fontWeight: 700, color: '#095a4e' }}>
+          {m[1]}
+        </strong>
+      )
+    }
+    return <span key={i}>{part}</span>
+  })
+}
+
 // ---------- عرض المحتوى مع دعم أسطر وقوائم بسيطة ----------
 function renderContent(text: string) {
-  const lines = text.split('\n').filter((l) => l.trim().length > 0)
+  // نتجاهل خطوط الفصل --- ونحوّل ## عناوين لأسطر عادية عريضة
+  const lines = text
+    .split('\n')
+    .filter((l) => l.trim().length > 0 && l.trim() !== '---')
   return lines.map((line, i) => {
+    // عنوان ## → سطر عريض
+    const heading = line.match(/^\s*#{1,4}\s+(.*)$/)
+    if (heading) {
+      return (
+        <p key={i} style={{ margin: '8px 0 4px', fontWeight: 700, color: '#095a4e' }}>
+          {renderInline(heading[1])}
+        </p>
+      )
+    }
     const numbered = /^\s*\d+[.)]\s+/.test(line)
     const bullet = /^\s*[-•]\s+/.test(line)
     if (numbered || bullet) {
+      const content = line.replace(/^\s*(\d+[.)]|[-•])\s+/, '')
       return (
         <div key={i} style={{ display: 'flex', gap: 8, margin: '4px 0' }}>
           <span style={{ color: '#0d7d6b', fontWeight: 700 }}>
             {numbered ? line.match(/^\s*(\d+)/)?.[1] : '•'}
           </span>
-          <span>{line.replace(/^\s*(\d+[.)]|[-•])\s+/, '')}</span>
+          <span>{renderInline(content)}</span>
         </div>
       )
     }
     return (
       <p key={i} style={{ margin: '4px 0' }}>
-        {line}
+        {renderInline(line)}
       </p>
     )
   })
