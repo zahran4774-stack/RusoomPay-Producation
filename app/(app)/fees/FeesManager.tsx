@@ -1,5 +1,5 @@
 'use client'
-// مدير الرسوم — بحث وتصفية + بنود كل طالب، وزر فاتورة منفصلة لكل بند
+// مدير الرسوم — بحث وتصفية + بطاقات ملخّص + صفوف قابلة للطي (Accordion) + صفحات (Pagination)
 // الفاتورة تحمل هوية المدرسة (لا المنصة) · المتبقي يُخفى عند الطباعة/التنزيل
 import { useState, useMemo } from 'react'
 import { generateInvoice } from '@/lib/invoice-pdf'
@@ -18,79 +18,103 @@ type School = {
   bank_holder?: string | null; bank_enabled?: boolean | null
 } | null
 
+const PAGE_SIZE = 20
+
 export default function FeesManager({ students, school, currency }: { students: Student[]; school: School; currency: string }) {
   const [invoice, setInvoice] = useState<{ student: Student; fee: Fee } | null>(null)
   const [q, setQ] = useState('')
   const [grade, setGrade] = useState('')
   const [overdueOnly, setOverdueOnly] = useState(false)
+  const [open, setOpen] = useState<string | null>(null)   // الطالب المفتوح (Accordion)
+  const [page, setPage] = useState(1)
 
   const dec = CUR_DEC[currency] ?? 3
   const sym = CUR_SYM[currency] ?? 'ر.ع'
   const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec })
 
-  // قائمة الصفوف الفريدة للتصفية
   const grades = useMemo(
     () => Array.from(new Set(students.map((s) => s.grade).filter(Boolean))).sort(),
     [students]
   )
 
-  // التصفية: الاسم/الرقم · الصف · المتأخرات فقط
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase()
     return students.filter((s) => {
       if (grade && s.grade !== grade) return false
-
       if (term) {
         const hay = `${s.full_name} ${s.code} ${s.section ?? ''}`.toLowerCase()
         if (!hay.includes(term)) return false
       }
-
       if (overdueOnly) {
         const fees = s.student_fees ?? []
         const remain = fees.reduce((a, f) => a + ((f.total ?? 0) - (f.paid ?? 0)), 0)
         if (remain <= 0.0005) return false
       }
-
       return true
     })
   }, [students, q, grade, overdueOnly])
 
-  // ملخص النتائج المعروضة
+  // ملخّص شامل لكل النتائج المُصفّاة (يظهر دائماً)
   const summary = useMemo(() => {
-    let tot = 0, paid = 0
-    filtered.forEach((s) => (s.student_fees ?? []).forEach((f) => {
-      tot += f.total ?? 0; paid += f.paid ?? 0
-    }))
-    return { tot, paid, remain: tot - paid }
+    let tot = 0, paid = 0, overdueStudents = 0
+    filtered.forEach((s) => {
+      let sRemain = 0
+      ;(s.student_fees ?? []).forEach((f) => { tot += f.total ?? 0; paid += f.paid ?? 0; sRemain += (f.total ?? 0) - (f.paid ?? 0) })
+      if (sRemain > 0.0005) overdueStudents++
+    })
+    return { tot, paid, remain: tot - paid, overdueStudents }
   }, [filtered])
 
   const active = q.trim() !== '' || grade !== '' || overdueOnly
+
+  // إعادة الصفحة للأولى عند تغيّر التصفية
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const safePage = Math.min(page, totalPages)
+  const pageItems = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+
+  const resetPage = () => setPage(1)
 
   const inp: React.CSSProperties = {
     padding: '10px 12px', borderRadius: 10, border: '1.5px solid #DDE3EC',
     fontSize: 14, fontFamily: 'inherit', background: '#fff',
   }
 
+  // بطاقة ملخّص صغيرة
+  const StatCard = ({ label, value, color, bg }: { label: string; value: string; color: string; bg: string }) => (
+    <div style={{ flex: '1 1 150px', background: bg, borderRadius: 12, padding: '14px 16px', minWidth: 130 }}>
+      <div style={{ fontSize: 12.5, color: '#5A6B7B', marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 19, fontWeight: 800, color, direction: 'ltr', textAlign: 'right' }}>{value}</div>
+    </div>
+  )
+
   return (
     <div>
+      {/* بطاقات الملخّص العلوية */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+        <StatCard label="إجمالي الرسوم" value={`${fmt(summary.tot)} ${sym}`} color="#0F2744" bg="#F4F7FB" />
+        <StatCard label="المحصّل" value={`${fmt(summary.paid)} ${sym}`} color="#1A7A45" bg="#EFF9F2" />
+        <StatCard label="المتبقّي" value={`${fmt(summary.remain)} ${sym}`} color="#C0392B" bg="#FDEEED" />
+        <StatCard label="طلاب عليهم متأخرات" value={`${summary.overdueStudents}`} color="#B54708" bg="#FFF6ED" />
+      </div>
+
       {/* شريط البحث والتصفية */}
       <div style={{ background: '#fff', borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           <input
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => { setQ(e.target.value); resetPage() }}
             placeholder="🔍 ابحث بالاسم أو الرقم المدرسي أو الشعبة"
             style={{ ...inp, flex: '1 1 260px' }}
           />
 
-          <select value={grade} onChange={(e) => setGrade(e.target.value)}
+          <select value={grade} onChange={(e) => { setGrade(e.target.value); resetPage() }}
                   style={{ ...inp, flex: '0 1 180px', cursor: 'pointer' }}>
             <option value="">كل الصفوف</option>
             {grades.map((g) => <option key={g} value={g}>{g}</option>)}
           </select>
 
           <button
-            onClick={() => setOverdueOnly((v) => !v)}
+            onClick={() => { setOverdueOnly((v) => !v); resetPage() }}
             style={{
               ...inp, cursor: 'pointer', fontWeight: 700,
               border: `1.5px solid ${overdueOnly ? '#C0392B' : '#DDE3EC'}`,
@@ -102,27 +126,20 @@ export default function FeesManager({ students, school, currency }: { students: 
 
           {active && (
             <button
-              onClick={() => { setQ(''); setGrade(''); setOverdueOnly(false) }}
+              onClick={() => { setQ(''); setGrade(''); setOverdueOnly(false); resetPage() }}
               style={{ ...inp, cursor: 'pointer', color: '#667', border: '1.5px solid #EEF2F7' }}>
               ✕ مسح
             </button>
           )}
         </div>
 
-        {active && (
-          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #EEF2F7',
-                        display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap',
-                        gap: 8, fontSize: 13.5 }}>
-            <span style={{ color: '#556' }}>
-              {filtered.length} من {students.length} طالب
-            </span>
-            <span style={{ color: '#556' }}>
-              الإجمالي <b style={{ color: '#0F2744' }}>{fmt(summary.tot)}</b> ·
-              {' '}المحصّل <b style={{ color: '#1A7A45' }}>{fmt(summary.paid)}</b> ·
-              {' '}المتبقي <b style={{ color: summary.remain > 0.0005 ? '#C0392B' : '#1A7A45' }}>{fmt(summary.remain)}</b> {sym}
-            </span>
-          </div>
-        )}
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #EEF2F7',
+                      display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap',
+                      gap: 8, fontSize: 13.5 }}>
+          <span style={{ color: '#556' }}>
+            عرض {pageItems.length} من {filtered.length}{active ? ` (مُصفّى من ${students.length})` : ' طالب'}
+          </span>
+        </div>
       </div>
 
       {/* لا نتائج */}
@@ -133,75 +150,122 @@ export default function FeesManager({ students, school, currency }: { students: 
         </div>
       )}
 
-      {filtered.map((s) => {
-        const fees = s.student_fees ?? []
-        const tot = fees.reduce((a, f) => a + f.total, 0)
-        const paid = fees.reduce((a, f) => a + f.paid, 0)
-        const remain = tot - paid
-        return (
-          <div key={s.id} style={{ background: '#fff', borderRadius: 14, padding: 18, marginBottom: 14, boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
-              <div>
-                <div style={{ fontWeight: 700, color: '#0F2744' }}>{s.full_name}</div>
-                <div style={{ fontSize: 13, color: '#667', marginBottom: 12 }}>
-                  {s.code} · الصف {s.grade}{s.section ? ` - ${s.section}` : ''}
+      {/* قائمة الطلاب — صفوف قابلة للطي */}
+      {filtered.length > 0 && (
+        <div style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
+          {pageItems.map((s, idx) => {
+            const fees = s.student_fees ?? []
+            const tot = fees.reduce((a, f) => a + f.total, 0)
+            const paid = fees.reduce((a, f) => a + f.paid, 0)
+            const remain = tot - paid
+            const isOpen = open === s.id
+            return (
+              <div key={s.id} style={{ borderTop: idx === 0 ? 'none' : '1px solid #EEF2F7' }}>
+                {/* رأس الصف — قابل للنقر */}
+                <div
+                  onClick={() => setOpen(isOpen ? null : s.id)}
+                  style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    gap: 10, flexWrap: 'wrap', padding: '14px 18px', cursor: 'pointer',
+                    background: isOpen ? '#F8FAFC' : '#fff', transition: 'background .15s',
+                  }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                    <span style={{ color: '#8A94A6', fontSize: 13, transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▶</span>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, color: '#0F2744' }}>{s.full_name}</div>
+                      <div style={{ fontSize: 12.5, color: '#667' }}>{s.code} · الصف {s.grade}{s.section ? ` - ${s.section}` : ''}</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 12.5, color: '#667' }}>الإجمالي <b style={{ color: '#0F2744', direction: 'ltr', display: 'inline-block' }}>{fmt(tot)}</b></span>
+                    {remain > 0.0005 ? (
+                      <span style={{ background: '#FBE9E9', color: '#8A2B2B', fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 20 }}>
+                        متبقٍ {fmt(remain)} {sym}
+                      </span>
+                    ) : (
+                      <span style={{ background: '#EFF9F2', color: '#1A7A45', fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 20 }}>
+                        مسدّد بالكامل ✓
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-              {remain > 0.0005 && (
-                <span style={{ background: '#FBE9E9', color: '#8A2B2B', fontSize: 12,
-                               fontWeight: 700, padding: '4px 10px', borderRadius: 20 }}>
-                  متبقٍ {fmt(remain)} {sym}
-                </span>
-              )}
-            </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-              <thead>
-                <tr style={{ textAlign: 'right', color: '#667', fontSize: 13 }}>
-                  <th style={{ padding: '6px 8px' }}>البند</th><th style={{ padding: '6px 8px' }}>الإجمالي</th>
-                  <th style={{ padding: '6px 8px' }}>المسدّد</th><th style={{ padding: '6px 8px' }}>المتبقي</th>
-                  <th style={{ padding: '6px 8px' }}>فاتورة</th>
-                  <th style={{ padding: '6px 8px' }}>الدفع</th>
-                </tr>
-              </thead>
-              <tbody>
-                {fees.map((f) => {
-                  const due = f.total - f.paid
-                  return (
-                    <tr key={f.id} style={{ borderTop: '1px solid #F0F3F8' }}>
-                      <td style={{ padding: '8px' }}>{f.description}</td>
-                      <td style={{ padding: '8px' }}>{fmt(f.total)}</td>
-                      <td style={{ padding: '8px' }}>{fmt(f.paid)}</td>
-                      <td style={{ padding: '8px', color: due > 0.0005 ? '#C0392B' : '#1A7A45', fontWeight: due > 0.0005 ? 600 : 400 }}>{fmt(due)}</td>
-                      <td style={{ padding: '8px' }}>
-                        <button onClick={() => setInvoice({ student: s, fee: f })}
-                          title="طباعة فاتورة هذا البند"
-                          style={{ background: '#FBF3D5', border: '1px solid #E8D9A4', borderRadius: 8, padding: '4px 9px', cursor: 'pointer' }}>
-                          🧾
-                        </button>
-                      </td>
-                      <td style={{ padding: '8px' }}>
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                          <CashPayment fee={f} studentName={s.full_name} currency={currency} sym={sym} dec={dec} />
-                          <RefundButton fee={f} studentName={s.full_name} currency={currency} sym={sym} dec={dec} />
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-                {fees.length === 0 && <tr><td colSpan={6} style={{ padding: 12, color: '#999' }}>لا توجد رسوم</td></tr>}
-                {fees.length > 0 && (
-                  <tr style={{ borderTop: '2px solid #0F2744', fontWeight: 700 }}>
-                    <td style={{ padding: '8px' }}>الإجمالي</td>
-                    <td style={{ padding: '8px' }}>{fmt(tot)}</td>
-                    <td style={{ padding: '8px' }}>{fmt(paid)}</td>
-                    <td style={{ padding: '8px' }}>{fmt(tot - paid)}</td><td></td>
-                  </tr>
+
+                {/* تفاصيل الرسوم — تظهر عند الفتح */}
+                {isOpen && (
+                  <div style={{ padding: '0 18px 18px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                      <thead>
+                        <tr style={{ textAlign: 'right', color: '#667', fontSize: 13 }}>
+                          <th style={{ padding: '6px 8px' }}>البند</th><th style={{ padding: '6px 8px' }}>الإجمالي</th>
+                          <th style={{ padding: '6px 8px' }}>المسدّد</th><th style={{ padding: '6px 8px' }}>المتبقي</th>
+                          <th style={{ padding: '6px 8px' }}>فاتورة</th>
+                          <th style={{ padding: '6px 8px' }}>الدفع</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {fees.map((f) => {
+                          const due = f.total - f.paid
+                          return (
+                            <tr key={f.id} style={{ borderTop: '1px solid #F0F3F8' }}>
+                              <td style={{ padding: '8px' }}>{f.description}</td>
+                              <td style={{ padding: '8px' }}>{fmt(f.total)}</td>
+                              <td style={{ padding: '8px' }}>{fmt(f.paid)}</td>
+                              <td style={{ padding: '8px', color: due > 0.0005 ? '#C0392B' : '#1A7A45', fontWeight: due > 0.0005 ? 600 : 400 }}>{fmt(due)}</td>
+                              <td style={{ padding: '8px' }}>
+                                <button onClick={() => setInvoice({ student: s, fee: f })}
+                                  title="طباعة فاتورة هذا البند"
+                                  style={{ background: '#FBF3D5', border: '1px solid #E8D9A4', borderRadius: 8, padding: '4px 9px', cursor: 'pointer' }}>
+                                  🧾
+                                </button>
+                              </td>
+                              <td style={{ padding: '8px' }}>
+                                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                                  <CashPayment fee={f} studentName={s.full_name} currency={currency} sym={sym} dec={dec} />
+                                  <RefundButton fee={f} studentName={s.full_name} currency={currency} sym={sym} dec={dec} />
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                        {fees.length === 0 && <tr><td colSpan={6} style={{ padding: 12, color: '#999' }}>لا توجد رسوم</td></tr>}
+                        {fees.length > 0 && (
+                          <tr style={{ borderTop: '2px solid #0F2744', fontWeight: 700 }}>
+                            <td style={{ padding: '8px' }}>الإجمالي</td>
+                            <td style={{ padding: '8px' }}>{fmt(tot)}</td>
+                            <td style={{ padding: '8px' }}>{fmt(paid)}</td>
+                            <td style={{ padding: '8px' }}>{fmt(tot - paid)}</td><td></td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
-              </tbody>
-            </table>
-          </div>
-        )
-      })}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* الترقيم (Pagination) */}
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={safePage === 1}
+            style={{ ...inp, cursor: safePage === 1 ? 'default' : 'pointer', opacity: safePage === 1 ? 0.5 : 1, fontWeight: 700 }}>
+            ‹ السابق
+          </button>
+          <span style={{ fontSize: 13.5, color: '#556', padding: '0 8px' }}>
+            صفحة {safePage} من {totalPages}
+          </span>
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={safePage === totalPages}
+            style={{ ...inp, cursor: safePage === totalPages ? 'default' : 'pointer', opacity: safePage === totalPages ? 0.5 : 1, fontWeight: 700 }}>
+            التالي ›
+          </button>
+        </div>
+      )}
 
       {invoice && (
         <InvoiceModal student={invoice.student} fee={invoice.fee} school={school} sym={sym} fmt={fmt}
@@ -243,7 +307,6 @@ function InvoiceModal({ student, fee, school, sym, fmt, onClose }: {
   }
 
   function printInvoice() {
-    // الطباعة تخفي المتبقي (CSS @media print داخل النافذة)
     window.print()
   }
 
@@ -265,7 +328,6 @@ function InvoiceModal({ student, fee, school, sym, fmt, onClose }: {
         </div>
 
         <div className="inv-sheet" style={{ padding: 24 }}>
-          {/* هوية المدرسة */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
             {school?.logo_url
               ? <img src={school.logo_url} alt="" style={{ width: 42, height: 42, borderRadius: 11, objectFit: 'cover' }} />
