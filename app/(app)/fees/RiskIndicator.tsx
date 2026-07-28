@@ -87,7 +87,13 @@ export default function RiskIndicator({ currency }: { currency: string }) {
                         let school = 'مدرستكم'
                         const { data: sch } = await supabase.from('schools').select('name').limit(1).single()
                         if (sch?.name) school = sch.name
-                        const to = r.phone.startsWith('+') ? r.phone : `+${r.phone}`
+                        // تطبيع الرقم العُماني: نزيل المسافات والرموز، ونضمن رمز الدولة 968
+let raw = (r.phone || '').replace(/[\s\-()]/g, '')
+if (raw.startsWith('+')) raw = raw.slice(1)
+if (raw.startsWith('00')) raw = raw.slice(2)
+if (!raw.startsWith('968') && raw.length === 8) raw = '968' + raw  // رقم عُماني محلي (8 أرقام)
+const to = `+${raw}`
+
                         const body = `رسالة من ${school} عبر RusoomPay:\nعزيزنا ${r.guardian || 'ولي الأمر'}، نذكّركم برسوم الطالب ${r.student_name} المستحقة بمبلغ ${fmt(r.outstanding)} ${sym}. شكراً لتعاونكم.`
                         try {
                           const res = await fetch('/api/send-whatsapp', {
