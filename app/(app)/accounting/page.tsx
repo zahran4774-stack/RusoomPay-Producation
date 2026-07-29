@@ -62,6 +62,9 @@ export default async function AccountingPage() {
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }} dir="rtl">
+      <DailyPaymentsReport />
+      <div style={{ display: 'flex', justifyContent: 'space-between', ...
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
         <div>
           <h1 style={{ color: '#0F2744', marginBottom: 4 }}>المحاسبة والتقارير</h1>
