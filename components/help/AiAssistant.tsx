@@ -6,9 +6,11 @@
 // يفتح كلوحة جانبية، يتصل بـ /api/assistant، ويعرض المحادثة بدعم RTL.
 // يعتمد على متغيّر الخط --font-cairo المعرّف في layout.
 // لا يعتمد أي مكتبة خارجية — أيقونات SVG مضمّنة.
+// يُخفى تلقائياً في صفحات المصادقة (تسجيل الدخول/الإنشاء) — لا يظهر إلا بعد الدخول.
 // ============================================================================
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { usePathname } from 'next/navigation'
 
 type Msg = { role: 'user' | 'assistant'; content: string }
 
@@ -19,7 +21,11 @@ const SUGGESTIONS = [
   'اشرح لي نسبة التحصيل',
 ]
 
+// المسارات التي لا يظهر فيها المساعد (صفحات عامة/مصادقة قبل الدخول)
+const HIDDEN_PATHS = ['/', '/login', '/signup', '/register', '/forgot-password', '/reset-password', '/auth']
+
 export default function AiAssistant() {
+  const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<Msg[]>([])
   const [input, setInput] = useState('')
@@ -101,6 +107,9 @@ export default function AiAssistant() {
       send(input)
     }
   }
+
+  // إخفاء المساعد في صفحات المصادقة/العامة — بعد كل الـ hooks (قاعدة React)
+  if (HIDDEN_PATHS.includes(pathname || '')) return null
 
   return (
     <>
