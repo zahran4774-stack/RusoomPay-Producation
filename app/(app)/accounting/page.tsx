@@ -9,6 +9,8 @@ import PrintButton from '../PrintButton'
 import PeriodReports from './PeriodReports'
 import JournalList from './JournalList'
 import ForecastPanel from './ForecastPanel'
+import DailyPaymentsReport from './DailyPaymentsReport'
+
 
 export default async function AccountingPage() {
   const supabase = await createClient()
