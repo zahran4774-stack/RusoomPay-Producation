@@ -23,8 +23,8 @@ export default async function AccountingPage() {
   const { data: school } = await supabase.from('schools').select('name, vat_number, currency').single()
   const currency = school?.currency ?? 'OMR'
 
-  // الأرصدة والملخّص والقيود — تُجلب معاً بالتوازي (أسرع من التسلسل)
-  const [balancesRes, summaryRes, entriesRes] = await Promise.all([
+  // الأرصدة والملخّص والقيود وملخّص مشتريات المخزون — تُجلب معاً بالتوازي (أسرع من التسلسل)
+  const [balancesRes, summaryRes, entriesRes, purchasesRes] = await Promise.all([
     supabase.rpc('account_balances'),
     supabase.rpc('financial_summary').single(),
     supabase
@@ -32,11 +32,13 @@ export default async function AccountingPage() {
       .select('id, entry_date, description, reference, reversed_by_entry, reverses_entry, journal_lines(debit)')
       .order('entry_date', { ascending: false })
       .limit(10),
+    supabase.rpc('inventory_purchases_summary'),
   ])
 
   const balances = balancesRes.data
   const summary = summaryRes.data
   const entries = entriesRes.data
+  const purchases = (purchasesRes.data ?? {}) as { ok?: boolean; general_purchases?: number; food_purchases?: number }
 
   const bal = (balances ?? []) as { account_id: string; code: string; name: string; type: string; balance: number }[]
 
@@ -107,6 +109,8 @@ export default async function AccountingPage() {
         <KPI label="المصروفات" v={fmt(fin.expense)} sym={sym} color="#C0392B" />
         <KPI label="صافي الربح" v={fmt(fin.profit)} sym={sym} color="#163B68" />
         <KPI label="النقدية والبنوك" v={fmt(fin.cash)} sym={sym} color="#D4A017" />
+        <KPI label="مشتريات المخزون (كتب وزي)" v={fmt(purchases.general_purchases ?? 0)} sym={sym} color="#6D5EA6" />
+        <KPI label="مشتريات التغذية" v={fmt(purchases.food_purchases ?? 0)} sym={sym} color="#2E8B8B" />
       </div>
 
       {/* إدخال قيد جديد */}
