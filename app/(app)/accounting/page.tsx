@@ -40,10 +40,11 @@ export default async function AccountingPage() {
   const entries = entriesRes.data
   const purchases = (purchasesRes.data ?? {}) as { ok?: boolean; general_purchases?: number; food_purchases?: number }
 
-  const bal = (balances ?? []) as { account_id: string; code: string; name: string; type: string; balance: number }[]
+  const bal = (balances ?? []) as { account_id: string; code: string; name: string; type: string; balance: number; is_active: boolean }[]
 
-  // قائمة الحسابات لنموذج القيد (مشتقّة من نتيجة الأرصدة)
-  const acc = bal.map((b) => ({ id: b.account_id, code: b.code, name: b.name, type: b.type })) as Account[]
+  // قائمة الحسابات لنموذج القيد الجديد — تستبعد الحسابات المعطَّلة (مثل 4210 بعد إلغائها)
+  // بينما جدول "الحسابات والأرصدة" وميزان المراجعة أدناه يعرضان كل الحسابات دون استثناء (شفافية كاملة)
+  const acc = bal.filter((b) => b.is_active !== false).map((b) => ({ id: b.account_id, code: b.code, name: b.name, type: b.type })) as Account[]
 
   const ent = (entries ?? []) as { id: string; entry_date: string; description: string | null; reference: string | null; reversed_by_entry: string | null; reverses_entry: string | null; journal_lines: { debit: number }[] }[]
 
@@ -117,44 +118,20 @@ export default async function AccountingPage() {
       <JournalForm accounts={acc} currency={currency} />
       {/* (acc مشتقّة من الأرصدة) */}
 
-      {/* الحسابات والأرصدة — بلغة واضحة لغير المحاسبين */}
-      <h2 style={{ color: '#0F2744', fontSize: 18, margin: '24px 0 4px' }} title="يعرض جميع الحسابات المالية مع أرصدتها الحالية وكامل الحركات المرتبطة بكل حساب.">الحسابات والأرصدة</h2>
-      <p style={{ color: '#667', fontSize: 13.5, marginBottom: 12 }}>استعرض جميع الحسابات المالية، الأرصدة الحالية، والحركات المالية لكل حساب في مكان واحد.</p>
+      {/* ميزان المراجعة — يضم أيضاً نوع كل حساب (أصول/خصوم/إيرادات...) بدل قسم منفصل مكرِّر */}
+      <h2 style={{ color: '#0F2744', fontSize: 18, margin: '24px 0 12px' }}>ميزان المراجعة</h2>
       {bal.length === 0 ? (
         <div style={{ background: '#fff', borderRadius: 14, padding: 28, textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
           <div style={{ fontWeight: 700, color: '#0F2744', marginBottom: 4 }}>لا توجد حسابات حتى الآن</div>
           <div style={{ color: '#8A94A6', fontSize: 13.5 }}>ستظهر هنا جميع الحسابات وأرصدتها بمجرد تسجيل أول عملية مالية.</div>
         </div>
       ) : (
-        <div style={{ background: '#fff', borderRadius: 14, overflow: 'auto', boxShadow: '0 1px 4px rgba(0,0,0,.08)', marginBottom: 8 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-            <thead>
-              <tr style={{ background: '#F4F8F7', color: '#0F2744', textAlign: 'right' }}>
-                <th style={{ padding: 11 }}>الرمز</th><th style={{ padding: 11 }}>الحساب</th>
-                <th style={{ padding: 11 }}>النوع</th><th style={{ padding: 11 }}>الرصيد الحالي</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bal.map((b) => (
-                <tr key={b.account_id} style={{ borderBottom: '1px solid #EEF2F1' }}>
-                  <td style={{ padding: 10, fontWeight: 700 }}>{b.code}</td>
-                  <td style={{ padding: 10 }}>{b.name}</td>
-                  <td style={{ padding: 10, color: '#8A94A6', fontSize: 13 }}>{typeLabel(b.type)}</td>
-                  <td style={{ padding: 10, direction: 'ltr', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmt(b.balance)} {sym}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* ميزان المراجعة */}
-      <h2 style={{ color: '#0F2744', fontSize: 18, margin: '24px 0 12px' }}>ميزان المراجعة</h2>
       <div style={{ background: '#fff', borderRadius: 14, overflow: 'auto', boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
           <thead>
             <tr style={{ background: '#0F2744', color: '#fff', textAlign: 'right' }}>
               <th style={{ padding: 12 }}>الرمز</th><th style={{ padding: 12 }}>الحساب</th>
+              <th style={{ padding: 12 }}>النوع</th>
               <th style={{ padding: 12 }}>مدين</th><th style={{ padding: 12 }}>دائن</th>
             </tr>
           </thead>
@@ -163,18 +140,20 @@ export default async function AccountingPage() {
               <tr key={r.id} style={{ borderBottom: '1px solid #EEF2F1' }}>
                 <td style={{ padding: 10, fontWeight: 700 }}>{r.code}</td>
                 <td style={{ padding: 10 }}>{r.name}</td>
+                <td style={{ padding: 10, color: '#8A94A6', fontSize: 13 }}>{typeLabel(r.type)}</td>
                 <td style={{ padding: 10 }}>{r.debit ? fmt(r.debit) : '—'}</td>
                 <td style={{ padding: 10 }}>{r.credit ? fmt(r.credit) : '—'}</td>
               </tr>
             ))}
             <tr style={{ borderTop: '2px solid #0F2744', fontWeight: 700, background: balanced ? '#E6F4EC' : '#FCE9E6' }}>
-              <td style={{ padding: 12 }} colSpan={2}>الإجمالي {balanced ? '✓ متوازن' : '⚠️ غير متوازن'}</td>
+              <td style={{ padding: 12 }} colSpan={3}>الإجمالي {balanced ? '✓ متوازن' : '⚠️ غير متوازن'}</td>
               <td style={{ padding: 12 }}>{fmt(totalDebit)}</td>
               <td style={{ padding: 12 }}>{fmt(totalCredit)}</td>
             </tr>
           </tbody>
         </table>
       </div>
+      )}
 
       {/* قائمة الدخل المبسّطة */}
       <h2 style={{ color: '#0F2744', fontSize: 18, margin: '24px 0 12px' }}>قائمة الدخل</h2>
