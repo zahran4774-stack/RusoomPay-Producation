@@ -2,7 +2,7 @@
 // app/(app)/accounting/DailyPaymentsReport.tsx
 // تقرير المدفوعات اليومية بأسماء الطلاب — للمتابعة اليومية.
 // يعتمد على RPC daily_payments_report (معزول بالمدرسة + للطاقم المالي فقط).
-// اختيار التاريخ · إجماليات (نقدي/بنكي) · طباعة.
+// يجلب عملة المدرسة تلقائياً (يدعم جميع عملات الخليج).
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase-client'
 
@@ -30,18 +30,33 @@ const METHOD_LABEL: Record<string, string> = {
   cash: 'نقداً', bank: 'تحويل بنكي', card: 'بطاقة', applepay: 'Apple Pay', googlepay: 'Google Pay', onsite: 'عند المدرسة',
 }
 
+// رموز عملات الخليج + المنازل العشرية
+const CUR_SYM: Record<string, string> = { OMR: 'ر.ع', SAR: 'ر.س', AED: 'د.إ', QAR: 'ر.ق', KWD: 'د.ك', BHD: 'د.ب' }
+const CUR_DEC: Record<string, number> = { OMR: 3, KWD: 3, BHD: 3, SAR: 2, AED: 2, QAR: 2 }
+
 const todayStr = () => new Date().toISOString().slice(0, 10)
 
-export default function DailyPaymentsReport({ currency = 'OMR' }: { currency?: string }) {
+export default function DailyPaymentsReport() {
   const supabase = createClient()
   const [date, setDate] = useState(todayStr())
   const [report, setReport] = useState<Report | null>(null)
   const [loading, setLoading] = useState(false)
+  const [currency, setCurrency] = useState<string>('OMR')
 
-  const sym = currency === 'OMR' ? 'ر.ع' : currency
-  const dec = ['OMR', 'KWD', 'BHD'].includes(currency) ? 3 : 2
+  const sym = CUR_SYM[currency] ?? currency
+  const dec = CUR_DEC[currency] ?? 2
   const fmt = (n: number) =>
     new Intl.NumberFormat('en', { minimumFractionDigits: dec, maximumFractionDigits: dec }).format(n || 0)
+
+  // جلب عملة المدرسة تلقائياً (مرّة واحدة) — معزول بـ RLS
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      const { data } = await supabase.from('schools').select('currency').limit(1).single()
+      if (active && data?.currency) setCurrency(data.currency)
+    })()
+    return () => { active = false }
+  }, [supabase])
 
   const load = useCallback(
     async (d: string) => {
