@@ -1,7 +1,6 @@
 'use client'
-// دعوة أولياء الأمور لتفعيل حساباتهم — عبر واتساب برسالة جاهزة.
-// لا إرسال تلقائي: يفتح محادثة واتساب بنصّ معدّ، والإداري يضغط إرسال.
-// هذا يجعل الدعوة مجانية وفورية، ويناسب سلوك المستخدم الخليجي.
+// دعوة أولياء الأمور لتفعيل حساباتهم — تُرسل عبر رقم واتساب المدرسة الرسمي (Twilio API)
+// لا يُستخدم واتساب الموظف الشخصي؛ الإرسال من رقم المنظومة الموحّد.
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import { MessageCircle, Copy, Check, Users, RefreshCw } from 'lucide-react'
@@ -19,6 +18,7 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
   const [list, setList] = useState<Guardian[]>([])
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState<string | null>(null)
+  const [sending, setSending] = useState<string | null>(null)
   const [sent, setSent] = useState<Set<string>>(new Set())
 
   const siteUrl = typeof window !== 'undefined' ? window.location.origin : 'https://rusoompay.com'
@@ -46,8 +46,13 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
     )
   }
 
-  function waLink(g: Guardian): string {
-    return `https://wa.me/${g.phone}?text=${encodeURIComponent(messageFor(g))}`
+  // تطبيع الرقم العُماني: يزيل الرموز، ويضمن رمز الدولة 968
+  function normalizePhone(raw: string): string {
+    let p = (raw || '').replace(/[\s\-()]/g, '')
+    if (p.startsWith('+')) p = p.slice(1)
+    if (p.startsWith('00')) p = p.slice(2)
+    if (!p.startsWith('968') && p.length === 8) p = '968' + p
+    return p
   }
 
   async function copyMsg(g: Guardian) {
@@ -58,8 +63,27 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
     } catch { /* المتصفح منع النسخ */ }
   }
 
-  function markSent(phone: string) {
-    setSent((prev) => new Set(prev).add(phone))
+  // الإرسال عبر رقم المدرسة الرسمي في المنظومة (Twilio) — لا واتساب شخصي
+  async function sendInvite(g: Guardian) {
+    setSending(g.phone)
+    try {
+      const to = `+${normalizePhone(g.phone)}`
+      const res = await fetch('/api/send-whatsapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, body: messageFor(g) }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setSent((prev) => new Set(prev).add(g.phone))
+      } else {
+        alert('فشل الإرسال: ' + (data.error || 'خطأ غير معروف'))
+      }
+    } catch {
+      alert('تعذّر الاتصال بالخادم، حاول مجدداً')
+    } finally {
+      setSending(null)
+    }
   }
 
   if (!open) {
@@ -77,9 +101,10 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
         <b style={{ color: '#0F2744', fontSize: 16 }}>دعوة أولياء الأمور لتفعيل حساباتهم</b>
         <button onClick={() => setOpen(false)} style={{ background: 'none', border: 0, fontSize: 21, cursor: 'pointer', color: '#667' }}>×</button>
       </div>
+
       <p style={{ color: '#667', fontSize: 13.5, margin: '0 0 16px', lineHeight: 1.85 }}>
-        هؤلاء أولياء أمور لم يُفعّلوا حساباتهم بعد. اضغط زر واتساب — تُفتح المحادثة برسالة جاهزة،
-        وأنت تضغط إرسال. <b>لا يُرسل شيء تلقائياً.</b>
+        هؤلاء أولياء أمور لم يُفعّلوا حساباتهم بعد. اضغط زر واتساب — تُرسل الدعوة مباشرة
+        من رقم المدرسة الرسمي في المنظومة. <b>لا حاجة لاستخدام واتساب هاتفك الشخصي.</b>
       </p>
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 14 }}>
@@ -106,6 +131,7 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
         <div style={{ border: '1px solid #EEF1F5', borderRadius: 12, overflow: 'hidden', maxHeight: 420, overflowY: 'auto' }}>
           {list.map((g, i) => {
             const isSent = sent.has(g.phone)
+            const isSending = sending === g.phone
             return (
               <div key={g.phone} style={{
                 display: 'flex', alignItems: 'center', gap: 12, padding: '13px 15px',
@@ -127,17 +153,22 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
                   {copied === g.phone ? <Check size={16} strokeWidth={2.4} /> : <Copy size={16} strokeWidth={2} />}
                 </button>
 
-                <a href={waLink(g)} target="_blank" rel="noopener noreferrer" onClick={() => markSent(g.phone)}
+                <button
+                  onClick={() => sendInvite(g)}
+                  disabled={isSending || isSent}
                   style={{
                     flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6,
                     background: isSent ? '#EAF7F0' : '#25D366', color: isSent ? '#15803D' : '#fff',
-                    border: isSent ? '1px solid #BFE5D0' : 0,
-                    borderRadius: 9, padding: '9px 15px', textDecoration: 'none',
+                    border: isSent ? '1px solid #BFE5D0' : 'none',
+                    borderRadius: 9, padding: '9px 15px',
                     fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap',
+                    cursor: isSending || isSent ? 'default' : 'pointer',
+                    opacity: isSending ? 0.7 : 1,
+                    fontFamily: 'inherit',
                   }}>
                   <MessageCircle size={16} strokeWidth={2.2} />
-                  {isSent ? 'أُرسلت' : 'واتساب'}
-                </a>
+                  {isSent ? 'أُرسلت ✓' : isSending ? 'جارٍ الإرسال…' : 'إرسال واتساب'}
+                </button>
               </div>
             )
           })}
