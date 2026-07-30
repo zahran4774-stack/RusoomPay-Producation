@@ -11,7 +11,6 @@ import JournalList from './JournalList'
 import ForecastPanel from './ForecastPanel'
 import DailyPaymentsReport from './DailyPaymentsReport'
 
-
 export default async function AccountingPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -24,7 +23,7 @@ export default async function AccountingPage() {
   const { data: school } = await supabase.from('schools').select('name, vat_number, currency').single()
   const currency = school?.currency ?? 'OMR'
 
-  // الأرصthe والملخّص والقيود — تُجلb معاً بالتوازي (أسرع من التسلسل)
+  // الأرصدة والملخّص والقيود — تُجلب معاً بالتوازي (أسرع من التسلسل)
   const [balancesRes, summaryRes, entriesRes] = await Promise.all([
     supabase.rpc('account_balances'),
     supabase.rpc('financial_summary').single(),
@@ -34,20 +33,27 @@ export default async function AccountingPage() {
       .order('entry_date', { ascending: false })
       .limit(10),
   ])
+
   const balances = balancesRes.data
   const summary = summaryRes.data
   const entries = entriesRes.data
 
   const bal = (balances ?? []) as { account_id: string; code: string; name: string; type: string; balance: number }[]
+
   // قائمة الحسابات لنموذج القيد (مشتقّة من نتيجة الأرصدة)
   const acc = bal.map((b) => ({ id: b.account_id, code: b.code, name: b.name, type: b.type })) as Account[]
+
   const ent = (entries ?? []) as { id: string; entry_date: string; description: string | null; reference: string | null; reversed_by_entry: string | null; reverses_entry: string | null; journal_lines: { debit: number }[] }[]
+
   const s = (summary ?? { revenue: 0, expense: 0, profit: 0, cash: 0, receivables: 0, vat: 0 }) as {
     revenue: number; expense: number; profit: number; cash: number; receivables: number; vat: number
   }
+
   const fin = { revenue: s.revenue, expense: s.expense, profit: s.profit, cash: s.cash }
+
   const fmt = (n: number) => fmtCurrency(n, currency)
   const sym = curSymbol(currency)
+
   const typeLabel = (t: string) => ({ asset: 'أصول', liability: 'خصوم', equity: 'حقوق ملكية', revenue: 'إيرادات', expense: 'مصروفات' } as Record<string, string>)[t] || t
 
   // ميزان المراجعة — من الأرصدة المحسوبة خادمياً
@@ -63,6 +69,7 @@ export default async function AccountingPage() {
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }} dir="rtl">
       <DailyPaymentsReport />
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
         <div>
           <h1 style={{ color: '#0F2744', marginBottom: 4 }}>المحاسبة والتقارير</h1>
@@ -104,7 +111,6 @@ export default async function AccountingPage() {
 
       {/* إدخال قيد جديد */}
       <JournalForm accounts={acc} currency={currency} />
-
       {/* (acc مشتقّة من الأرصدة) */}
 
       {/* الحسابات والأرصدة — بلغة واضحة لغير المحاسبين */}
