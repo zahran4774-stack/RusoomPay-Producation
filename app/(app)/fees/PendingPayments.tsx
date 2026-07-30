@@ -1,11 +1,14 @@
 'use client'
 // لوحة اعتماد الدفعات المعلّقة — للمحاسب/المدير
+// بعد الاعتماد: تُرسل تلقائياً رسالة شكر/إثبات سداد لولي الأمر عبر واتساب
+// (من رقم المدرسة الرسمي عبر Twilio). لا تُرسل عند الرفض.
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase-client'
 
 type Pending = {
   id: string; guardian: string; student: string
   amount: number; method: string; bank_ref: string | null; created_at: string
+  guardian_phone?: string | null; school_name?: string | null
 }
 
 const METHOD_LABEL: Record<string, string> = {
@@ -13,15 +16,52 @@ const METHOD_LABEL: Record<string, string> = {
 }
 const fmt = (n: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 
+// تطبيع الرقم العُماني: يزيل الرموز، ويضمن رمز الدولة 968
+function normalizePhone(raw: string): string {
+  let p = (raw || '').replace(/[\s\-()]/g, '')
+  if (p.startsWith('+')) p = p.slice(1)
+  if (p.startsWith('00')) p = p.slice(2)
+  if (!p.startsWith('968') && p.length === 8) p = '968' + p
+  return p
+}
+
 export default function PendingPayments({ initial }: { initial: Pending[] }) {
   const supabase = createClient()
   const [items, setItems] = useState<Pending[]>(initial)
   const [busy, setBusy] = useState<string | null>(null)
 
+  // إرسال رسالة الشكر — فشل الإرسال لا يُظهر خطأ للمستخدم (الاعتماد نفسه نجح ومستقل عنه)
+  async function sendThankYou(p: Pending) {
+    if (!p.guardian_phone) return
+    try {
+      const to = `+${normalizePhone(p.guardian_phone)}`
+      const school = p.school_name ? `مدرسة ${p.school_name}` : 'المدرسة'
+      const methodLabel = METHOD_LABEL[p.method] || p.method
+      const body =
+        `${school}\n\n` +
+        `شكراً لكم ${p.guardian} 🌿\n` +
+        `نفيدكم بأنه تم اعتماد واستلام دفعتكم بمبلغ ${fmt(p.amount)} (${methodLabel}) ` +
+        `لصالح الطالب ${p.student}.\n\n` +
+        `نقدّر التزامكم وحسن تعاونكم معنا.`
+
+      await fetch('/api/send-whatsapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, body }),
+      })
+    } catch {
+      // لا نعرض خطأ — الاعتماد نجح بالفعل، الإشعار وحده فشل
+    }
+  }
+
   async function act(id: string, approve: boolean) {
     setBusy(id)
     const { error } = await supabase.rpc(approve ? 'approve_payment' : 'reject_payment', { p_id: id })
-    if (!error) setItems((prev) => prev.filter((p) => p.id !== id))
+    if (!error) {
+      const target = items.find((p) => p.id === id)
+      setItems((prev) => prev.filter((p) => p.id !== id))
+      if (approve && target) sendThankYou(target)
+    }
     setBusy(null)
   }
 
