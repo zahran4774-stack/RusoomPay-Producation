@@ -56,11 +56,11 @@ export default function CashPayment({
     if (!res.guardian_phone) return // لا رقم متوفّر — لا يوجد ما نرسل إليه
     try {
       const to = `+${normalizePhone(res.guardian_phone)}`
-      const school = res.school_name ? `مدرسة ${res.school_name}` : 'المدرسة'
+      const school = res.school_name || 'المدرسة'
       const methodLabel = METHOD_LABEL[res.method || 'cash'] || res.method
       const body =
         `${school}\n\n` +
-        `شكراً لكم ${res.guardian_name || 'ولي الأمر'} 🌿\n` +
+        `شكراً لكم ${res.guardian_name || 'ولي الأمر'}\n` +
         `نفيدكم بأنه تم استلام دفعة بمبلغ ${fmt(res.amount || 0)} ${sym} (${methodLabel}) ` +
         `لصالح الطالب ${res.student_name || studentName}.\n\n` +
         (res.remaining && res.remaining > 0.0005
