@@ -1,5 +1,5 @@
 'use client'
-// مكوّن المخزون — أصناف + شراء + بيع لطالب + طباعة
+// مكوّن المخزون — أصناف + شراء + بيع لطالب + صرف استهلاكي داخلي (غير مفوتر) + طباعة
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import { printReport, type SchoolHeader } from '@/lib/print-report'
@@ -20,11 +20,18 @@ const btnGold: React.CSSProperties = {
   padding: '11px 18px', borderRadius: 10, border: 'none', cursor: 'pointer',
   background: '#D4A017', color: '#08172B', fontWeight: 700, fontSize: 14, fontFamily: 'inherit',
 }
+const btnTeal: React.CSSProperties = {
+  padding: '11px 18px', borderRadius: 10, border: 'none', cursor: 'pointer',
+  background: '#0D7D6B', color: '#fff', fontWeight: 700, fontSize: 14, fontFamily: 'inherit',
+}
 const btnSm: React.CSSProperties = {
   padding: '6px 12px', borderRadius: 8, border: '1px solid #DDE3EC', cursor: 'pointer',
   background: '#fff', color: '#445', fontWeight: 600, fontSize: 12.5, fontFamily: 'inherit',
 }
 const fmt = (n: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+
+// أسباب صرف شائعة — اختصار سريع، مع إمكانية كتابة سبب مخصّص
+const DISPENSE_REASONS = ['قرطاسية صفوف', 'مواد نظافة', 'صيانة وأدوات', 'استخدام إداري', 'أخرى']
 
 export default function InventoryClient({ initialItems, students, school }: {
   initialItems: Item[]; students: Student[]; school: SchoolHeader
@@ -40,12 +47,14 @@ export default function InventoryClient({ initialItems, students, school }: {
   const [cost, setCost] = useState('')
   const [price, setPrice] = useState('')
 
-  // حركة (شراء/بيع)
+  // حركة (شراء/بيع/صرف)
   const [moveItem, setMoveItem] = useState<Item | null>(null)
-  const [moveMode, setMoveMode] = useState<'buy' | 'sell'>('buy')
+  const [moveMode, setMoveMode] = useState<'buy' | 'sell' | 'dispense'>('buy')
   const [moveQty, setMoveQty] = useState('1')
   const [moveStudent, setMoveStudent] = useState('')
   const [applyTax, setApplyTax] = useState(true)   // مع ضريبة افتراضياً
+  const [dispenseReason, setDispenseReason] = useState(DISPENSE_REASONS[0])
+  const [customReason, setCustomReason] = useState('')
 
   async function refresh() {
     const { data } = await supabase.rpc('inventory_list')
@@ -64,8 +73,9 @@ export default function InventoryClient({ initialItems, students, school }: {
     setMsg('✓ تمت إضافة الصنف'); setBusy(false)
   }
 
-  function openMove(item: Item, mode: 'buy' | 'sell') {
-    setMoveItem(item); setMoveMode(mode); setMoveQty('1'); setMoveStudent(''); setApplyTax(true); setMsg('')
+  function openMove(item: Item, mode: 'buy' | 'sell' | 'dispense') {
+    setMoveItem(item); setMoveMode(mode); setMoveQty('1'); setMoveStudent(''); setApplyTax(true)
+    setDispenseReason(DISPENSE_REASONS[0]); setCustomReason(''); setMsg('')
   }
 
   async function execMove() {
@@ -73,15 +83,22 @@ export default function InventoryClient({ initialItems, students, school }: {
     const q = parseInt(moveQty) || 0
     if (q <= 0) { setMsg('أدخل كمية صحيحة'); return }
     setBusy(true); setMsg('')
+
     if (moveMode === 'buy') {
       const { error } = await supabase.rpc('inventory_purchase', { p_item: moveItem.id, p_qty: q })
       if (error) { setMsg('خطأ: ' + error.message); setBusy(false); return }
       setMsg('✓ تم الشراء — مخزون مدين / بنك دائن')
-    } else {
+    } else if (moveMode === 'sell') {
       if (!moveStudent) { setMsg('اختر الطالب'); setBusy(false); return }
       const { error } = await supabase.rpc('inventory_sell', { p_item: moveItem.id, p_qty: q, p_student: moveStudent, p_apply_tax: applyTax })
       if (error) { setMsg('خطأ: ' + error.message); setBusy(false); return }
       setMsg('✓ صدرت فاتورة للطالب + قيد تكلفة وانخفض المخزون')
+    } else {
+      // صرف استهلاكي داخلي — بلا فاتورة وبلا طالب
+      const reason = dispenseReason === 'أخرى' ? customReason.trim() : dispenseReason
+      const { error } = await supabase.rpc('inventory_dispense', { p_item: moveItem.id, p_qty: q, p_reason: reason || null })
+      if (error) { setMsg('خطأ: ' + error.message); setBusy(false); return }
+      setMsg('✓ سُجّل الصرف الاستهلاكي — بلا فاتورة على أولياء الأمور')
     }
     setMoveItem(null); await refresh(); setBusy(false)
   }
@@ -110,7 +127,7 @@ export default function InventoryClient({ initialItems, students, school }: {
         </div>
         {items.length > 0 ? (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 600 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 680 }}>
               <thead>
                 <tr style={{ background: '#F7F9FC', textAlign: 'right' }}>
                   {['الصنف', 'الكمية', 'التكلفة', 'سعر البيع', 'قيمة المخزون', ''].map((h) => (
@@ -130,7 +147,8 @@ export default function InventoryClient({ initialItems, students, school }: {
                     <td style={{ padding: '10px 12px' }}>{fmt(it.stock_value)}</td>
                     <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
                       <button style={btnSm} onClick={() => openMove(it, 'buy')}>＋ شراء</button>{' '}
-                      <button style={{ ...btnSm, background: '#D4A017', color: '#08172B', border: 'none' }} onClick={() => openMove(it, 'sell')}>بيع لطالب</button>
+                      <button style={{ ...btnSm, background: '#D4A017', color: '#08172B', border: 'none' }} onClick={() => openMove(it, 'sell')}>بيع لطالب</button>{' '}
+                      <button style={{ ...btnSm, background: '#0D7D6B', color: '#fff', border: 'none' }} onClick={() => openMove(it, 'dispense')}>صرف استهلاكي</button>
                     </td>
                   </tr>
                 ))}
@@ -156,12 +174,27 @@ export default function InventoryClient({ initialItems, students, school }: {
       {moveItem && (
         <div onClick={() => setMoveItem(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(8,15,27,.55)', display: 'grid', placeItems: 'center', zIndex: 100, padding: 20 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 420, width: '100%' }} dir="rtl">
-            <h3 style={{ margin: '0 0 6px', color: '#0F2744' }}>{moveMode === 'buy' ? 'شراء مخزون' : 'بيع لطالب'}</h3>
+            <h3 style={{ margin: '0 0 6px', color: '#0F2744' }}>
+              {moveMode === 'buy' ? 'شراء مخزون' : moveMode === 'sell' ? 'بيع لطالب' : 'صرف استهلاكي داخلي'}
+            </h3>
             <p style={{ fontSize: 13, color: '#667', margin: '0 0 16px' }}>
-              <b>{moveItem.name}</b> — الرصيد الحالي: <b>{moveItem.qty}</b> · {moveMode === 'buy' ? `تكلفة الوحدة ${fmt(moveItem.cost)}` : `سعر البيع ${fmt(moveItem.price)}${applyTax ? ` + ضريبة ${moveItem.vat_rate ?? 5}%` : ' (بدون ضريبة)'}`}
+              <b>{moveItem.name}</b> — الرصيد الحالي: <b>{moveItem.qty}</b> ·{' '}
+              {moveMode === 'buy'
+                ? `تكلفة الوحدة ${fmt(moveItem.cost)}`
+                : moveMode === 'sell'
+                  ? `سعر البيع ${fmt(moveItem.price)}${applyTax ? ` + ضريبة ${moveItem.vat_rate ?? 5}%` : ' (بدون ضريبة)'}`
+                  : `تكلفة الوحدة ${fmt(moveItem.cost)} — بلا فاتورة على أولياء الأمور`}
             </p>
+
+            {moveMode === 'dispense' && (
+              <div style={{ background: '#EAF5F2', border: '1px solid #CDE8E1', borderRadius: 10, padding: '10px 13px', marginBottom: 14, fontSize: 12.5, color: '#0D7D6B' }}>
+                هذا صرف داخلي فقط — لا يُنشئ فاتورة ولا يُحمَّل على أي طالب، لأنه محسوب أصلاً ضمن تكاليف الدراسة العامة.
+              </div>
+            )}
+
             <label style={lbl}>الكمية</label>
             <input style={{ ...input, marginBottom: 14 }} type="number" value={moveQty} onChange={(e) => setMoveQty(e.target.value)} />
+
             {moveMode === 'sell' && (
               <>
                 <label style={lbl}>الطالب</label>
@@ -210,10 +243,29 @@ export default function InventoryClient({ initialItems, students, school }: {
                 </div>
               </>
             )}
+
+            {moveMode === 'dispense' && (
+              <>
+                <label style={lbl}>سبب الصرف</label>
+                <select style={{ ...input, marginBottom: dispenseReason === 'أخرى' ? 10 : 14 }} value={dispenseReason} onChange={(e) => setDispenseReason(e.target.value)}>
+                  {DISPENSE_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
+                </select>
+                {dispenseReason === 'أخرى' && (
+                  <input style={{ ...input, marginBottom: 14 }} value={customReason} onChange={(e) => setCustomReason(e.target.value)} placeholder="اكتب السبب..." />
+                )}
+                <div style={{ background: '#F7FAFC', border: '1px solid #EEF1F5', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 13 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0F2744' }}>
+                    <span>تكلفة الصرف (مصروف إداري)</span>
+                    <b>{fmt((parseInt(moveQty) || 0) * moveItem.cost)}</b>
+                  </div>
+                </div>
+              </>
+            )}
+
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button style={btnSm} onClick={() => setMoveItem(null)}>إلغاء</button>
-              <button style={btnGold} onClick={execMove} disabled={busy}>
-                {moveMode === 'buy' ? 'تأكيد الشراء والترحيل' : 'إصدار فاتورة + قيد التكلفة'}
+              <button style={moveMode === 'dispense' ? btnTeal : btnGold} onClick={execMove} disabled={busy}>
+                {moveMode === 'buy' ? 'تأكيد الشراء والترحيل' : moveMode === 'sell' ? 'إصدار فاتورة + قيد التكلفة' : 'تأكيد الصرف الاستهلاكي'}
               </button>
             </div>
           </div>
