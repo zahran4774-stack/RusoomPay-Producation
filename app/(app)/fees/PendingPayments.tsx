@@ -35,11 +35,11 @@ export default function PendingPayments({ initial }: { initial: Pending[] }) {
     if (!p.guardian_phone) return
     try {
       const to = `+${normalizePhone(p.guardian_phone)}`
-      const school = p.school_name ? `مدرسة ${p.school_name}` : 'المدرسة'
+      const school = p.school_name || 'المدرسة'
       const methodLabel = METHOD_LABEL[p.method] || p.method
       const body =
         `${school}\n\n` +
-        `شكراً لكم ${p.guardian} 🌿\n` +
+        `شكراً لكم ${p.guardian}\n` +
         `نفيدكم بأنه تم اعتماد واستلام دفعتكم بمبلغ ${fmt(p.amount)} (${methodLabel}) ` +
         `لصالح الطالب ${p.student}.\n\n` +
         `نقدّر التزامكم وحسن تعاونكم معنا.`
