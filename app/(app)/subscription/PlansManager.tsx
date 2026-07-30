@@ -142,9 +142,20 @@ export default function PlansManager({ sub, schoolId, schoolName }: { sub: Sub; 
               {usage.price_omr === 0 && <span style={{ fontSize: 14, fontWeight: 600, color: '#1A7A45' }}> · مجاناً</span>}
             </div>
           </div>
-          <span style={{ background: st.bg, color: st.c, fontWeight: 700, fontSize: 13, padding: '5px 14px', borderRadius: 99 }}>
-            {st.t}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ background: st.bg, color: st.c, fontWeight: 700, fontSize: 13, padding: '5px 14px', borderRadius: 99 }}>
+              {st.t}
+            </span>
+            <button
+              onClick={() => document.getElementById('plans-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              style={{
+                background: '#163B68', color: '#fff', border: 0, padding: '9px 18px',
+                borderRadius: 10, fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: 'inherit',
+                whiteSpace: 'nowrap',
+              }}>
+              ⬆ ترقية / تغيير الباقة
+            </button>
+          </div>
         </div>
 
         {/* شريط استخدام الطلاب */}
@@ -203,7 +214,7 @@ export default function PlansManager({ sub, schoolId, schoolName }: { sub: Sub; 
       )}
 
       {/* ── الباقات ── */}
-      <div style={{ fontSize: 13, fontWeight: 700, color: '#8A94A6', marginBottom: 10 }}>الباقات المتاحة</div>
+      <div id="plans-list" style={{ fontSize: 13, fontWeight: 700, color: '#8A94A6', marginBottom: 10, scrollMarginTop: 90 }}>الباقات المتاحة</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(215px,1fr))', gap: 12, marginBottom: 18 }}>
         {plans.map((p) => {
           const sel = picked === p.code
