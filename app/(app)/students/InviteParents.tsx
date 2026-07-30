@@ -1,6 +1,7 @@
 'use client'
 // دعوة أولياء الأمور لتفعيل حساباتهم — تُرسل عبر رقم واتساب المدرسة الرسمي (Twilio API)
-// لا يُستخدم واتساب الموظف الشخصي؛ الإرسال من رقم المنظومة الموحّد.
+// يُحفظ تاريخ آخر إرسال في قاعدة البيانات (guardian_invites) — يبقى ظاهراً حتى بعد إغلاق الصفحة،
+// حتى يسجّل ولي الأمر فعلياً (عندها يختفي تلقائياً من القائمة عبر unlinked_guardians).
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import { MessageCircle, Copy, Check, Users, RefreshCw } from 'lucide-react'
@@ -10,6 +11,7 @@ type Guardian = {
   guardian_name: string
   children_count: number
   children: string
+  invited_at: string | null
 }
 
 export default function InviteParents({ schoolName }: { schoolName?: string }) {
@@ -19,7 +21,6 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState<string | null>(null)
   const [sending, setSending] = useState<string | null>(null)
-  const [sent, setSent] = useState<Set<string>>(new Set())
 
   const siteUrl = typeof window !== 'undefined' ? window.location.origin : 'https://rusoompay.com'
   const registerUrl = `${siteUrl}/parent-register`
@@ -34,7 +35,6 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
 
   useEffect(() => { if (open) load() }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // نصّ الرسالة — واضح، بلا حشو، يشرح الخطوة الواحدة المطلوبة
   function messageFor(g: Guardian): string {
     const school = schoolName ? `مدرسة ${schoolName}` : 'مدرستكم'
     const kids = g.children_count === 1 ? 'ابنكم/ابنتكم' : `أبنائكم (${g.children_count})`
@@ -46,7 +46,6 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
     )
   }
 
-  // تطبيع الرقم العُماني: يزيل الرموز، ويضمن رمز الدولة 968
   function normalizePhone(raw: string): string {
     let p = (raw || '').replace(/[\s\-()]/g, '')
     if (p.startsWith('+')) p = p.slice(1)
@@ -63,7 +62,7 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
     } catch { /* المتصفح منع النسخ */ }
   }
 
-  // الإرسال عبر رقم المدرسة الرسمي في المنظومة (Twilio) — لا واتساب شخصي
+  // إرسال عبر رقم المدرسة الرسمي (Twilio) + تسجيل وقت الإرسال في قاعدة البيانات (يبقى دائماً)
   async function sendInvite(g: Guardian) {
     setSending(g.phone)
     try {
@@ -75,7 +74,9 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
       })
       const data = await res.json()
       if (data.success) {
-        setSent((prev) => new Set(prev).add(g.phone))
+        // تسجيل دائم في قاعدة البيانات — يبقى حتى لو أُغلقت الصفحة
+        await supabase.rpc('mark_guardian_invited', { p_phone: g.phone })
+        setList((prev) => prev.map((x) => x.phone === g.phone ? { ...x, invited_at: new Date().toISOString() } : x))
       } else {
         alert('فشل الإرسال: ' + (data.error || 'خطأ غير معروف'))
       }
@@ -84,6 +85,15 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
     } finally {
       setSending(null)
     }
+  }
+
+  // نص نسبي لوقت آخر دعوة ("اليوم"، "أمس"، "منذ 5 أيام"...)
+  function invitedLabel(iso: string): string {
+    const diffMs = Date.now() - new Date(iso).getTime()
+    const days = Math.floor(diffMs / 86400000)
+    if (days <= 0) return 'اليوم'
+    if (days === 1) return 'أمس'
+    return `منذ ${days} أيام`
   }
 
   if (!open) {
@@ -130,13 +140,13 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
       {!loading && list.length > 0 && (
         <div style={{ border: '1px solid #EEF1F5', borderRadius: 12, overflow: 'hidden', maxHeight: 420, overflowY: 'auto' }}>
           {list.map((g, i) => {
-            const isSent = sent.has(g.phone)
             const isSending = sending === g.phone
+            const wasInvited = !!g.invited_at
             return (
               <div key={g.phone} style={{
                 display: 'flex', alignItems: 'center', gap: 12, padding: '13px 15px',
                 borderTop: i === 0 ? 'none' : '1px solid #F2F5F8',
-                background: isSent ? '#F7FBF9' : '#fff',
+                background: wasInvited ? '#FBFAF5' : '#fff',
               }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: 14.5, color: '#0F2744' }}>
@@ -146,6 +156,11 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
                   <div style={{ fontSize: 12.5, color: '#667', marginTop: 2 }}>
                     {g.children_count} {g.children_count === 1 ? 'ابن' : 'أبناء'} — {g.children}
                   </div>
+                  {wasInvited && (
+                    <div style={{ fontSize: 11.5, color: '#B54708', marginTop: 4, fontWeight: 600 }}>
+                      ⏱ تم إرسال دعوة {invitedLabel(g.invited_at as string)} — لم يُفعّل الحساب بعد
+                    </div>
+                  )}
                 </div>
 
                 <button onClick={() => copyMsg(g)} title="نسخ نصّ الرسالة"
@@ -155,19 +170,20 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
 
                 <button
                   onClick={() => sendInvite(g)}
-                  disabled={isSending || isSent}
+                  disabled={isSending}
                   style={{
                     flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6,
-                    background: isSent ? '#EAF7F0' : '#25D366', color: isSent ? '#15803D' : '#fff',
-                    border: isSent ? '1px solid #BFE5D0' : 'none',
+                    background: wasInvited ? '#FFF6ED' : '#25D366',
+                    color: wasInvited ? '#B54708' : '#fff',
+                    border: wasInvited ? '1px solid #F3D9B0' : 'none',
                     borderRadius: 9, padding: '9px 15px',
                     fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap',
-                    cursor: isSending || isSent ? 'default' : 'pointer',
+                    cursor: isSending ? 'default' : 'pointer',
                     opacity: isSending ? 0.7 : 1,
                     fontFamily: 'inherit',
                   }}>
                   <MessageCircle size={16} strokeWidth={2.2} />
-                  {isSent ? 'أُرسلت ✓' : isSending ? 'جارٍ الإرسال…' : 'إرسال واتساب'}
+                  {isSending ? 'جارٍ الإرسال…' : wasInvited ? 'إعادة الإرسال' : 'إرسال واتساب'}
                 </button>
               </div>
             )
@@ -176,7 +192,8 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
       )}
 
       <div style={{ fontSize: 12, color: '#8A94A6', marginTop: 12, lineHeight: 1.8 }}>
-        💡 يختفي ولي الأمر من القائمة تلقائياً بمجرّد تسجيله. اضغط «تحديث القائمة» للتحقّق.
+        💡 يختفي ولي الأمر من القائمة تلقائياً بمجرّد تسجيله. القائمة تُبقي "تم الإرسال" ظاهراً
+        حتى يفعّل حسابه فعلياً — حتى لو أعدت فتح هذه الصفحة لاحقاً.
       </div>
     </div>
   )
