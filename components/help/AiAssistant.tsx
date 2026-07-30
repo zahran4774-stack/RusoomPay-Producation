@@ -15,6 +15,7 @@ import { usePathname } from 'next/navigation'
 type Msg = { role: 'user' | 'assistant'; content: string }
 
 const SUGGESTIONS = [
+  'أعطني نبذة عن برنامج RusoomPay',
   'كم طالب متأخر عن السداد؟',
   'كيف أرسل تذكير دفع؟',
   'كيف أصدّر تقريراً مالياً؟',
