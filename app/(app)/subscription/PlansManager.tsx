@@ -96,21 +96,27 @@ export default function PlansManager({ sub, schoolId, schoolName }: { sub: Sub; 
     setBusy(true); setMsg(null)
     const plan = plans.find((p) => p.code === picked)
     const renewsAt = new Date(Date.now() + 365 * 86400000).toISOString()
+    const newStatus = method === 'bank' ? 'pending' : 'active'
 
-    const { error } = await supabase.from('subscriptions').insert({
-      school_id: schoolId,
-      plan: picked,
-      status: method === 'bank' ? 'pending' : 'active',
-      pay_method: method,
-      renews_at: renewsAt,
-    })
+    // مدرسة لا يجوز أن يكون لها أكثر من اشتراك نشط/معلّق/تجريبي واحد في آن واحد
+    // (قيد فريد على مستوى قاعدة البيانات: subscriptions_one_active_per_school).
+    // لذا: إن وُجد اشتراك سابق بإحدى هذه الحالات، نحدّثه بدل إدراج صف جديد.
+    const hasExisting = sub && ['active', 'trial', 'pending'].includes(sub.status)
+
+    const { error } = hasExisting
+      ? await supabase.from('subscriptions').update({
+          plan: picked, status: newStatus, pay_method: method, renews_at: renewsAt,
+        }).eq('id', sub!.id)
+      : await supabase.from('subscriptions').insert({
+          school_id: schoolId, plan: picked, status: newStatus, pay_method: method, renews_at: renewsAt,
+        })
     setBusy(false)
 
     if (error) { setMsg({ ok: false, text: 'تعذّر إتمام الاشتراك: ' + error.message }); return }
     setMsg({
       ok: true,
       text: method === 'bank'
-        ? `تم تسجيل طلب الاشتراك في باقة «${plan?.name}» — بانتظار اعتماد الإدارة بعد التحويل.`
+        ? `تم تسجيل طلب الترقية إلى باقة «${plan?.name}» — بانتظار اعتماد الإدارة بعد التحويل.`
         : `تم تفعيل باقة «${plan?.name}» بنجاح.`,
     })
 
