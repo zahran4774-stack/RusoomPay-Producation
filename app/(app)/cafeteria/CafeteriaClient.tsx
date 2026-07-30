@@ -90,7 +90,7 @@ export default function CafeteriaClient({ initialPlans, initialSubscribers, stud
   const [foodBusy, setFoodBusy] = useState(false)
   // نموذج صنف جديد
   const [fName, setFName] = useState('عصير')
-  const [fUnit, setFUnit] = useState('')
+  const [fUnit, setFUnit] = useState('عبوه')
   const [fQty, setFQty] = useState('')
   const [fCost, setFCost] = useState('')
   // نافذة الحركة (شراء/صرف)
