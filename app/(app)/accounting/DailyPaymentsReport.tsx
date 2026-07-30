@@ -1,6 +1,6 @@
 'use client'
 // app/(app)/accounting/DailyPaymentsReport.tsx
-// تقرير المدفوعات اليومية بأسماء الطلاب — للمتابعة اليومية.
+// تقرير المدفوعات — يوم واحد (افتراضي: اليوم) أو فترة مخصّصة (من-إلى).
 // يعتمد على RPC daily_payments_report (معزول بالمدرسة + للطاقم المالي فقط).
 // يجلب عملة المدرسة تلقائياً (يدعم جميع عملات الخليج).
 import { useState, useEffect, useCallback } from 'react'
@@ -13,12 +13,15 @@ type Item = {
   fee_description: string
   amount: number
   method: string
+  paid_at: string
   created_at: string
 }
 type Report = {
   ok: boolean
   reason?: string
-  date?: string
+  from?: string
+  to?: string
+  is_range?: boolean
   count?: number
   total?: number
   cash?: number
@@ -29,16 +32,24 @@ type Report = {
 const METHOD_LABEL: Record<string, string> = {
   cash: 'نقداً', bank: 'تحويل بنكي', card: 'بطاقة', applepay: 'Apple Pay', googlepay: 'Google Pay', onsite: 'عند المدرسة',
 }
-
-// رموز عملات الخليج + المنازل العشرية
 const CUR_SYM: Record<string, string> = { OMR: 'ر.ع', SAR: 'ر.س', AED: 'د.إ', QAR: 'ر.ق', KWD: 'د.ك', BHD: 'د.ب' }
 const CUR_DEC: Record<string, number> = { OMR: 3, KWD: 3, BHD: 3, SAR: 2, AED: 2, QAR: 2 }
 
 const todayStr = () => new Date().toISOString().slice(0, 10)
+const addDays = (d: string, n: number) => {
+  const dt = new Date(d)
+  dt.setDate(dt.getDate() + n)
+  return dt.toISOString().slice(0, 10)
+}
+
+type Mode = 'day' | 'range'
 
 export default function DailyPaymentsReport() {
   const supabase = createClient()
-  const [date, setDate] = useState(todayStr())
+  const [mode, setMode] = useState<Mode>('day')
+  const [date, setDate] = useState(todayStr())        // وضع اليوم الواحد
+  const [from, setFrom] = useState(addDays(todayStr(), -6)) // وضع الفترة
+  const [to, setTo] = useState(todayStr())
   const [report, setReport] = useState<Report | null>(null)
   const [loading, setLoading] = useState(false)
   const [currency, setCurrency] = useState<string>('OMR')
@@ -48,7 +59,7 @@ export default function DailyPaymentsReport() {
   const fmt = (n: number) =>
     new Intl.NumberFormat('en', { minimumFractionDigits: dec, maximumFractionDigits: dec }).format(n || 0)
 
-  // جلب عملة المدرسة تلقائياً (مرّة واحدة) — معزول بـ RLS
+  // جلب عملة المدرسة تلقائياً — معزول بـ RLS
   useEffect(() => {
     let active = true
     ;(async () => {
@@ -59,32 +70,50 @@ export default function DailyPaymentsReport() {
   }, [supabase])
 
   const load = useCallback(
-    async (d: string) => {
+    async (p_date: string, p_to: string | null) => {
       setLoading(true)
-      const { data, error } = await supabase.rpc('daily_payments_report', { p_date: d })
+      const { data, error } = await supabase.rpc('daily_payments_report', { p_date, p_to })
       setReport(error ? { ok: false, reason: 'error' } : (data as Report))
       setLoading(false)
     },
     [supabase],
   )
 
-  useEffect(() => { load(date) }, [date, load])
+  // تحميل عند تغيّر الوضع أو التواريخ
+  useEffect(() => {
+    if (mode === 'day') load(date, null)
+    else load(from, to)
+  }, [mode, date, from, to, load])
 
   const items = report?.items ?? []
 
   const timeOf = (iso: string) => {
-    try {
-      return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-    } catch { return '—' }
+    try { return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) }
+    catch { return '—' }
+  }
+  const dateOf = (d: string) => {
+    try { return new Date(d).toLocaleDateString('en-GB') }
+    catch { return d }
   }
 
-  const shiftDay = (delta: number) => {
-    const d = new Date(date)
-    d.setDate(d.getDate() + delta)
-    setDate(d.toISOString().slice(0, 10))
+  const shiftDay = (delta: number) => setDate((d) => addDays(d, delta))
+
+  const quickRange = (days: number) => {
+    setTo(todayStr())
+    setFrom(addDays(todayStr(), -(days - 1)))
+  }
+  const thisMonth = () => {
+    const now = new Date()
+    const first = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
+    setFrom(first)
+    setTo(todayStr())
   }
 
   function printReport() { window.print() }
+
+  const rangeLabel = report?.is_range
+    ? `${dateOf(report.from ?? '')} — ${dateOf(report.to ?? '')}`
+    : dateOf(report?.from ?? date)
 
   return (
     <section style={{ background: '#fff', border: '1px solid #E7EBF0', borderRadius: 16, padding: 22, marginTop: 18 }} dir="rtl">
@@ -98,37 +127,59 @@ export default function DailyPaymentsReport() {
       `}</style>
 
       {/* الرأس */}
-      <div className="dpr-no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+      <div className="dpr-no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
         <div>
-          <h2 style={{ color: '#0F2744', fontSize: '1.15rem', margin: 0 }}>تقرير المدفوعات اليومية</h2>
-          <p style={{ color: '#667', fontSize: 13, margin: '4px 0 0' }}>متابعة يومية لجميع الدفعات المستلمة بأسماء الطلاب</p>
+          <h2 style={{ color: '#0F2744', fontSize: '1.15rem', margin: 0 }}>تقرير المدفوعات</h2>
+          <p style={{ color: '#667', fontSize: 13, margin: '4px 0 0' }}>متابعة الدفعات المستلمة بأسماء الطلاب — يوم واحد أو فترة محدّدة</p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <button onClick={printReport} style={btnPrint}>⎙ طباعة</button>
+      </div>
+
+      {/* مبدّل الوضع */}
+      <div className="dpr-no-print" style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <button onClick={() => setMode('day')} style={mode === 'day' ? tabActive : tabLite}>يوم واحد</button>
+        <button onClick={() => setMode('range')} style={mode === 'range' ? tabActive : tabLite}>فترة (من/إلى)</button>
+      </div>
+
+      {/* أدوات التحكم — يوم واحد */}
+      {mode === 'day' && (
+        <div className="dpr-no-print" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
           <button onClick={() => shiftDay(-1)} style={btnLite} aria-label="اليوم السابق">‹</button>
           <input type="date" value={date} max={todayStr()} onChange={(e) => setDate(e.target.value)} style={dateInput} />
           <button onClick={() => shiftDay(1)} disabled={date >= todayStr()} style={{ ...btnLite, opacity: date >= todayStr() ? 0.4 : 1 }} aria-label="اليوم التالي">›</button>
           <button onClick={() => setDate(todayStr())} style={btnLite}>اليوم</button>
-          <button onClick={printReport} style={btnPrint}>⎙ طباعة</button>
         </div>
-      </div>
+      )}
+
+      {/* أدوات التحكم — فترة */}
+      {mode === 'range' && (
+        <div className="dpr-no-print" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+          <label style={{ fontSize: 13, color: '#556' }}>من</label>
+          <input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} style={dateInput} />
+          <label style={{ fontSize: 13, color: '#556' }}>إلى</label>
+          <input type="date" value={to} min={from} max={todayStr()} onChange={(e) => setTo(e.target.value)} style={dateInput} />
+          <button onClick={() => quickRange(7)} style={btnLite}>آخر 7 أيام</button>
+          <button onClick={() => quickRange(30)} style={btnLite}>آخر 30 يوم</button>
+          <button onClick={thisMonth} style={btnLite}>هذا الشهر</button>
+        </div>
+      )}
 
       <div className="dpr-sheet">
         {/* عنوان الطباعة */}
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontWeight: 800, color: '#0F2744', fontSize: 16 }}>
-            تقرير المدفوعات — {new Date(date).toLocaleDateString('en-GB')}
+            تقرير المدفوعات — {rangeLabel}
           </div>
         </div>
 
         {/* بطاقات الإجمالي */}
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-          <Stat label="إجمالي اليوم" value={`${fmt(report?.total ?? 0)} ${sym}`} color="#0F2744" bg="#F4F7FB" />
+          <Stat label="الإجمالي" value={`${fmt(report?.total ?? 0)} ${sym}`} color="#0F2744" bg="#F4F7FB" />
           <Stat label="نقداً" value={`${fmt(report?.cash ?? 0)} ${sym}`} color="#1A7A45" bg="#EFF9F2" />
           <Stat label="تحويل/بطاقة" value={`${fmt(report?.bank ?? 0)} ${sym}`} color="#1D5FA8" bg="#EEF4FC" />
           <Stat label="عدد الدفعات" value={`${report?.count ?? 0}`} color="#B54708" bg="#FFF6ED" />
         </div>
 
-        {/* الحالة */}
         {loading && <div style={{ textAlign: 'center', color: '#8A94A6', padding: 24 }}>جارٍ التحميل…</div>}
 
         {!loading && report && !report.ok && (
@@ -143,11 +194,10 @@ export default function DailyPaymentsReport() {
 
         {!loading && report?.ok && items.length === 0 && (
           <div style={{ textAlign: 'center', color: '#8A94A6', padding: 28, background: '#F8FAFC', borderRadius: 12 }}>
-            لا توجد مدفوعات مسجّلة في هذا اليوم
+            لا توجد مدفوعات مسجّلة في هذه الفترة
           </div>
         )}
 
-        {/* الجدول */}
         {!loading && report?.ok && items.length > 0 && (
           <div style={{ overflowX: 'auto', border: '1px solid #EEF1F5', borderRadius: 12 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
@@ -159,7 +209,7 @@ export default function DailyPaymentsReport() {
                   <th style={th}>البند</th>
                   <th style={th}>المبلغ</th>
                   <th style={th}>الطريقة</th>
-                  <th style={th}>الوقت</th>
+                  <th style={th}>{report?.is_range ? 'التاريخ' : 'الوقت'}</th>
                 </tr>
               </thead>
               <tbody>
@@ -178,10 +228,11 @@ export default function DailyPaymentsReport() {
                         {METHOD_LABEL[it.method] || it.method}
                       </span>
                     </td>
-                    <td style={{ ...td, direction: 'ltr', textAlign: 'right', color: '#556' }}>{timeOf(it.created_at)}</td>
+                    <td style={{ ...td, direction: 'ltr', textAlign: 'right', color: '#556' }}>
+                      {report?.is_range ? dateOf(it.paid_at) : timeOf(it.created_at)}
+                    </td>
                   </tr>
                 ))}
-                {/* صف الإجمالي */}
                 <tr style={{ borderTop: '2px solid #0F2744', fontWeight: 700, background: '#F9FBFC' }}>
                   <td style={td}></td>
                   <td style={td} colSpan={3}>الإجمالي ({report.count} دفعة)</td>
@@ -193,10 +244,9 @@ export default function DailyPaymentsReport() {
           </div>
         )}
 
-        {/* تذييل الطباعة */}
         {report?.ok && items.length > 0 && (
           <div style={{ marginTop: 14, fontSize: 12, color: '#8A94A6', textAlign: 'center' }}>
-            تقرير المدفوعات اليومية — RusoomPay · {new Date(date).toLocaleDateString('en-GB')}
+            تقرير المدفوعات — RusoomPay · {rangeLabel}
           </div>
         )}
       </div>
@@ -218,3 +268,5 @@ const td: React.CSSProperties = { padding: '11px 14px', fontSize: 13.5, color: '
 const btnLite: React.CSSProperties = { padding: '9px 14px', borderRadius: 10, border: '1.5px solid #DDE3EC', background: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', color: '#334' }
 const dateInput: React.CSSProperties = { padding: '9px 12px', borderRadius: 10, border: '1.5px solid #DDE3EC', fontSize: 14, fontFamily: 'inherit', background: '#fff' }
 const btnPrint: React.CSSProperties = { padding: '9px 16px', borderRadius: 10, border: 'none', background: '#163B68', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }
+const tabLite: React.CSSProperties = { padding: '8px 16px', borderRadius: 20, border: '1.5px solid #DDE3EC', background: '#fff', fontSize: 13.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', color: '#556' }
+const tabActive: React.CSSProperties = { ...tabLite, background: '#0F2744', color: '#fff', border: '1.5px solid #0F2744' }
