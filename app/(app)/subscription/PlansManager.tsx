@@ -2,6 +2,8 @@
 // إدارة باقة المدرسة — أربع باقات بسقوف طلاب + عرض التأسيس.
 // السقف ليّن: ننبّه عند 90% ولا نقطع الخدمة.
 // كل الباقات تشمل كل الميزات — الفرق في السعة فقط.
+// عند تسجيل طلب اشتراك بتحويل بنكي (pending): تُرسل رسالة واتساب فورية لمالك المنصة
+// عبر /api/send-notify-admin — للتنبيه بضرورة اعتماد الاشتراك بعد مراجعة التحويل.
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
@@ -34,7 +36,7 @@ const STATUS: Record<string, { t: string; c: string; bg: string }> = {
   expired: { t: 'منتهٍ',  c: '#C0392B', bg: '#FDECEA' },
 }
 
-export default function PlansManager({ sub, schoolId }: { sub: Sub; schoolId?: string }) {
+export default function PlansManager({ sub, schoolId, schoolName }: { sub: Sub; schoolId?: string; schoolName?: string }) {
   const router = useRouter()
   const supabase = createClient()
   const [plans, setPlans] = useState<Plan[]>([])
@@ -69,6 +71,26 @@ export default function PlansManager({ sub, schoolId }: { sub: Sub; schoolId?: s
   // أقرب تاريخ انتهاء عرض بين الباقات (لعرض شريط عام)
   const activeOffer = plans.find((p) => p.offer_ends_at)?.offer_ends_at ?? null
 
+  // تنبيه مالك المنصة عبر واتساب — لا يُظهر أي خطأ للمستخدم لو فشل (تسجيل الاشتراك نفسه أهم وأولوية)
+  async function notifyAdmin(planName: string) {
+    try {
+      await fetch('/api/send-notify-admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          body:
+            `🔔 اشتراك جديد بانتظار الاعتماد\n\n` +
+            `المدرسة: ${schoolName || 'غير معروف'}\n` +
+            `الباقة: ${planName}\n` +
+            `طريقة الدفع: تحويل بنكي\n\n` +
+            `راجع الإيصال واعتمد الاشتراك من لوحة تحكم المنصة.`,
+        }),
+      })
+    } catch {
+      // فشل التنبيه لا يعطّل تسجيل طلب الاشتراك نفسه
+    }
+  }
+
   async function subscribe(method: 'bank' | 'card') {
     if (!picked || !schoolId) return
     setBusy(true); setMsg(null)
@@ -91,6 +113,10 @@ export default function PlansManager({ sub, schoolId }: { sub: Sub; schoolId?: s
         ? `تم تسجيل طلب الاشتراك في باقة «${plan?.name}» — بانتظار اعتماد الإدارة بعد التحويل.`
         : `تم تفعيل باقة «${plan?.name}» بنجاح.`,
     })
+
+    // تحويل بنكي فقط = يحتاج اعتماد يدوي لاحقاً → أرسل تنبيهاً فورياً لمالك المنصة
+    if (method === 'bank') notifyAdmin(plan?.name || picked)
+
     setPicked(null)
     router.refresh()
   }
