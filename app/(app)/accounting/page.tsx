@@ -10,6 +10,7 @@ import PeriodReports from './PeriodReports'
 import JournalList from './JournalList'
 import ForecastPanel from './ForecastPanel'
 import DailyPaymentsReport from './DailyPaymentsReport'
+import PayrollYearlyReport from './PayrollYearlyReport'
 
 export default async function AccountingPage() {
   const supabase = await createClient()
@@ -72,6 +73,7 @@ export default async function AccountingPage() {
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }} dir="rtl">
       <DailyPaymentsReport />
+      <PayrollYearlyReport currency={currency} />
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
         <div>
