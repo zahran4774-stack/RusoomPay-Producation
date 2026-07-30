@@ -1,10 +1,36 @@
 'use client'
 // تسجيل دفعة حضورية (نقداً / بطاقة / شيك) — يسجّلها المحاسب مباشرة في المدرسة
+// بعد نجاح التسجيل: تُرسل تلقائياً رسالة شكر/إثبات سداد لولي الأمر عبر واتساب
+// (من رقم المدرسة الرسمي عبر Twilio) — بأولوية لرقم حساب ولي الأمر المفعّل، وإلا رقمه المخزّن.
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
 
 type Fee = { id: string; description: string; total: number; paid: number }
+
+type RecordPaymentResult = {
+  ok: boolean
+  student_name?: string
+  guardian_name?: string
+  guardian_phone?: string | null
+  amount?: number
+  method?: string
+  school_name?: string
+  remaining?: number
+}
+
+const METHOD_LABEL: Record<string, string> = {
+  cash: 'نقداً', card: 'بطاقة', cheque: 'شيك', bank: 'تحويل بنكي',
+}
+
+// تطبيع الرقم العُماني: يزيل الرموز، ويضمن رمز الدولة 968
+function normalizePhone(raw: string): string {
+  let p = (raw || '').replace(/[\s\-()]/g, '')
+  if (p.startsWith('+')) p = p.slice(1)
+  if (p.startsWith('00')) p = p.slice(2)
+  if (!p.startsWith('968') && p.length === 8) p = '968' + p
+  return p
+}
 
 export default function CashPayment({
   fee, studentName, currency, sym, dec,
@@ -25,6 +51,33 @@ export default function CashPayment({
 
   const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec })
 
+  // إرسال رسالة الشكر — لا تعطّل نجاح الدفعة لو فشل الإرسال (يُسجَّل فقط في الكونسول)
+  async function sendThankYou(res: RecordPaymentResult) {
+    if (!res.guardian_phone) return // لا رقم متوفّر — لا يوجد ما نرسل إليه
+    try {
+      const to = `+${normalizePhone(res.guardian_phone)}`
+      const school = res.school_name ? `مدرسة ${res.school_name}` : 'المدرسة'
+      const methodLabel = METHOD_LABEL[res.method || 'cash'] || res.method
+      const body =
+        `${school}\n\n` +
+        `شكراً لكم ${res.guardian_name || 'ولي الأمر'} 🌿\n` +
+        `نفيدكم بأنه تم استلام دفعة بمبلغ ${fmt(res.amount || 0)} ${sym} (${methodLabel}) ` +
+        `لصالح الطالب ${res.student_name || studentName}.\n\n` +
+        (res.remaining && res.remaining > 0.0005
+          ? `المتبقّي على الفاتورة: ${fmt(res.remaining)} ${sym}.`
+          : `تم سداد الفاتورة بالكامل. ✅`) +
+        `\n\nنقدّر التزامكم وحسن تعاونكم معنا.`
+
+      await fetch('/api/send-whatsapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, body }),
+      })
+    } catch {
+      // فشل إرسال الإشعار لا يجب أن يُظهر خطأ للمستخدم — الدفعة نفسها نجحت وسُجّلت
+    }
+  }
+
   async function submit() {
     setErr(null)
     const amt = Number(amount)
@@ -32,7 +85,7 @@ export default function CashPayment({
     if (amt > remaining) { setErr(`المبلغ أكبر من المتبقّي (${fmt(remaining)} ${sym})`); return }
 
     setSaving(true)
-    const { error } = await supabase.rpc('record_payment', {
+    const { data, error } = await supabase.rpc('record_payment', {
       p_fee_id: fee.id,
       p_amount: amt,
       p_method: method,
@@ -43,6 +96,11 @@ export default function CashPayment({
 
     setOk(true)
     router.refresh()
+
+    // إرسال رسالة الشكر تلقائياً — لا ننتظرها قبل إغلاق النافذة (تجربة سلسة للمحاسب)
+    const res = data as RecordPaymentResult
+    if (res?.ok) sendThankYou(res)
+
     setTimeout(() => { setOk(false); setOpen(false) }, 1200)
   }
 
@@ -74,18 +132,15 @@ export default function CashPayment({
         <div style={{ color: '#667', fontSize: 13, marginBottom: 18 }}>
           {studentName} · {fee.description}
         </div>
-
         <div style={{ background: '#F7FAFC', border: '1px solid #E3E8EE', borderRadius: 11, padding: '12px 14px', marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
           <span style={{ fontSize: 13, color: '#667' }}>المتبقّي</span>
           <b style={{ fontSize: 15, color: '#B54708' }}>{fmt(remaining)} {sym}</b>
         </div>
-
         <div style={{ marginBottom: 14 }}>
           <label style={label}>المبلغ المدفوع ({sym})</label>
           <input type="number" step="0.001" style={input} value={amount} dir="ltr"
             onChange={(e) => setAmount(e.target.value)} />
         </div>
-
         <div style={{ display: 'flex', gap: 12, marginBottom: 18 }}>
           <div style={{ flex: 1 }}>
             <label style={label}>طريقة الدفع</label>
@@ -102,10 +157,8 @@ export default function CashPayment({
               onChange={(e) => setPaidAt(e.target.value)} />
           </div>
         </div>
-
         {err && <div style={{ color: '#C0392B', marginBottom: 12, fontWeight: 600, fontSize: 13 }}>⚠ {err}</div>}
         {ok && <div style={{ color: '#067647', marginBottom: 12, fontWeight: 700, fontSize: 13 }}>✓ سُجّلت الدفعة بنجاح</div>}
-
         <div style={{ display: 'flex', gap: 10 }}>
           <button onClick={submit} disabled={saving}
             style={{ flex: 1, background: saving ? '#8AA' : '#067647', color: '#fff', border: 0, padding: '12px', borderRadius: 11, fontWeight: 800, fontSize: 15, cursor: saving ? 'default' : 'pointer', fontFamily: 'inherit' }}>
