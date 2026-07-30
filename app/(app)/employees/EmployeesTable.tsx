@@ -1,6 +1,8 @@
 'use client'
 // جدول الموظفين التفاعلي — إضافة/تعديل
 // المحاسب: تعديل الراتب يصبح طلباً · المدير: تعديل مباشر عبر update_employee
+// البيانات البنكية (البنك، الآيبان، رقم الحساب) قابلة للتعديل مباشرة من الطرفين —
+// مع تحقّق من صيغة الآيبان العُماني (23 حرفاً، يبدأ بـ OM) قبل الحفظ.
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
@@ -9,6 +11,8 @@ import GrantAccess from './GrantAccess'
 type Emp = {
   id: string; code: string; full_name: string; job_title: string | null
   nationality: string; basic: number; allowance: number; iban: string | null
+  bank_name?: string | null
+  bank_account_no?: string | null
   email?: string | null
   department?: string | null
   org_level?: number | null
@@ -22,7 +26,18 @@ function payslip(basic: number, allow: number, nat: string, rates: InsRates) {
     er: exempt ? 0 : Math.round(base * rates.er * 1000) / 1000,
   }
 }
+
 const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+
+// التحقق من صيغة الآيبان العُماني: 23 حرفاً بالضبط، يبدأ بـ OM، والباقي أرقام
+function validateOmanIban(iban: string): string | null {
+  const clean = iban.trim().toUpperCase().replace(/\s/g, '')
+  if (!clean) return null // فارغ مسموح — الحقل اختياري
+  if (!/^OM\d{21}$/.test(clean)) {
+    return 'صيغة الآيبان غير صحيحة — يجب أن يبدأ بـ OM ويتبعه 21 رقماً (23 حرفاً بالضبط)'
+  }
+  return null
+}
 
 import type { InsRates } from '@/lib/payroll'
 
@@ -35,17 +50,24 @@ export default function EmployeesTable({ employees, role, rates }: { employees: 
 
   async function saveEdit(form: Emp) {
     setMsg(''); setErr('')
+
+    // التحقق من صيغة الآيبان قبل أي استدعاء للخادم
+    const ibanError = validateOmanIban(form.iban ?? '')
+    if (ibanError) { setErr(ibanError); return }
+
     const original = employees.find((e) => e.id === form.id)
     const salaryChanged = original && (form.basic !== original.basic || form.allowance !== original.allowance)
 
     if (role === 'accountant' && salaryChanged) {
-      // المحاسب: الحقول غير المالية مباشرة · الراتب يصبح طلباً معلّقاً
+      // المحاسب: الحقول غير المالية (بما فيها البيانات البنكية) مباشرة · الراتب يصبح طلباً معلّقاً
       const { error: e1 } = await supabase.rpc('update_employee', {
         p_id: form.id,
         p_full_name: form.full_name,
         p_job_title: form.job_title,
         p_nationality: form.nationality,
         p_iban: form.iban,
+        p_bank_name: form.bank_name,
+        p_bank_account_no: form.bank_account_no,
         p_department: form.department,
         p_org_level: form.org_level,
       })
@@ -60,9 +82,9 @@ export default function EmployeesTable({ employees, role, rates }: { employees: 
         status: 'pending',
       })
       if (e2) { setErr(e2.message); return }
-      setMsg('📩 تم إرسال طلب تعديل الراتب لاعتماد مدير المدرسة')
+      setMsg('📩 تم إرسال طلب تعديل الراتب لاعتماد مدير المدرسة — تُحدَّث البيانات الأخرى فوراً')
     } else {
-      // المدير/الإداري: تعديل مباشر معتمد
+      // المدير/الإداري: تعديل مباشر معتمد (شامل البيانات البنكية)
       const { error } = await supabase.rpc('update_employee', {
         p_id: form.id,
         p_full_name: form.full_name,
@@ -71,6 +93,8 @@ export default function EmployeesTable({ employees, role, rates }: { employees: 
         p_basic: form.basic,
         p_allowance: form.allowance,
         p_iban: form.iban,
+        p_bank_name: form.bank_name,
+        p_bank_account_no: form.bank_account_no,
         p_department: form.department,
         p_org_level: form.org_level,
       })
@@ -140,13 +164,25 @@ function EditModal({ emp, role, onSave, onClose }: { emp: Emp; role: string; onS
     nationality: emp.nationality?.toUpperCase() === 'OM' ? 'OM' : 'NON_OM',
     department: emp.department ?? 'teaching',
     org_level: emp.org_level ?? 3,
+    bank_name: emp.bank_name ?? '',
+    bank_account_no: emp.bank_account_no ?? '',
+    iban: emp.iban ?? '',
   })
   const [saving, setSaving] = useState(false)
+  const [ibanWarning, setIbanWarning] = useState<string | null>(null)
   const set = (k: keyof Emp, v: string | number) => setForm({ ...form, [k]: v })
   const inp: React.CSSProperties = { width: '100%', padding: 10, margin: '5px 0 12px', borderRadius: 9, border: '1.5px solid #DDE3EC', fontFamily: 'inherit', fontSize: 14 }
   const lbl: React.CSSProperties = { fontSize: 13, fontWeight: 600 }
 
+  function onIbanChange(v: string) {
+    const upper = v.toUpperCase()
+    set('iban', upper)
+    setIbanWarning(validateOmanIban(upper))
+  }
+
   async function submit() {
+    const finalIbanError = validateOmanIban(form.iban ?? '')
+    if (finalIbanError) { setIbanWarning(finalIbanError); return }
     setSaving(true)
     await onSave(form)
     setSaving(false)
@@ -159,7 +195,7 @@ function EditModal({ emp, role, onSave, onClose }: { emp: Emp; role: string; onS
 
         {role === 'accountant' && (
           <div style={{ background: '#FBF3D5', color: '#8A6D0F', padding: 10, borderRadius: 8, fontSize: 13, marginBottom: 14 }}>
-            ℹ️ تعديل الراتب سيُرسل كطلب لاعتماد مدير المدرسة
+            ℹ️ تعديل الراتب سيُرسل كطلب لاعتماد مدير المدرسة — بقية البيانات (بما فيها البنكية) تُحدَّث فوراً
           </div>
         )}
 
@@ -171,7 +207,6 @@ function EditModal({ emp, role, onSave, onClose }: { emp: Emp; role: string; onS
 
         <div style={{ background: '#F7F9FC', borderRadius: 10, padding: '12px 12px 2px', margin: '0 0 12px' }}>
           <div style={{ fontSize: 12.5, fontWeight: 800, color: '#1B4F8A', marginBottom: 8 }}>الهيكل التنظيمي</div>
-
           <label style={lbl}>القسم</label>
           <select value={form.department ?? 'teaching'} onChange={(e) => set('department', e.target.value)} style={inp}>
             <option value="management">الإدارة العليا</option>
@@ -179,7 +214,6 @@ function EditModal({ emp, role, onSave, onClose }: { emp: Emp; role: string; onS
             <option value="teaching">الهيئة التدريسية</option>
             <option value="support">خدمات مساندة</option>
           </select>
-
           <label style={lbl}>المستوى</label>
           <select value={form.org_level ?? 3} onChange={(e) => set('org_level', Number(e.target.value))} style={inp}>
             <option value={1}>مدير المدرسة</option>
@@ -202,6 +236,29 @@ function EditModal({ emp, role, onSave, onClose }: { emp: Emp; role: string; onS
 
         <label style={lbl}>البدلات</label>
         <input type="number" value={form.allowance} onChange={(e) => set('allowance', parseFloat(e.target.value) || 0)} style={inp} />
+
+        {/* البيانات البنكية — القسم المضاف: كانت مفقودة تماماً من نموذج التعديل رغم دعم الخادم لها */}
+        <div style={{ background: '#F7F9FC', borderRadius: 10, padding: '12px 12px 2px', margin: '0 0 12px' }}>
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: '#1B4F8A', marginBottom: 8 }}>البيانات البنكية</div>
+
+          <label style={lbl}>اسم البنك</label>
+          <input value={form.bank_name ?? ''} onChange={(e) => set('bank_name', e.target.value)} style={inp} placeholder="بنك مسقط" />
+
+          <label style={lbl}>الآيبان (لتحويل الراتب)</label>
+          <input
+            value={form.iban ?? ''}
+            onChange={(e) => onIbanChange(e.target.value)}
+            style={{ ...inp, direction: 'ltr', textAlign: 'left', marginBottom: ibanWarning ? 4 : 12 }}
+            placeholder="OM810180000001299123456"
+            maxLength={23}
+          />
+          {ibanWarning && (
+            <div style={{ color: '#C0392B', fontSize: 12, marginBottom: 12, lineHeight: 1.6 }}>⚠ {ibanWarning}</div>
+          )}
+
+          <label style={lbl}>رقم الحساب (إن اختلف عن الآيبان)</label>
+          <input value={form.bank_account_no ?? ''} onChange={(e) => set('bank_account_no', e.target.value)} style={{ ...inp, direction: 'ltr', textAlign: 'left' }} placeholder="اتركه فارغاً لاستخدام الآيبان" />
+        </div>
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
           <button onClick={onClose} disabled={saving} style={{ padding: '10px 18px', background: '#F0F3F8', border: 'none', borderRadius: 9, cursor: 'pointer', fontFamily: 'inherit' }}>إلغاء</button>
