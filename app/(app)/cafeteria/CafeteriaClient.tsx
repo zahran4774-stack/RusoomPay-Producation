@@ -1,6 +1,6 @@
 'use client'
 // مكوّن التغذية المدرسية — باقات + اشتراكات متعددة لكل طالب + فوترة شهرية
-// + قسم مستقل: مخزون المواد الغذائية الخام (شراء/صرف استهلاكي) — غير مفوتر على الطالب،
+// + قسم مستقل: مخزون المواد الغذائية  (شراء/صرف استهلاكي) — غير مفوتر على الطالب،
 //   لأنه محسوب أصلاً ضمن الرسوم الدراسية العامة.
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase-client'
@@ -17,7 +17,7 @@ type Sub = {
 }
 type Student = { id: string; full_name: string; guardian_name: string | null }
 
-// صنف في مخزون المواد الغذائية الخام
+//صنف في مخزون المواد الغذائية
 type FoodItem = { id: string; name: string; unit: string; qty: number; cost: number }
 
 const card: React.CSSProperties = {
@@ -110,11 +110,11 @@ export default function CafeteriaClient({ initialPlans, initialSubscribers, stud
     if (!fName.trim()) { setFoodMsg('اسم الصنف مطلوب'); return }
     setFoodBusy(true); setFoodMsg('')
     const { error } = await supabase.rpc('save_food_item', {
-      p_name: fName.trim(), p_unit: fUnit.trim() || 'كجم',
+      p_name: fName.trim(), p_unit: fUnit.trim() || 'وحده',
       p_qty: parseFloat(fQty) || 0, p_cost: parseFloat(fCost) || 0,
     })
     if (error) { setFoodMsg('خطأ: ' + error.message); setFoodBusy(false); return }
-    setFName(''); setFUnit('كجم'); setFQty(''); setFCost('')
+    setFName(''); setFUnit('وحده'); setFQty(''); setFCost('')
     await loadFoodItems(); setFoodMsg('✓ تمت إضافة الصنف'); setFoodBusy(false)
   }
 
@@ -366,13 +366,13 @@ export default function CafeteriaClient({ initialPlans, initialSubscribers, stud
         </p>
       </div>
 
-      {/* ══ مخزون المواد الغذائية الخام — شراء وصرف استهلاكي، غير مفوتر على الطالب ══ */}
+      {/* ══ مخزون المواد الغذائية  — شراء وصرف استهلاكي، غير مفوتر على الطالب ══ */}
       <div style={card}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
           <h3 style={{ margin: 0, color: '#0F2744', fontSize: 16 }}>مخزون المواد الغذائية</h3>
         </div>
         <p style={{ fontSize: 12.5, color: '#8A94A6', margin: '0 0 14px' }}>
-          الكميات المشتراة والمصروفة من المواد الغذائية الخام (دقيق، خضار، لحوم...) — لمتابعة الاستهلاك والتكلفة فقط.
+          الكميات المشتراة والمصروفة من المواد الغذائية  (عصائر، كعك ،سندويش ، فواكه...) — لمتابعة الاستهلاك والتكلفة فقط.
           محسوبة أصلاً ضمن الرسوم الدراسية العامة، ولا تُفوتر بشكل منفصل على أي طالب.
         </p>
 
@@ -442,7 +442,7 @@ export default function CafeteriaClient({ initialPlans, initialSubscribers, stud
 
             {moveMode === 'dispense' && (
               <div style={{ background: '#EAF5F2', border: '1px solid #CDE8E1', borderRadius: 10, padding: '10px 13px', marginBottom: 14, fontSize: 12.5, color: '#0D7D6B' }}>
-                صرف داخلي فقط — لا يُنشئ فاتورة ولا يُحمَّل على أي طالب.
+                صرف داخلي فقط — لا يُنشئ فاتورة على أي طالب.
               </div>
             )}
 
