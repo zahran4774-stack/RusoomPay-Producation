@@ -300,7 +300,7 @@ const INK = '#0A1D33' // لون علامتك من layout
 
 const S: Record<string, React.CSSProperties> = {
   fab: {
-    position: 'fixed', insetInlineStart: 20, bottom: 96, zIndex: 9998,
+    position: 'fixed', insetInlineEnd: 20, bottom: 24, zIndex: 9998,
     display: 'flex', alignItems: 'center', gap: 8,
     background: BRAND, color: '#fff', border: 'none', borderRadius: 30,
     padding: '13px 20px', fontFamily: 'var(--font-cairo), sans-serif',
