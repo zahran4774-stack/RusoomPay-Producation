@@ -2,12 +2,21 @@
 // إدارة باقة المدرسة — أربع باقات بسقوف طلاب + عرض التأسيس.
 // السقف ليّن: ننبّه عند 90% ولا نقطع الخدمة.
 // كل الباقات تشمل كل الميزات — الفرق في السعة فقط.
-// عند تسجيل طلب اشتراك بتحويل بنكي (pending): تُرسل رسالة واتساب فورية لمالك المنصة
-// عبر /api/send-notify-admin — للتنبيه بضرورة اعتماد الاشتراك بعد مراجعة التحويل.
+// عند تأكيد الدفع بتحويل بنكي (بعد إرفاق الإيصال): يُرفع الإيصال، يُسجَّل الاشتراك pending،
+// وتُرسل رسالة واتساب فورية لمالك المنصة عبر /api/send-notify-admin.
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
-import { Check, TriangleAlert, Users, GraduationCap, Building2 } from 'lucide-react'
+import { Check, TriangleAlert, Users, GraduationCap, Building2, Upload, Copy, Check as CheckIcon } from 'lucide-react'
+
+// بيانات الحساب البنكي الرسمي للمنصة — ثابتة، تُعرض للمدرسة عند اختيار التحويل البنكي
+const BANK_ACCOUNT = {
+  name: 'ZAHRAN ZAHIR HAMED AL DAGHARI',
+  number: '0368 0016 6281 0033',
+  swift: 'BMUSOMRXXXX',
+  iban: 'OM670270368001662810033',
+  phoneTransfer: '96895476649', // تحويل عبر رقم الهاتف (خدمة تحويل بنكي بالهاتف)
+}
 
 type Sub = {
   id: string; plan: string; status: string
@@ -44,6 +53,12 @@ export default function PlansManager({ sub, schoolId, schoolName }: { sub: Sub; 
   const [picked, setPicked] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  // نافذة الدفع بالتحويل البنكي — تظهر بعد اختيار الباقة وقبل تسجيل الاشتراك
+  const [showBankModal, setShowBankModal] = useState(false)
+  const [receiptFile, setReceiptFile] = useState<File | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [copied, setCopied] = useState<string | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -93,38 +108,76 @@ export default function PlansManager({ sub, schoolId, schoolName }: { sub: Sub; 
 
   async function subscribe(method: 'bank' | 'card') {
     if (!picked || !schoolId) return
+    // تحويل بنكي: نفتح نافذة بيانات الحساب + رفع الإيصال، ولا نسجّل شيئاً بعد
+    if (method === 'bank') { setShowBankModal(true); setMsg(null); return }
+
+    // بطاقة/تفعيل فوري (مجاني): يسجَّل مباشرة كما كان
     setBusy(true); setMsg(null)
     const plan = plans.find((p) => p.code === picked)
     const renewsAt = new Date(Date.now() + 365 * 86400000).toISOString()
-    const newStatus = method === 'bank' ? 'pending' : 'active'
-
-    // مدرسة لا يجوز أن يكون لها أكثر من اشتراك نشط/معلّق/تجريبي واحد في آن واحد
-    // (قيد فريد على مستوى قاعدة البيانات: subscriptions_one_active_per_school).
-    // لذا: إن وُجد اشتراك سابق بإحدى هذه الحالات، نحدّثه بدل إدراج صف جديد.
     const hasExisting = sub && ['active', 'trial', 'pending'].includes(sub.status)
 
     const { error } = hasExisting
       ? await supabase.from('subscriptions').update({
-          plan: picked, status: newStatus, pay_method: method, renews_at: renewsAt,
+          plan: picked, status: 'active', pay_method: method, renews_at: renewsAt,
         }).eq('id', sub!.id)
       : await supabase.from('subscriptions').insert({
-          school_id: schoolId, plan: picked, status: newStatus, pay_method: method, renews_at: renewsAt,
+          school_id: schoolId, plan: picked, status: 'active', pay_method: method, renews_at: renewsAt,
         })
     setBusy(false)
 
     if (error) { setMsg({ ok: false, text: 'تعذّر إتمام الاشتراك: ' + error.message }); return }
-    setMsg({
-      ok: true,
-      text: method === 'bank'
-        ? `تم تسجيل طلب الترقية إلى باقة «${plan?.name}» — بانتظار اعتماد الإدارة بعد التحويل.`
-        : `تم تفعيل باقة «${plan?.name}» بنجاح.`,
-    })
-
-    // تحويل بنكي فقط = يحتاج اعتماد يدوي لاحقاً → أرسل تنبيهاً فورياً لمالك المنصة
-    if (method === 'bank') notifyAdmin(plan?.name || picked)
-
+    setMsg({ ok: true, text: `تم تفعيل باقة «${plan?.name}» بنجاح.` })
     setPicked(null)
     router.refresh()
+  }
+
+  // تأكيد التحويل البنكي — يرفع الإيصال أولاً، ثم يسجّل الاشتراك pending، ثم ينبّه مالك المنصة
+  async function confirmBankTransfer() {
+    if (!picked || !schoolId || !receiptFile) return
+    setUploading(true); setMsg(null)
+
+    const plan = plans.find((p) => p.code === picked)
+    const renewsAt = new Date(Date.now() + 365 * 86400000).toISOString()
+    const ext = receiptFile.name.split('.').pop() || 'jpg'
+    const path = `${schoolId}/${Date.now()}.${ext}`
+
+    // ١) رفع الإيصال إلى bucket خاص (subscription-receipts)
+    const { error: uploadError } = await supabase.storage
+      .from('subscription-receipts')
+      .upload(path, receiptFile, { upsert: false })
+
+    if (uploadError) {
+      setUploading(false)
+      setMsg({ ok: false, text: 'تعذّر رفع الإيصال: ' + uploadError.message })
+      return
+    }
+
+    // ٢) تسجيل/تحديث الاشتراك بحالة pending + رابط الإيصال
+    const hasExisting = sub && ['active', 'trial', 'pending'].includes(sub.status)
+    const { error } = hasExisting
+      ? await supabase.from('subscriptions').update({
+          plan: picked, status: 'pending', pay_method: 'bank', renews_at: renewsAt, receipt_url: path,
+        }).eq('id', sub!.id)
+      : await supabase.from('subscriptions').insert({
+          school_id: schoolId, plan: picked, status: 'pending', pay_method: 'bank', renews_at: renewsAt, receipt_url: path,
+        })
+    setUploading(false)
+
+    if (error) { setMsg({ ok: false, text: 'تعذّر إتمام الاشتراك: ' + error.message }); return }
+
+    setMsg({ ok: true, text: `تم إرسال إيصال التحويل لباقة «${plan?.name}» — بانتظار اعتماد الإدارة.` })
+    notifyAdmin(plan?.name || picked)
+    setShowBankModal(false)
+    setReceiptFile(null)
+    setPicked(null)
+    router.refresh()
+  }
+
+  function copyText(label: string, text: string) {
+    navigator.clipboard?.writeText(text)
+    setCopied(label)
+    setTimeout(() => setCopied(null), 1500)
   }
 
   return (
@@ -296,6 +349,80 @@ export default function PlansManager({ sub, schoolId, schoolName }: { sub: Sub; 
         </div>
       )}
 
+      {/* ── نافذة الدفع بالتحويل البنكي ── */}
+      {showBankModal && (
+        <div
+          onClick={() => !uploading && setShowBankModal(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(15,39,68,.55)', display: 'grid', placeItems: 'center', zIndex: 100, padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()}
+            style={{ background: '#fff', borderRadius: 18, padding: 24, maxWidth: 460, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+            <b style={{ color: '#0F2744', fontSize: 16 }}>الدفع بالتحويل البنكي</b>
+            <p style={{ color: '#667', fontSize: 13, margin: '6px 0 16px', lineHeight: 1.8 }}>
+              حوّل مبلغ الاشتراك لباقة «{plans.find((p) => p.code === picked)?.name}» بإحدى الطريقتين أدناه، ثم أرفق صورة أو ملف الإيصال لإتمام الطلب.
+            </p>
+
+            {/* الطريقة ١ — بيانات الحساب البنكي */}
+            <div style={{ background: '#F7FAFC', border: '1px solid #EEF1F5', borderRadius: 12, padding: 14, marginBottom: 12 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: '#0F2744', marginBottom: 8 }}>١ — التحويل إلى الحساب البنكي</div>
+              <BankRow label="اسم الحساب" value={BANK_ACCOUNT.name} copied={copied} onCopy={copyText} />
+              <BankRow label="رقم الحساب" value={BANK_ACCOUNT.number} copied={copied} onCopy={copyText} />
+              <BankRow label="IBAN" value={BANK_ACCOUNT.iban} copied={copied} onCopy={copyText} />
+              <BankRow label="SWIFT" value={BANK_ACCOUNT.swift} copied={copied} onCopy={copyText} last />
+            </div>
+
+            {/* الطريقة ٢ — التحويل برقم الهاتف */}
+            <div style={{ background: '#F7FAFC', border: '1px solid #EEF1F5', borderRadius: 12, padding: 14, marginBottom: 16 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: '#0F2744', marginBottom: 8 }}>٢ — أو التحويل عبر رقم الهاتف</div>
+              <BankRow label="رقم الهاتف" value={BANK_ACCOUNT.phoneTransfer} copied={copied} onCopy={copyText} last />
+            </div>
+
+            {/* رفع الإيصال */}
+            <label style={{ fontSize: 13, fontWeight: 700, color: '#0F2744', display: 'block', marginBottom: 8 }}>إرفاق إيصال التحويل</label>
+            <label
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                border: `1.5px dashed ${receiptFile ? '#1A7A45' : '#DDE3EC'}`, borderRadius: 12,
+                padding: '18px 14px', cursor: 'pointer', background: receiptFile ? '#EAF7F0' : '#fff',
+                marginBottom: 14, fontSize: 13.5, color: receiptFile ? '#15803D' : '#667', fontWeight: 600,
+              }}>
+              <Upload size={17} strokeWidth={2} />
+              {receiptFile ? receiptFile.name : 'اختر صورة أو PDF للإيصال'}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,application/pdf"
+                onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)}
+                style={{ display: 'none' }}
+              />
+            </label>
+
+            {msg && !msg.ok && (
+              <div style={{ background: '#FDECEA', border: '1px solid #F3C9C2', color: '#A5331F', borderRadius: 10, padding: '10px 13px', fontSize: 13, marginBottom: 14 }}>
+                {msg.text}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={confirmBankTransfer}
+                disabled={!receiptFile || uploading}
+                style={{
+                  flex: 1, background: !receiptFile || uploading ? '#8AA' : '#163B68', color: '#fff', border: 0,
+                  padding: '12px', borderRadius: 10, fontWeight: 700, fontSize: 14.5,
+                  cursor: !receiptFile || uploading ? 'default' : 'pointer', fontFamily: 'inherit',
+                }}>
+                {uploading ? 'جارٍ الإرسال…' : 'تأكيد وإرسال الطلب'}
+              </button>
+              <button
+                onClick={() => { setShowBankModal(false); setReceiptFile(null) }}
+                disabled={uploading}
+                style={{ background: '#F2F5F8', color: '#0F2744', border: '1px solid #E3E8EE', padding: '12px 18px', borderRadius: 10, fontWeight: 600, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {msg && (
         <div style={{
           borderRadius: 11, padding: '12px 15px', fontSize: 13.5, fontWeight: 600, lineHeight: 1.8,
@@ -313,6 +440,34 @@ function Row({ icon: Icon, text }: { icon: typeof Users; text: string }) {
     <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
       <Icon size={14} strokeWidth={2} color="#8A94A6" style={{ flexShrink: 0 }} />
       <span>{text}</span>
+    </div>
+  )
+}
+
+function BankRow({ label, value, copied, onCopy, last }: {
+  label: string; value: string; copied: string | null; onCopy: (label: string, text: string) => void; last?: boolean
+}) {
+  const isCopied = copied === label
+  return (
+    <div style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      paddingBottom: last ? 0 : 8, marginBottom: last ? 0 : 8,
+      borderBottom: last ? 'none' : '1px dashed #E3E8EE',
+    }}>
+      <div>
+        <div style={{ fontSize: 11, color: '#8A94A6' }}>{label}</div>
+        <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0F2744', direction: 'ltr', textAlign: 'right' }}>{value}</div>
+      </div>
+      <button
+        onClick={() => onCopy(label, value)}
+        title="نسخ"
+        style={{
+          background: isCopied ? '#EAF7F0' : '#fff', border: `1px solid ${isCopied ? '#BFE5D0' : '#E3E8EE'}`,
+          borderRadius: 8, padding: '6px 8px', cursor: 'pointer', color: isCopied ? '#15803D' : '#667',
+          display: 'grid', placeItems: 'center', flexShrink: 0,
+        }}>
+        {isCopied ? <CheckIcon size={14} strokeWidth={2.4} /> : <Copy size={14} strokeWidth={2} />}
+      </button>
     </div>
   )
 }
