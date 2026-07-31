@@ -72,6 +72,10 @@ export default async function AccountingPage() {
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }} dir="rtl">
+      <div style={{ marginBottom: 18 }}>
+        <JournalForm accounts={acc} currency={currency} />
+      </div>
+
       <DailyPaymentsReport />
       <PayrollYearlyReport currency={currency} />
 
@@ -81,7 +85,6 @@ export default async function AccountingPage() {
           <p style={{ color: '#667', fontSize: 14, marginBottom: 20 }}>قيد مزدوج · ميزان مراجعة · قائمة الدخل</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <JournalForm accounts={acc} currency={currency} />
           <PrintButton
             school={{ name: school?.name ?? 'مدرسة', vat: school?.vat_number }}
             title="ميزان المراجعة"
