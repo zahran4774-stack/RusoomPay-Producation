@@ -105,6 +105,11 @@ export default function JournalForm({ accounts, currency }: { accounts: Account[
       <input placeholder="البيان (وصف القيد)" value={desc} onChange={(e) => setDesc(e.target.value)}
         style={{ width: '100%', padding: 10, borderRadius: 9, border: '1.5px solid #DDE3EC', marginBottom: 12 }} />
 
+      <div style={{ background: '#F2F6FA', border: '1px solid #DCE6F0', borderRadius: 9, padding: '10px 13px', marginBottom: 14, fontSize: 12.5, color: '#3A526B', lineHeight: 1.9 }}>
+        💡 <b>كيف تختار مدين ودائن؟</b> كل عملية لها طرفان: <b>مدين</b> = الحساب الذي استفاد أو زاد (مثل: مصروف صُرف، أو حساب ارتفع رصيده) — <b>دائن</b> = الحساب الذي منه خرجت القيمة (مثل: البنك أو الصندوق الذي دُفع منه).
+        النظام يوجّهك تلقائياً: اختر جهة السطر الأول، ويُقفل السطر الثاني على الجهة المقابلة ليبقى القيد متوازناً دائماً.
+      </div>
+
       <table style={{ width: '100%', fontSize: 14, marginBottom: 10 }}>
         <thead><tr style={{ textAlign: 'right', color: '#667', fontSize: 13 }}>
           <th style={{ padding: 6 }}>الحساب</th><th style={{ padding: 6, width: 110 }}>مدين</th><th style={{ padding: 6, width: 110 }}>دائن</th>
