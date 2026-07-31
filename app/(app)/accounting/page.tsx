@@ -60,15 +60,6 @@ export default async function AccountingPage() {
 
   const typeLabel = (t: string) => ({ asset: 'أصول', liability: 'خصوم', equity: 'حقوق ملكية', revenue: 'إيرادات', expense: 'مصروفات' } as Record<string, string>)[t] || t
 
-  // ترجمة الحركة المحاسبية بلغة بسيطة — "دخل/زيادة" أو "تكلفة/صرف"، حسب نوع الحساب والاتجاه
-  // العملية — تطابق حرفية لعمود مدين/دائن: أي مبلغ في "مدين" = صرف، أي مبلغ في "دائن" = دخل
-  // بدون أي تفسير حسب نوع الحساب، لتفادي أي التباس — العمود ببساطة يعكس أي خانة فيها رقم
-  const operationLabel = (debit: number, credit: number): { t: string; c: string } => {
-    if (debit > 0) return { t: 'صرف', c: '#C0392B' }
-    if (credit > 0) return { t: 'دخل', c: '#1A7A45' }
-    return { t: '—', c: '#8A94A6' }
-  }
-
   // ميزان المراجعة — من الأرصدة المحسوبة خادمياً
   const trial = bal.map((a) => ({
     id: a.account_id, code: a.code, name: a.name, type: a.type,
@@ -144,30 +135,22 @@ export default async function AccountingPage() {
               <th style={{ padding: 12 }}>الرمز</th><th style={{ padding: 12 }}>الحساب</th>
               <th style={{ padding: 12 }}>النوع</th>
               <th style={{ padding: 12 }}>مدين</th><th style={{ padding: 12 }}>دائن</th>
-              <th style={{ padding: 12 }}>العملية</th>
             </tr>
           </thead>
           <tbody>
-            {trial.map((r) => {
-              const impact = operationLabel(r.debit, r.credit)
-              return (
+            {trial.map((r) => (
               <tr key={r.id} style={{ borderBottom: '1px solid #EEF2F1' }}>
                 <td style={{ padding: 10, fontWeight: 700 }}>{r.code}</td>
                 <td style={{ padding: 10 }}>{r.name}</td>
                 <td style={{ padding: 10, color: '#8A94A6', fontSize: 13 }}>{typeLabel(r.type)}</td>
                 <td style={{ padding: 10 }}>{r.debit ? fmt(r.debit) : '—'}</td>
                 <td style={{ padding: 10 }}>{r.credit ? fmt(r.credit) : '—'}</td>
-                <td style={{ padding: 10 }}>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: impact.c }}>{impact.t}</span>
-                </td>
               </tr>
-              )
-            })}
+            ))}
             <tr style={{ borderTop: '2px solid #0F2744', fontWeight: 700, background: balanced ? '#E6F4EC' : '#FCE9E6' }}>
               <td style={{ padding: 12 }} colSpan={3}>الإجمالي {balanced ? '✓ متوازن' : '⚠️ غير متوازن'}</td>
               <td style={{ padding: 12 }}>{fmt(totalDebit)}</td>
               <td style={{ padding: 12 }}>{fmt(totalCredit)}</td>
-              <td style={{ padding: 12 }}></td>
             </tr>
           </tbody>
         </table>
