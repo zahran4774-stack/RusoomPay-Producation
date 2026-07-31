@@ -81,6 +81,7 @@ export default async function AccountingPage() {
           <p style={{ color: '#667', fontSize: 14, marginBottom: 20 }}>قيد مزدوج · ميزان مراجعة · قائمة الدخل</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <JournalForm accounts={acc} currency={currency} />
           <PrintButton
             school={{ name: school?.name ?? 'مدرسة', vat: school?.vat_number }}
             title="ميزان المراجعة"
@@ -116,9 +117,7 @@ export default async function AccountingPage() {
         <KPI label="مشتريات التغذية" v={fmt(purchases.food_purchases ?? 0)} sym={sym} color="#2E8B8B" />
       </div>
 
-      {/* إدخال قيد جديد */}
-      <JournalForm accounts={acc} currency={currency} />
-      {/* (acc مشتقّة من الأرصدة) */}
+      {/* (acc مشتقّة من الأرصدة، تُستخدم في نموذج القيد بأعلى الصفحة) */}
 
       {/* ميزان المراجعة — يضم أيضاً نوع كل حساب (أصول/خصوم/إيرادات...) بدل قسم منفصل مكرِّر */}
       <h2 style={{ color: '#0F2744', fontSize: 18, margin: '24px 0 12px' }}>ميزان المراجعة</h2>
