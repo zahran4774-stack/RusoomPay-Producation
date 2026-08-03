@@ -28,7 +28,7 @@ export default async function StudentsPage() {
   ] = await Promise.all([
     supabase.from('profiles').select('role').eq('id', user.id).single(),
     supabase.rpc('my_role'),
-    ssupabase.from('schools').select('name, vat_number, section_styles').single(),
+    supabase.from('schools').select('name, vat_number, section_styles').single(),
     supabase.from('students')
       .select('id, code, full_name, grade, section, guardian_name, guardian_phone, guardian_email, birth_date, gender, status')
       .order('code'),
@@ -73,7 +73,8 @@ export default async function StudentsPage() {
       {error && <div style={{ color: '#C0392B' }}>تعذّر جلب البيانات: {error.message}</div>}
 
       <div style={{ marginBottom: 18, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-        <AddStudent />
+        <AddStudent sectionOptions={sectionOptions} />
+
         <ImportStudents />
         <div id="invite-parents" style={{ scrollMarginTop: 80 }}>
           <InviteParents schoolName={school?.name ?? undefined} />
