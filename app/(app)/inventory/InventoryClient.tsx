@@ -1,11 +1,15 @@
 'use client'
-// مكوّن المخزون — أصناف + شراء + بيع لطالب + صرف استهلاكي داخلي (غير مفوتر) + طباعة
-import { useState } from 'react'
+// مكوّن المخزون — أصناف مصنَّفة (فئة + نوع فرعي) + شراء + بيع لطالب + صرف استهلاكي داخلي (غير مفوتر) + فلترة وتقرير + طباعة
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import { printReport, type SchoolHeader } from '@/lib/print-report'
 
-type Item = { id: string; name: string; qty: number; cost: number; price: number; vat_rate: number; stock_value: number }
+type Item = {
+  id: string; name: string; qty: number; cost: number; price: number; vat_rate: number
+  stock_value: number; category: string; subtype: string | null
+}
 type Student = { id: string; full_name: string; guardian_name: string | null }
+type CategoryReportRow = { category: string; items_count: number; total_qty: number; total_value: number }
 
 const card: React.CSSProperties = {
   background: '#fff', border: '1px solid #E6EBF1', borderRadius: 14,
@@ -46,6 +50,17 @@ export default function InventoryClient({ initialItems, students, school }: {
   const [qty, setQty] = useState('')
   const [cost, setCost] = useState('')
   const [price, setPrice] = useState('')
+  const [category, setCategory] = useState('كتب')
+  const [subtype, setSubtype] = useState('')
+  const [customCategory, setCustomCategory] = useState('')
+
+  // الفئات المتاحة + فلترة العرض حسب الفئة
+  const [categories, setCategories] = useState<string[]>(['كتب', 'زي مدرسي', 'قرطاسية', 'أخرى'])
+  const [filterCategory, setFilterCategory] = useState<string>('all')
+
+  // تقرير ملخّص حسب الفئة
+  const [categoryReport, setCategoryReport] = useState<CategoryReportRow[]>([])
+  const [showReport, setShowReport] = useState(false)
 
   // حركة (شراء/بيع/صرف)
   const [moveItem, setMoveItem] = useState<Item | null>(null)
@@ -56,20 +71,39 @@ export default function InventoryClient({ initialItems, students, school }: {
   const [dispenseReason, setDispenseReason] = useState(DISPENSE_REASONS[0])
   const [customReason, setCustomReason] = useState('')
 
-  async function refresh() {
-    const { data } = await supabase.rpc('inventory_list')
+  async function refresh(cat?: string) {
+    const activeFilter = cat !== undefined ? cat : filterCategory
+    const { data } = await supabase.rpc('inventory_list', {
+      p_category: activeFilter === 'all' ? null : activeFilter,
+    })
     setItems(data || [])
   }
 
+  async function loadCategories() {
+    const { data } = await supabase.rpc('inventory_categories')
+    if (data) setCategories(data.map((r: { category: string }) => r.category))
+  }
+
+  async function loadReport() {
+    const { data } = await supabase.rpc('inventory_category_report')
+    setCategoryReport(data || [])
+  }
+
+  useEffect(() => { loadCategories() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   async function addItem() {
     if (!name.trim()) { setMsg('اسم الصنف مطلوب'); return }
+    const finalCategory = category === '__new__' ? customCategory.trim() : category
+    if (!finalCategory) { setMsg('اختر أو اكتب فئة للصنف'); return }
     setBusy(true); setMsg('')
     const { error } = await supabase.rpc('save_inventory_item', {
       p_name: name.trim(), p_qty: parseInt(qty) || 0,
       p_cost: parseFloat(cost) || 0, p_price: parseFloat(price) || 0, p_vat: 5,
+      p_category: finalCategory, p_subtype: subtype.trim() || null,
     })
     if (error) { setMsg('خطأ: ' + error.message); setBusy(false); return }
-    setName(''); setQty(''); setCost(''); setPrice(''); await refresh()
+    setName(''); setQty(''); setCost(''); setPrice(''); setSubtype(''); setCustomCategory('')
+    await refresh(); await loadCategories()
     setMsg('✓ تمت إضافة الصنف'); setBusy(false)
   }
 
@@ -108,29 +142,74 @@ export default function InventoryClient({ initialItems, students, school }: {
       {msg && <div style={{ ...card, padding: 12, marginBottom: 12, color: msg.startsWith('✓') ? '#1A7A45' : '#C0392B' }}>{msg}</div>}
 
       {/* جدول المخزون */}
+      {/* ملخّص المخزون حسب الفئة */}
       <div style={card}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: showReport ? 14 : 0 }}>
+          <h3 style={{ margin: 0, color: '#0F2744', fontSize: 16 }}>ملخّص المخزون حسب الفئة</h3>
+          <button style={btnSm} onClick={async () => { if (!showReport) await loadReport(); setShowReport(!showReport) }}>
+            {showReport ? 'إخفاء' : 'عرض التقرير'}
+          </button>
+        </div>
+        {showReport && (
+          categoryReport.length > 0 ? (
+            <div style={{ overflowX: 'auto', marginTop: 4 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
+                <thead>
+                  <tr style={{ background: '#F7F9FC', textAlign: 'right' }}>
+                    {['الفئة', 'عدد الأصناف', 'إجمالي الكمية', 'قيمة المخزون'].map((h) => (
+                      <th key={h} style={{ padding: '10px 12px', fontSize: 13, color: '#69757F' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {categoryReport.map((r) => (
+                    <tr key={r.category} style={{ borderTop: '1px solid #F2F5F8' }}>
+                      <td style={{ padding: '10px 12px', fontWeight: 600, color: '#0F2744' }}>{r.category}</td>
+                      <td style={{ padding: '10px 12px' }}>{r.items_count}</td>
+                      <td style={{ padding: '10px 12px' }}>{r.total_qty}</td>
+                      <td style={{ padding: '10px 12px', fontWeight: 600 }}>{fmt(r.total_value)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : <p style={{ color: '#8A94A6', textAlign: 'center', padding: 16 }}>لا توجد بيانات بعد</p>
+        )}
+      </div>
+
+      <div style={card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
           <h3 style={{ margin: 0, color: '#0F2744', fontSize: 16 }}>الأصناف</h3>
-          {items.length > 0 && (
-            <button onClick={() => printReport({
-              school, title: 'تقرير المخزون والكميات',
-              columns: [
-                { key: 'name', label: 'الصنف' }, { key: 'qty', label: 'الكمية' },
-                { key: 'cost', label: 'التكلفة' }, { key: 'price', label: 'سعر البيع' },
-                { key: 'value', label: 'قيمة المخزون' },
-              ],
-              rows: items.map((it) => ({
-                name: it.name, qty: it.qty, cost: fmt(it.cost), price: fmt(it.price), value: fmt(it.stock_value),
-              })),
-            })} style={btnSm}>🖨 طباعة</button>
-          )}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <select
+              style={{ ...input, width: 'auto', padding: '7px 12px', fontSize: 13 }}
+              value={filterCategory}
+              onChange={async (e) => { setFilterCategory(e.target.value); await refresh(e.target.value) }}>
+              <option value="all">كل الفئات</option>
+              {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            {items.length > 0 && (
+              <button onClick={() => printReport({
+                school, title: filterCategory === 'all' ? 'تقرير المخزون والكميات' : `تقرير المخزون — ${filterCategory}`,
+                columns: [
+                  { key: 'name', label: 'الصنف' }, { key: 'category', label: 'الفئة' }, { key: 'qty', label: 'الكمية' },
+                  { key: 'cost', label: 'التكلفة' }, { key: 'price', label: 'سعر البيع' },
+                  { key: 'value', label: 'قيمة المخزون' },
+                ],
+                rows: items.map((it) => ({
+                  name: it.name, category: it.category + (it.subtype ? ` / ${it.subtype}` : ''),
+                  qty: it.qty, cost: fmt(it.cost), price: fmt(it.price), value: fmt(it.stock_value),
+                })),
+              })} style={btnSm}>🖨 طباعة</button>
+            )}
+          </div>
         </div>
         {items.length > 0 ? (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 680 }}>
               <thead>
                 <tr style={{ background: '#F7F9FC', textAlign: 'right' }}>
-                  {['الصنف', 'الكمية', 'التكلفة', 'سعر البيع', 'قيمة المخزون', ''].map((h) => (
+                  {['الصنف', 'الفئة', 'الكمية', 'التكلفة', 'سعر البيع', 'قيمة المخزون', ''].map((h) => (
                     <th key={h} style={{ padding: '10px 12px', fontSize: 13, color: '#69757F' }}>{h}</th>
                   ))}
                 </tr>
@@ -139,6 +218,11 @@ export default function InventoryClient({ initialItems, students, school }: {
                 {items.map((it) => (
                   <tr key={it.id} style={{ borderTop: '1px solid #F2F5F8' }}>
                     <td style={{ padding: '10px 12px', fontWeight: 600, color: '#0F2744' }}>{it.name}</td>
+                    <td style={{ padding: '10px 12px' }}>
+                      <span style={{ fontSize: 12, background: '#EEF3F9', color: '#1B4F8A', padding: '2px 9px', borderRadius: 20, fontWeight: 600 }}>
+                        {it.category}{it.subtype ? ` / ${it.subtype}` : ''}
+                      </span>
+                    </td>
                     <td style={{ padding: '10px 12px' }}>
                       {it.qty} {it.qty < 10 && <span style={{ background: '#FCE9E6', color: '#C0392B', fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 99 }}>منخفض</span>}
                     </td>
@@ -155,12 +239,30 @@ export default function InventoryClient({ initialItems, students, school }: {
               </tbody>
             </table>
           </div>
-        ) : <p style={{ color: '#8A94A6', textAlign: 'center', padding: 20 }}>لا توجد أصناف بعد</p>}
+        ) : <p style={{ color: '#8A94A6', textAlign: 'center', padding: 20 }}>لا توجد أصناف بهذي الفئة</p>}
       </div>
 
       {/* إضافة صنف */}
       <div style={card}>
         <h3 style={{ margin: '0 0 14px', color: '#0F2744', fontSize: 16 }}>إضافة صنف جديد</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+          <div>
+            <label style={lbl}>الفئة</label>
+            <select style={input} value={category} onChange={(e) => setCategory(e.target.value)}>
+              {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+              <option value="__new__">＋ فئة جديدة...</option>
+            </select>
+          </div>
+          {category === '__new__' ? (
+            <div><label style={lbl}>اسم الفئة الجديدة</label>
+              <input style={input} value={customCategory} onChange={(e) => setCustomCategory(e.target.value)} placeholder="مثال: أدوات صيانة" />
+            </div>
+          ) : (
+            <div><label style={lbl}>النوع الفرعي (اختياري)</label>
+              <input style={input} value={subtype} onChange={(e) => setSubtype(e.target.value)} placeholder="مثال: قميص، بنطلون، حذاء" />
+            </div>
+          )}
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: 10, alignItems: 'end' }}>
           <div><label style={lbl}>اسم الصنف</label><input style={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="كتاب الرياضيات" /></div>
           <div><label style={lbl}>الكمية</label><input style={input} type="number" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="0" /></div>
