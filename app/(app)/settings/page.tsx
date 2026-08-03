@@ -17,8 +17,6 @@ export default async function SettingsPage() {
   // جلب دور المستخدم وهوية مدرسته (للمدير فقط تظهر أدوات الهوية)
   const { data: profile } = await supabase.from('profiles').select('role, school_id').eq('id', user.id).maybeSingle()
   const isOwner = profile?.role === 'owner'
-  
-  }
 
   // إعداد الضريبة حسب قانون الدولة (لكل المستخدمين للعرض، التعديل للمدير)
   const { data: vat } = await supabase.rpc('my_vat_setting').maybeSingle() as {
@@ -26,7 +24,6 @@ export default async function SettingsPage() {
   }
 
   let logo: string | null = null
-
   let color: string | null = null
   let schoolName: string | null = null
   let sectionStyles: string[] = ['ar_letters']
@@ -46,9 +43,8 @@ export default async function SettingsPage() {
       <h1 style={{ color: '#0F2744', fontSize: 24, marginBottom: 4 }}>الإعدادات</h1>
       <p style={{ color: '#667', fontSize: 14, marginBottom: 24 }}>إدارة أمان حسابك وهوية مدرستك.</p>
       <MfaSetup />
-       <SchoolBranding initialLogo={logo} initialColor={color} canEdit={isOwner} />
+      <SchoolBranding initialLogo={logo} initialColor={color} canEdit={isOwner} />
       {isOwner && <SectionStyleSetting initial={sectionStyles} canEdit={isOwner} />}
-
       {vat && (
         <VatSetting
           mode={(vat.vat_mode ?? 'none') as 'mandatory' | 'optional' | 'none'}
@@ -60,8 +56,8 @@ export default async function SettingsPage() {
       {engines && engines.length > 0 && (
         <IntelligencePanel initial={engines} canEdit={isOwner} />
       )}
-    {isOwner && <div style={{ marginTop: 18 }}><SchoolBackup schoolName={schoolName ?? undefined} /></div>}
-    {isOwner && <StaffInvites />}</div> 
-
+      {isOwner && <div style={{ marginTop: 18 }}><SchoolBackup schoolName={schoolName ?? undefined} /></div>}
+      {isOwner && <StaffInvites />}
+    </div>
   )
 }
