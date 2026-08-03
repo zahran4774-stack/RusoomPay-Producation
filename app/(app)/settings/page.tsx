@@ -7,6 +7,8 @@ import VatSetting from './VatSetting'
 import IntelligencePanel from './IntelligencePanel'
 import StaffInvites from './StaffInvites'
 import SchoolBackup from './SchoolBackup'
+import SectionStyleSetting from './SectionStyleSetting'
+
 export default async function SettingsPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -15,19 +17,23 @@ export default async function SettingsPage() {
   // جلب دور المستخدم وهوية مدرسته (للمدير فقط تظهر أدوات الهوية)
   const { data: profile } = await supabase.from('profiles').select('role, school_id').eq('id', user.id).maybeSingle()
   const isOwner = profile?.role === 'owner'
-  let logo: string | null = null
-  let color: string | null = null
-  let schoolName: string | null = null
-  if (isOwner && profile?.school_id) {
-    const { data: school } = await supabase.from('schools').select('logo_url, color, name').eq('id', profile.school_id).maybeSingle()
-    logo = school?.logo_url ?? null
-    color = school?.color ?? null
-    schoolName = school?.name ?? null
+  
   }
 
   // إعداد الضريبة حسب قانون الدولة (لكل المستخدمين للعرض، التعديل للمدير)
   const { data: vat } = await supabase.rpc('my_vat_setting').maybeSingle() as {
     data: { vat_mode?: string; vat_rate?: number; applies?: boolean } | null
+  
+  let logo: string | null = null
+  let color: string | null = null
+  let schoolName: string | null = null
+  let sectionStyles: string[] = ['ar_letters']
+  if (isOwner && profile?.school_id) {
+    const { data: school } = await supabase.from('schools').select('logo_url, color, name, section_styles').eq('id', profile.school_id).maybeSingle()
+    logo = school?.logo_url ?? null
+    color = school?.color ?? null
+    schoolName = school?.name ?? null
+    sectionStyles = school?.section_styles ?? ['ar_letters']
   }
 
   // طبقة الذكاء — حالة المحرّكات (School Intelligence Core)
