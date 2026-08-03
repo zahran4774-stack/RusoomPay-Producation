@@ -23,8 +23,10 @@ export default async function SettingsPage() {
   // إعداد الضريبة حسب قانون الدولة (لكل المستخدمين للعرض، التعديل للمدير)
   const { data: vat } = await supabase.rpc('my_vat_setting').maybeSingle() as {
     data: { vat_mode?: string; vat_rate?: number; applies?: boolean } | null
-  
+  }
+
   let logo: string | null = null
+
   let color: string | null = null
   let schoolName: string | null = null
   let sectionStyles: string[] = ['ar_letters']
