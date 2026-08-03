@@ -23,6 +23,47 @@ export const GRADES = [
 export const SECTIONS = [
   'أ', 'ب', 'ج', 'د', 'هـ', 'و', 'ز', 'ح', 'ط', 'ي',
 ] as const
+// ═══════════════════════════════════════════════════════════════
+// أنماط ترميز الشُّعب — المدرسة تختار نمطاً أو أكثر من الإعدادات.
+// ═══════════════════════════════════════════════════════════════
+
+export type SectionStyle = 'ar_letters' | 'numbers' | 'en_letters' | 'en_numbers'
+
+export const SECTION_STYLE_META: Record<
+  SectionStyle,
+  { label: string; sample: string }
+> = {
+  ar_letters: { label: 'حروف عربية (أ، ب، ج)', sample: 'أ ب ج' },
+  numbers:    { label: 'أرقام عربية (١، ٢، ٣)', sample: '١ ٢ ٣' },
+  en_letters: { label: 'حروف لاتينية (A, B, C)', sample: 'A B C' },
+  en_numbers: { label: 'أرقام لاتينية (1, 2, 3)', sample: '1 2 3' },
+}
+
+const AR_LETTERS = ['أ', 'ب', 'ج', 'د', 'هـ', 'و', 'ز', 'ح', 'ط', 'ي']
+const AR_NUMBERS = ['١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '١٠']
+const EN_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']
+const EN_NUMBERS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']
+
+const STYLE_VALUES: Record<SectionStyle, string[]> = {
+  ar_letters: AR_LETTERS,
+  numbers: AR_NUMBERS,
+  en_letters: EN_LETTERS,
+  en_numbers: EN_NUMBERS,
+}
+
+// يبني قائمة خيارات الشُّعب من الأنماط المختارة، بلا تكرار.
+export function buildSectionOptions(styles: string[] | null | undefined): string[] {
+  const active = (styles && styles.length ? styles : ['ar_letters']) as SectionStyle[]
+  const out: string[] = []
+  for (const style of active) {
+    const vals = STYLE_VALUES[style]
+    if (!vals) continue
+    for (const v of vals) if (!out.includes(v)) out.push(v)
+  }
+  return out
+}
+
+export const DEFAULT_SECTION_STYLES: SectionStyle[] = ['ar_letters']
 
 export type Grade = (typeof GRADES)[number]
 export type Section = (typeof SECTIONS)[number]
