@@ -32,11 +32,12 @@ export default function PromoteStudents({ students }: { students: Student[] }) {
   const [open, setOpen] = useState(false)
   const [year, setYear] = useState(currentAcademicYear())
   const [repeatIds, setRepeatIds] = useState<Set<string>>(new Set())
+  const [gradeFilter, setGradeFilter] = useState<string>('')   // '' = كل الصفوف
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
-  // الطلاب النشطون فقط — مرتّبون بالصف
+  // الطلاب النشطون فقط — مرتّبون بالصف (كل الطلاب، بلا فلترة)
   const active = useMemo(
     () => students
       .filter((s) => s.status === 'active')
@@ -49,7 +50,19 @@ export default function PromoteStudents({ students }: { students: Student[] }) {
     [students]
   )
 
-  // ماذا سيحدث؟ حساب فوري في الواجهة
+  // الصفوف الموجودة فعلياً بين الطلاب النشطين — لبناء قائمة الفلتر
+  const presentGrades = useMemo(() => {
+    const set = new Set(active.map((s) => s.grade.trim()))
+    return (GRADES as readonly string[]).filter((g) => set.has(g))
+  }, [active])
+
+  // القائمة المعروضة فقط — تتأثر بالفلتر (للمراجعة البصرية)
+  const visible = useMemo(
+    () => gradeFilter ? active.filter((s) => s.grade.trim() === gradeFilter) : active,
+    [active, gradeFilter]
+  )
+
+  // المعاينة تبقى شاملة لكل الطلاب النشطين — لأن التنفيذ يرقّي الجميع
   const preview = useMemo(() => {
     let promote = 0, graduate = 0, repeat = 0, unknown = 0
     for (const s of active) {
@@ -61,6 +74,12 @@ export default function PromoteStudents({ students }: { students: Student[] }) {
     }
     return { promote, graduate, repeat, unknown }
   }, [active, repeatIds])
+
+  // عدد المعيدين المحدّدين داخل الصف المعروض حالياً (للعرض فقط)
+  const repeatInView = useMemo(
+    () => visible.reduce((n, s) => n + (repeatIds.has(s.id) ? 1 : 0), 0),
+    [visible, repeatIds]
+  )
 
   function toggleRepeat(id: string) {
     setRepeatIds((prev) => {
@@ -122,7 +141,7 @@ export default function PromoteStudents({ students }: { students: Student[] }) {
       <input value={year} onChange={(e) => setYear(e.target.value)} dir="ltr"
         style={{ width: 180, padding: '9px 12px', borderRadius: 10, border: '1px solid #E3E8EE', fontSize: 14, fontFamily: 'inherit', marginBottom: 16 }} />
 
-      {/* المعاينة */}
+      {/* المعاينة — شاملة كل الطلاب */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 10, marginBottom: 18 }}>
         <Box label="سيُرقّى" value={preview.promote} color="#067647" />
         <Box label="سيعيد" value={preview.repeat} color="#B54708" />
@@ -136,15 +155,39 @@ export default function PromoteStudents({ students }: { students: Student[] }) {
         </div>
       )}
 
+      {/* فلتر الصف — للمراجعة صفاً صفاً */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+        <label style={{ fontSize: 13, fontWeight: 700, color: '#0F2744' }}>مراجعة حسب الصف</label>
+        <select value={gradeFilter} onChange={(e) => setGradeFilter(e.target.value)}
+          style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid #E3E8EE', fontSize: 14, fontFamily: 'inherit', background: '#fff', cursor: 'pointer', minWidth: 160 }}>
+          <option value="">كل الصفوف ({active.length})</option>
+          {presentGrades.map((g) => {
+            const count = active.filter((s) => s.grade.trim() === g).length
+            return <option key={g} value={g}>{g} ({count})</option>
+          })}
+        </select>
+        {gradeFilter && (
+          <button onClick={() => setGradeFilter('')}
+            style={{ background: '#F2F5F8', color: '#0F2744', border: '1px solid #E3E8EE', padding: '7px 14px', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+            إظهار الكل
+          </button>
+        )}
+      </div>
+
       {/* قائمة الطلاب — تحديد المعيدين */}
       <div style={{ fontSize: 13, fontWeight: 700, color: '#0F2744', marginBottom: 8 }}>
-        حدّد المعيدين ({repeatIds.size} محدّد)
+        حدّد المعيدين
+        <span style={{ color: '#8A94A6', fontWeight: 600 }}>
+          {' '}({repeatIds.size} محدّد إجمالاً{gradeFilter ? ` · ${repeatInView} في هذا الصف` : ''})
+        </span>
       </div>
       <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid #EEF1F5', borderRadius: 12 }}>
-        {active.length === 0 && (
-          <div style={{ padding: 20, textAlign: 'center', color: '#8A94A6', fontSize: 14 }}>لا طلاب نشطون</div>
+        {visible.length === 0 && (
+          <div style={{ padding: 20, textAlign: 'center', color: '#8A94A6', fontSize: 14 }}>
+            {active.length === 0 ? 'لا طلاب نشطون' : 'لا طلاب في هذا الصف'}
+          </div>
         )}
-        {active.map((s, i) => {
+        {visible.map((s, i) => {
           const isRepeat = repeatIds.has(s.id)
           const ng = nextGrade(s.grade)
           const dest = isRepeat ? s.grade : (ng ?? (s.grade.trim() === LAST_GRADE ? 'متخرّج' : '—'))
@@ -185,7 +228,8 @@ export default function PromoteStudents({ students }: { students: Student[] }) {
           <b style={{ color: '#7A5C0A', fontSize: 14.5 }}>تأكيد الترقية</b>
           <p style={{ color: '#8A6D0F', fontSize: 13, margin: '6px 0 14px', lineHeight: 1.8 }}>
             سيُرقّى {preview.promote} طالباً، ويعيد {preview.repeat}، ويتخرّج {preview.graduate}.
-            <br />هذه العملية <b>لا يمكن التراجع عنها</b>، وتُنفَّذ مرّة واحدة للعام {year}.
+            <br />هذه العملية تشمل <b>كل الطلاب النشطين</b> بغضّ النظر عن الفلتر المعروض.
+            <br />وهي <b>لا يمكن التراجع عنها</b>، وتُنفَّذ مرّة واحدة للعام {year}.
           </p>
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={execute} disabled={busy}
