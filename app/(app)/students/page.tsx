@@ -8,6 +8,7 @@ import PrintButton from '../PrintButton'
 import LinkParent from './LinkParent'
 import StudentsByClass from './StudentsByClass'
 import AddStudent from './AddStudent'
+import { buildSectionOptions } from '@/lib/academic'
 import ImportStudents from './ImportStudents'
 import PromoteStudents from './PromoteStudents'
 import InviteParents from './InviteParents'
@@ -27,7 +28,7 @@ export default async function StudentsPage() {
   ] = await Promise.all([
     supabase.from('profiles').select('role').eq('id', user.id).single(),
     supabase.rpc('my_role'),
-    supabase.from('schools').select('name, vat_number').single(),
+    ssupabase.from('schools').select('name, vat_number, section_styles').single(),
     supabase.from('students')
       .select('id, code, full_name, grade, section, guardian_name, guardian_phone, guardian_email, birth_date, gender, status')
       .order('code'),
@@ -36,6 +37,7 @@ export default async function StudentsPage() {
   // التحقّق من الصلاحية بعد الجلب (الجلب المتوازي أسرع من التحقّق المتسلسل)
   const role = (myRole ?? profile?.role) as Role
   if (!isStaff(role)) redirect('/dashboard')
+  const sectionOptions = buildSectionOptions(school?.section_styles)
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }} dir="rtl">
