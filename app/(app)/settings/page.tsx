@@ -44,7 +44,9 @@ export default async function SettingsPage() {
       <h1 style={{ color: '#0F2744', fontSize: 24, marginBottom: 4 }}>الإعدادات</h1>
       <p style={{ color: '#667', fontSize: 14, marginBottom: 24 }}>إدارة أمان حسابك وهوية مدرستك.</p>
       <MfaSetup />
-      <SchoolBranding initialLogo={logo} initialColor={color} canEdit={isOwner} />
+       <SchoolBranding initialLogo={logo} initialColor={color} canEdit={isOwner} />
+      {isOwner && <SectionStyleSetting initial={sectionStyles} canEdit={isOwner} />}
+
       {vat && (
         <VatSetting
           mode={(vat.vat_mode ?? 'none') as 'mandatory' | 'optional' | 'none'}
