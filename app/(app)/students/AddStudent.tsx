@@ -2,9 +2,9 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
-import { GRADES, SECTIONS, GULF_COUNTRIES, DEFAULT_COUNTRY, cleanLocalNumber, isValidLocalNumber } from '@/lib/academic'
+import { GRADES, GULF_COUNTRIES, DEFAULT_COUNTRY, cleanLocalNumber, isValidLocalNumber } from '@/lib/academic'
 
-export default function AddStudent() {
+export default function AddStudent({ sectionOptions }: { sectionOptions: string[] }) {
   const router = useRouter()
   const supabase = createClient()
   const [open, setOpen] = useState(false)
@@ -100,10 +100,14 @@ export default function AddStudent() {
 
         <div style={cell}>
           <label style={label}>الشعبة</label>
-          <select style={select} value={f.section} onChange={(e) => set('section', e.target.value)}>
-            <option value="">— اختر الشعبة —</option>
-            {SECTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
+          {sectionOptions.length > 0 ? (
+            <select style={select} value={f.section} onChange={(e) => set('section', e.target.value)}>
+              <option value="">— اختر الشعبة —</option>
+              {sectionOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          ) : (
+            <input style={input} value={f.section} onChange={(e) => set('section', e.target.value)} placeholder="أ" />
+          )}
         </div>
 
         <div style={cell}>
