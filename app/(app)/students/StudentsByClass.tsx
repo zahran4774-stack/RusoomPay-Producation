@@ -184,41 +184,69 @@ function Stat({ label, value, color }: { label: string; value: number; color: st
   )
 }
 
-// تصدير قائمة الشعبة PDF
-async function exportClassPDF(g: ClassGroup, school: { name: string; vat: string | null }) {
-  const jsPDF = await loadJsPDF()
-  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
-  doc.setFontSize(15); doc.text(school.name, 200, 18, { align: 'right' })
-  if (school.vat) { doc.setFontSize(10); doc.text(`VAT: ${school.vat}`, 200, 24, { align: 'right' }) }
-  doc.setFontSize(13)
-  const title = `قائمة الصف ${g.grade}${g.section !== '—' ? ` - شعبة ${g.section}` : ''} (${g.students.length} طالب)`
-  doc.text(title, 200, 34, { align: 'right' })
-  doc.line(10, 38, 200, 38)
-  let y = 46
-  doc.setFontSize(9)
-  doc.text('الرقم | الطالب | ولي الأمر | الحالة', 200, y, { align: 'right' }); y += 7
-  g.students.forEach((s) => {
-    if (y > 285) { doc.addPage(); y = 20 }
-    const st = s.status === 'active' ? 'منتظم' : s.status === 'transferred' ? 'منقول' : 'متخرج'
-    doc.text(`${s.code} | ${s.full_name} | ${s.guardian_name || '—'} | ${st}`, 200, y, { align: 'right' })
-    y += 6
-  })
-  doc.save(`قائمة-${g.grade}-${g.section}.pdf`)
-}
+// تصدير قائمة الشعبة PDF — عبر HTML + خط Cairo (يدعم العربية تماماً)
+// نطبع من المتصفح بدل jsPDF لأن الأخيرة لا تدعم تشكيل الحروف العربية ولا RTL.
+function exportClassPDF(g: ClassGroup, school: { name: string; vat: string | null }) {
+  const title = `قائمة الصف ${g.grade}${g.section !== '\u2014' ? ` - شعبة ${g.section}` : ''}`
+  const now = new Date()
+  const dateStr = now.toLocaleDateString('en-GB')
 
-// تحميل jsPDF كسولاً من CDN
-let _jsPDFPromise: Promise<{ new (o: object): { setFontSize: (n: number) => void; text: (t: string, x: number, y: number, o?: object) => void; line: (a: number, b: number, c: number, d: number) => void; addPage: () => void; save: (n: string) => void } }> | null = null
-function loadJsPDF() {
-  const w = window as unknown as { jspdf?: { jsPDF: unknown } }
-  if (w.jspdf?.jsPDF) return Promise.resolve(w.jspdf.jsPDF as never)
-  if (!_jsPDFPromise) {
-    _jsPDFPromise = new Promise((resolve, reject) => {
-      const s = document.createElement('script')
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
-      s.onload = () => resolve((window as unknown as { jspdf: { jsPDF: never } }).jspdf.jsPDF)
-      s.onerror = () => reject(new Error('load failed'))
-      document.head.appendChild(s)
-    })
+  const rows = g.students.map((s, i) => {
+    const st = s.status === 'active' ? 'منتظم' : s.status === 'transferred' ? 'منقول' : 'متخرج'
+    return `<tr>
+      <td style="text-align:center">${i + 1}</td>
+      <td>${s.code ?? '\u2014'}</td>
+      <td>${s.full_name}</td>
+      <td>${s.guardian_name || '\u2014'}</td>
+      <td style="text-align:center">${st}</td>
+    </tr>`
+  }).join('')
+
+  const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
+    <title>${title}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=block" rel="stylesheet">
+    <style>
+      *{margin:0;padding:0;box-sizing:border-box;font-family:'Cairo',Tahoma,sans-serif}
+      body{padding:28px;color:#1a2530}
+      .head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0F2744;padding-bottom:14px;margin-bottom:6px}
+      .school{font-size:1.25rem;font-weight:800;color:#0F2744}
+      .vat{font-size:.8rem;color:#667;margin-top:2px}
+      .title{font-size:1.05rem;font-weight:700;color:#1E5C4E}
+      .date{font-size:.8rem;color:#667;margin-top:3px;text-align:left}
+      .count{font-size:.82rem;color:#8A94A6;margin:12px 0}
+      table{width:100%;border-collapse:collapse;margin-top:8px;font-size:.85rem}
+      th{background:#0F2744;color:#fff;padding:9px 11px;text-align:right;font-weight:600}
+      td{padding:8px 11px;border-bottom:1px solid #E6EBF1;text-align:right}
+      tr:nth-child(even) td{background:#F7F9FC}
+      .foot{margin-top:22px;padding-top:12px;border-top:1px solid #ccc;font-size:.72rem;color:#9AA7B8;text-align:center}
+      @media print{body{padding:0}}
+    </style></head><body>
+    <div class="head">
+      <div><div class="school">${school.name}</div>${school.vat ? `<div class="vat">الرقم الضريبي: ${school.vat}</div>` : ''}</div>
+      <div><div class="title">${title}</div><div class="date">تاريخ الطباعة: ${dateStr}</div></div>
+    </div>
+    <div class="count">عدد الطلاب: ${g.students.length}</div>
+    <table>
+      <thead><tr><th style="width:40px">#</th><th>الرقم</th><th>الطالب</th><th>ولي الأمر</th><th>الحالة</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="foot">RusoomPay · ${now.getFullYear()}</div>
+    </body></html>`
+
+  const win = window.open('', '_blank', 'width=900,height=650')
+  if (!win) { alert('فعّل النوافذ المنبثقة للطباعة'); return }
+  win.document.write(html)
+  win.document.close()
+
+  // انتظر تحميل خط Cairo قبل الطباعة (يمنع الأحرف المشوّهة)
+  const doPrint = () => { try { win.focus(); win.print() } catch { /* أُغلقت */ } }
+  const fonts = (win.document as Document & { fonts?: FontFaceSet }).fonts
+  if (fonts && fonts.ready) {
+    fonts.ready.then(() => setTimeout(doPrint, 150))
+    setTimeout(doPrint, 3000)
+  } else {
+    setTimeout(doPrint, 800)
   }
-  return _jsPDFPromise
 }
