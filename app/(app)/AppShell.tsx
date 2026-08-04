@@ -65,12 +65,10 @@ export default function AppShell({ role, brandColor, schoolLogo, schoolName, chi
   const pathname = usePathname()
   const router = useRouter()
 
-  // زر الرجوع الذكي: يظهر فقط في الصفحات الفرعية العميقة.
-  // المسار /students → مستوى أول (لا رجوع). /students/xxx → فرعي (رجوع للأب).
-  // نحسب الأب بحذف آخر جزء من المسار.
-  const segments = pathname.split('/').filter(Boolean)
-  const showBack = segments.length >= 2   // مثل ['payroll','xxx'] أو ['students','xxx']
-  const parentPath = '/' + segments.slice(0, -1).join('/')
+  // زر الرجوع: يظهر في كل صفحة ما عدا لوحة التحكّم (نقطة البداية بعد الدخول).
+  // يستخدم سجلّ المتصفح (router.back) — يرجع لآخر صفحة زارها المستخدم فعلياً،
+  // بلا افتراض "أب" منطقي، فيعمل بثبات في كل الصفحات (المحاسبة، الطلاب، إلخ).
+  const showBack = pathname !== '/dashboard'
   const [open, setOpen] = useState(false)
   const items = NAV.filter((n) => n.show(role))
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/')
@@ -153,7 +151,7 @@ export default function AppShell({ role, brandColor, schoolLogo, schoolName, chi
       {/* المحتوى */}
       <main className="app-main">
         {showBack && (
-          <button onClick={() => router.push(parentPath)}
+          <button onClick={() => router.back()}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#fff', border: '1px solid #E3E8EE', borderRadius: 10, padding: '8px 15px', marginBottom: 16, cursor: 'pointer', color: '#0F2744', fontWeight: 700, fontSize: 13.5, fontFamily: 'inherit', boxShadow: '0 1px 3px rgba(10,37,64,.06)' }}>
             <span style={{ fontSize: 17, lineHeight: 1, color: 'var(--brand)' }}>→</span> رجوع
           </button>
