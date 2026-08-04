@@ -71,7 +71,7 @@ export default function BusRoster({ schoolName }: { schoolName?: string }) {
         <thead><tr><th style="width:40px">#</th><th>اسم الطالب</th><th>الصف</th><th>ولي الأمر</th><th>الهاتف</th></tr></thead>
         <tbody>${rows || '<tr><td colspan="5" style="text-align:center;color:#999">لا طلاب مشتركين</td></tr>'}</tbody>
       </table>
-      <div class="foot">صدر من RusoomPay · ${new Date().toLocaleDateString('ar')}</div>
+      <div class="foot">تاريخ الطباعة: ${new Date().toLocaleDateString('en-GB')}</div>
       <script>window.onload = () => { window.print() }</script>
       </body></html>`
 
