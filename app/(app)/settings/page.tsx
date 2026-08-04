@@ -19,9 +19,8 @@ export default async function SettingsPage() {
   const isOwner = profile?.role === 'owner'
 
   // إعداد الضريبة حسب قانون الدولة (لكل المستخدمين للعرض، التعديل للمدير)
-  const { data: vat } = await supabase.rpc('my_vat_setting').maybeSingle() as {
-    data: { vat_mode?: string; vat_rate?: number; applies?: boolean } | null
-  }
+  const vatRes = await supabase.rpc('my_vat_setting').maybeSingle()
+  const vat = vatRes.data as { vat_mode?: string; vat_rate?: number; applies?: boolean } | null
 
   let logo: string | null = null
   let color: string | null = null
