@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import { printReport, type SchoolHeader } from '@/lib/print-report'
+import BusRoster from './BusRoster'
 
 type Bus = { id: string; route: string; driver: string; capacity: number; fee: number; pay_to: string; subscribers: number }
 type Sub = { student_id: string; student_name: string; guardian: string; route: string }
@@ -92,6 +93,10 @@ export default function TransportClient({ initialBuses, initialSubscribers, stud
   return (
     <>
       {msg && <div style={{ ...card, padding: 12, marginBottom: 12, color: msg.startsWith('✓') ? '#1A7A45' : '#C0392B' }}>{msg}</div>}
+
+      <div style={{ marginBottom: 16 }}>
+        <BusRoster schoolName={school?.name} />
+      </div>
 
       <div style={{ background: '#EEF3F9', border: '1px solid #DDE5EF', borderRadius: 12,
                     padding: '12px 14px', marginBottom: 16, fontSize: 13, color: '#37506F' }}>
