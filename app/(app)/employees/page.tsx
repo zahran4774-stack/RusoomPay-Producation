@@ -69,7 +69,7 @@ export default async function EmployeesPage() {
             school={{ name: school?.name ?? 'مدرسة', vat: school?.vat_number }}
             title="قائمة الموظفين"
             columns={[
-              { key: 'code', label: 'الرقم' },
+              { key: 'code', label: 'الرقم الوظيفي' },
               { key: 'name', label: 'الاسم' },
               { key: 'title', label: 'المسمى الوظيفي' },
               { key: 'nationality', label: 'الجنسية' },
