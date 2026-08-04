@@ -32,6 +32,13 @@ export default function AiAssistant() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [conversationId, setConversationId] = useState<string | undefined>()
+
+  // إعادة الضبط للحالة الأساسية — يمسح المحادثة دون إغلاق اللوحة
+  const resetChat = useCallback(() => {
+    setMessages([])
+    setInput('')
+    setConversationId(undefined)
+  }, [])
   const bodyRef = useRef<HTMLDivElement>(null)
   const taRef = useRef<HTMLTextAreaElement>(null)
 
@@ -151,9 +158,16 @@ export default function AiAssistant() {
               <div style={S.headStatus}>يعرف بيانات مدرستك</div>
             </div>
           </div>
-          <button onClick={() => setOpen(false)} aria-label="إغلاق" style={S.xBtn}>
-            ✕
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            {messages.length > 0 && (
+              <button onClick={resetChat} aria-label="محادثة جديدة" title="بدء محادثة جديدة" style={S.xBtn}>
+                ↺
+              </button>
+            )}
+            <button onClick={() => setOpen(false)} aria-label="إغلاق" style={S.xBtn}>
+              ✕
+            </button>
+          </div>
         </header>
 
         {/* جسم المحادثة */}
