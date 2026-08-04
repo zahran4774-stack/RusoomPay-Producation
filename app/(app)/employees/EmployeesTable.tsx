@@ -114,7 +114,7 @@ export default function EmployeesTable({ employees, role, rates }: { employees: 
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
           <thead>
             <tr style={{ background: '#0F2744', color: '#fff', textAlign: 'right' }}>
-              <th style={{ padding: 12 }}>الرقم</th><th style={{ padding: 12 }}>الاسم</th>
+              <th style={{ padding: 12 }}>الرقم الوظيفي</th><th style={{ padding: 12 }}>الاسم</th>
               <th style={{ padding: 12 }}>الجنسية</th><th style={{ padding: 12 }}>الأساسي</th>
               <th style={{ padding: 12 }}>البدلات</th><th style={{ padding: 12 }}>اشتراك الموظف</th>
               <th style={{ padding: 12 }}>حصة صاحب العمل</th><th style={{ padding: 12 }}></th>
