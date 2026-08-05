@@ -9,8 +9,6 @@ import StaffInvites from './StaffInvites'
 import SchoolBackup from './SchoolBackup'
 import SectionStyleSetting from './SectionStyleSetting'
 
-type VatData = { vat_mode?: string; vat_rate?: number; applies?: boolean } | null
-
 export default async function SettingsPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -27,7 +25,7 @@ export default async function SettingsPage() {
 
   // إعداد الضريبة حسب قانون الدولة (لكل المستخدمين للعرض، التعديل للمدير)
   const vatRes = await supabase.rpc('my_vat_setting').maybeSingle()
-  const vat: VatData = vatRes.data
+  const vat = vatRes.data as { vat_mode?: string; vat_rate?: number; applies?: boolean } | null
 
   let logo: string | null = null
   let color: string | null = null
