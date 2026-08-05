@@ -16,6 +16,7 @@
     "framer-motion": "^11.0.0",
     "lucide-react": "^0.454.0",
     "next": "^15.1.0",
+    "pdfmake": "^0.2.12",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "server-only": "^0.0.1",
@@ -23,6 +24,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/pdfmake": "^0.2.9",
     "@types/react": "^19.0.0",
     "autoprefixer": "^10.4.0",
     "postcss": "^8.4.0",
