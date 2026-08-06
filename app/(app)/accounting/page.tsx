@@ -6,11 +6,13 @@ import { fmtCurrency, curSymbol, type Account } from '@/lib/accounting'
 import { canAccessFinance, type Role } from '@/lib/roles'
 import JournalForm from './JournalForm'
 import PrintButton from '../PrintButton'
-import PeriodReports from './PeriodReports'
-import JournalList from './JournalList'
-import ForecastPanel from './ForecastPanel'
-import DailyPaymentsReport from './DailyPaymentsReport'
-import PayrollYearlyReport from './PayrollYearlyReport'
+import {
+  LazyPeriodReports as PeriodReports,
+  LazyJournalList as JournalList,
+  LazyForecastPanel as ForecastPanel,
+  LazyDailyPaymentsReport as DailyPaymentsReport,
+  LazyPayrollYearlyReport as PayrollYearlyReport,
+} from './LazyReports'
 
 export default async function AccountingPage() {
   const supabase = await createClient()
