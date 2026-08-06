@@ -1,10 +1,11 @@
 'use client'
 // بوابة ولي الأمر التفاعلية — أبناؤه، الرسوم، الدفع (5 طرق)، الإيصالات، الإشعارات
+
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import { printReport } from '@/lib/print-report'
 
-type Child = { student_id: string; student_name: string; grade: string; section: string | null; total: number; paid: number; remaining: number }
+type Child = { student_id: string; student_name: string; grade: string; section: string | null; total: number; paid: number; remaining: number; pending?: number }
 type Fee = { fee_id: string; student_name: string; description: string; total: number; paid: number; remaining: number; due_date: string | null }
 type Receipt = { payment_id: string; student_name: string; description: string; amount: number; method: string; paid_at: string }
 type Notif = { id: string; body: string; is_read: boolean; created_at: string }
@@ -14,6 +15,7 @@ type School = { name: string; vat: string | null; currency: string; bankIban: st
 const METHOD_LABEL: Record<string, string> = {
   thawani: 'ادفع الآن (ثواني)', bank: 'تحويل بنكي', applepay: 'Apple Pay', googlepay: 'Google Pay', onsite: 'نقداً عند المدرسة',
 }
+
 const fmt = (n: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 
 export default function ParentPortal({ parentName, school, children_, fees, receipts, notifications, certificates }: {
@@ -55,6 +57,7 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
   const totalRemaining = children_.reduce((a, c) => a + c.remaining, 0)
   const totalAll = children_.reduce((a, c) => a + c.total, 0)
   const totalPaid = children_.reduce((a, c) => a + c.paid, 0)
+  const totalPending = children_.reduce((a, c) => a + (c.pending || 0), 0)
   const paidPct = totalAll > 0 ? Math.round((totalPaid / totalAll) * 100) : 0
   const cur = school.currency === 'OMR' ? 'ر.ع' : school.currency
 
@@ -120,6 +123,12 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
     color: active ? '#fff' : '#556',
     transition: 'all .2s ease',
   })
+  const pendingBadge: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', gap: 6,
+    fontSize: 12, fontWeight: 600, color: '#F0C24B',
+    background: 'rgba(240,194,75,.15)', padding: '7px 12px',
+    borderRadius: 9, width: 'fit-content',
+  }
 
   return (
     <div style={{ minHeight: '100dvh', background: '#F4F6FA' }} dir="rtl">
@@ -144,6 +153,7 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
           <div style={{ fontSize: 13, opacity: .85 }}>إجمالي المتبقّي على أبنائك</div>
           <div style={{ fontSize: 30, fontWeight: 800, fontFamily: 'Cairo', margin: '4px 0' }}>{fmt(totalRemaining)} <span style={{ fontSize: 15 }}>{cur}</span></div>
           <div style={{ fontSize: 12.5, opacity: .8, marginBottom: 14 }}>{children_.length} {children_.length === 1 ? 'ابن' : 'أبناء'}</div>
+
           {/* مؤشّر نسبة الدفع من الإجمالي */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, marginBottom: 6 }}>
             <span style={{ opacity: .85 }}>نسبة المدفوع من الإجمالي</span>
@@ -160,6 +170,13 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
             <span>مدفوع: {fmt(totalPaid)} {cur}</span>
             <span>الإجمالي: {fmt(totalAll)} {cur}</span>
           </div>
+
+          {/* شارة: مبالغ قيد الاعتماد */}
+          {totalPending > 0.0005 && (
+            <div style={{ ...pendingBadge, marginTop: 12 }}>
+              ⏳ {fmt(totalPending)} {cur} قيد الاعتماد
+            </div>
+          )}
         </div>
 
         {/* تبويبات */}
@@ -205,6 +222,12 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
                 transition: 'width .6s ease',
               }} />
             </div>
+            {/* شارة قيد الاعتماد لهذا الابن تحديداً */}
+            {(c.pending || 0) > 0.0005 && (
+              <div style={{ ...pendingBadge, marginTop: 10 }}>
+                ⏳ {fmt(c.pending || 0)} {cur} قيد الاعتماد
+              </div>
+            )}
           </div>
         )) : <div style={card_}>لا يوجد أبناء مرتبطون بحسابك. تواصل مع المدرسة لربط أبنائك.</div>)}
 
@@ -279,8 +302,10 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
           <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: 22, maxWidth: 440, width: '100%', maxHeight: '90dvh', overflowY: 'auto' }} dir="rtl">
             <h3 style={{ margin: '0 0 4px', color: '#0F2744' }}>💳 الدفع الإلكتروني الآمن</h3>
             <p style={{ fontSize: 13, color: '#667', margin: '0 0 14px' }}>{payFee.description} — المتبقّي {fmt(payFee.remaining)} {cur}</p>
+
             <label style={{ fontSize: 13, fontWeight: 600, color: '#445' }}>المبلغ</label>
             <input style={input} type="number" step="0.001" value={amount} onChange={(e) => setAmount(e.target.value)} />
+
             <label style={{ fontSize: 13, fontWeight: 600, color: '#445' }}>طريقة الدفع</label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7, marginBottom: 12 }}>
               {(['thawani', 'bank', 'applepay', 'googlepay', 'onsite'] as const).map((m) => (
@@ -292,6 +317,7 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
                 }}>{METHOD_LABEL[m]}</button>
               ))}
             </div>
+
             {method === 'thawani' && (
               <div style={{ background: '#F4F8F7', borderRadius: 10, padding: 16, marginBottom: 10, textAlign: 'center', fontSize: 13, color: '#445', lineHeight: 1.8 }}>
                 🔒 ستنتقل لصفحة الدفع الآمنة من ثواني لإدخال بيانات بطاقتك. لا نطّلع على بيانات بطاقتك أبداً.
@@ -313,6 +339,7 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
                 🏫 ستدفع نقداً عند محاسب المدرسة. سيُسجّل طلبك ويؤكّده المحاسب عند الاستلام.
               </div>
             )}
+
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 6 }}>
               <button onClick={() => setPayFee(null)} style={{ padding: '10px 16px', borderRadius: 9, border: '1px solid #DDE3EC', background: '#fff', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>إلغاء</button>
               <button onClick={method === 'thawani' ? payViaThawani : submitPayment} disabled={busy || redirecting} style={{ padding: '10px 20px', borderRadius: 9, border: 'none', background: '#D4A017', color: '#08172B', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700 }}>
