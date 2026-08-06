@@ -1,0 +1,81 @@
+// app/api/thawani/verify/route.ts
+//
+// نقطة النهاية اللي يرجع لها المتصفح بعد ثواني (نفس الرابط لكل من النجاح والإلغاء).
+// ⚠️ مبدأ أمني مهم: لا نثق أبداً بكون المستخدم "وصل" لهذا الرابط كدليل على الدفع.
+// نتحقق دائماً من ثواني نفسها عبر Retrieve Session بالمفتاح السري قبل اعتماد أي شيء.
+//
+// ⚠️ عدّل مسار استيراد createClient حسب مكتبتك، ونقطة إعادة التوجيه النهائية
+// (REDIRECT_SUCCESS / REDIRECT_FAILED) حسب صفحة الوالد عندك.
+
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { retrieveSession } from "@/lib/thawani";
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+export async function GET(req: NextRequest) {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL!;
+  const pendingPaymentId = req.nextUrl.searchParams.get("pending_payment_id");
+
+  // ⚠️ عدّل هذين المسارين لصفحة الوالد الفعلية عندك
+  const REDIRECT_SUCCESS = `${appUrl}/parent?thawani=paid`;
+  const REDIRECT_FAILED = `${appUrl}/parent?thawani=failed`;
+
+  if (!pendingPaymentId) {
+    return NextResponse.redirect(REDIRECT_FAILED);
+  }
+
+  try {
+    const { data: pp, error } = await supabaseAdmin
+      .from("pending_payments")
+      .select("id, provider_ref, txn_state, status")
+      .eq("id", pendingPaymentId)
+      .single();
+
+    if (error || !pp || !pp.provider_ref) {
+      return NextResponse.redirect(REDIRECT_FAILED);
+    }
+
+    // لو سبق تأكيدها (مثلاً المستخدم رجع للصفحة مرتين) لا نكرر شيء
+    if (pp.status === "approved" || pp.txn_state === "paid") {
+      return NextResponse.redirect(REDIRECT_SUCCESS);
+    }
+
+    // 🔒 التحقق الحقيقي — نسأل ثواني مباشرة عن حالة الجلسة
+    const session = await retrieveSession(pp.provider_ref);
+
+    // تأكيد إضافي أن الجلسة تخص فعلاً هذه الدفعة (حماية من تلاعب بالـ query params)
+    if (session.clientReferenceId && session.clientReferenceId !== pendingPaymentId) {
+      await supabaseAdmin.rpc("mark_gateway_payment_failed", {
+        p_id: pendingPaymentId,
+        p_reason: "client_reference_id mismatch",
+      });
+      return NextResponse.redirect(REDIRECT_FAILED);
+    }
+
+    if (session.paymentStatus === "paid") {
+      const { error: confirmError } = await supabaseAdmin.rpc("confirm_gateway_payment", {
+        p_id: pendingPaymentId,
+        p_provider_ref: pp.provider_ref,
+      });
+      if (confirmError) {
+        console.error("confirm_gateway_payment error:", confirmError);
+        return NextResponse.redirect(REDIRECT_FAILED);
+      }
+      return NextResponse.redirect(REDIRECT_SUCCESS);
+    }
+
+    // unpaid / cancelled / أي حالة أخرى
+    await supabaseAdmin.rpc("mark_gateway_payment_failed", {
+      p_id: pendingPaymentId,
+      p_reason: `thawani_status_${session.paymentStatus}`,
+    });
+    return NextResponse.redirect(REDIRECT_FAILED);
+  } catch (err) {
+    console.error("thawani/verify error:", err);
+    return NextResponse.redirect(REDIRECT_FAILED);
+  }
+}
