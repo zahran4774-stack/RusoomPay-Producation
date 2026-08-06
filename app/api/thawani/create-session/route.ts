@@ -2,8 +2,7 @@
 // ينشئ جلسة دفع ثواني لفاتورة طالب — يُستدعى من بوابة ولي الأمر عند الضغط "ادفع عبر ثواني"
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
-import { createThawaniSession } from '@/lib/thawani'
-
+import { createCheckoutSession } from '@/lib/thawani'
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
