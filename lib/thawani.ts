@@ -1,111 +1,111 @@
-// مكتبة التكامل مع ثواني Pay — بوابة الدفع العُمانية
-// بيئة UAT للاختبار حالياً. التبديل للإنتاج: تغيير متغيّرات البيئة فقط، لا الكود.
-//
-// المبدأ: خادمنا ينشئ جلسة دفع، نحوّل العميل لصفحة ثواني المستضافة
-// (لا نلمس بيانات البطاقة أبداً)، ثم نتحقّق من النتيجة عبر webhook — لا نثق بـsuccess_url وحده.
+// lib/thawani.ts
+// عميل بسيط للتعامل مع Thawani Checkout API
+// المفاتيح تُقرأ من متغيرات البيئة فقط — لا تكتبها هنا أبداً
 
-const THAWANI_BASE_URL = process.env.THAWANI_BASE_URL || 'https://uatcheckout.thawani.om/api/v1'
-const THAWANI_PAY_URL = process.env.THAWANI_PAY_URL || 'https://uatcheckout.thawani.om/pay'
-const THAWANI_SECRET_KEY = process.env.THAWANI_SECRET_KEY || 'rRQ26GcsZzoEhbrP2HZvLYDbn9C9et'       // مفتاح UAT العام — للتطوير فقط
-const THAWANI_PUBLISHABLE_KEY = process.env.THAWANI_PUBLISHABLE_KEY || 'HGvTMLDssJghr9tlN9gr4DVYt0qyBy'
+const THAWANI_SECRET_KEY = process.env.THAWANI_SECRET_KEY!;
+const THAWANI_PUBLISHABLE_KEY = process.env.THAWANI_PUBLISHABLE_KEY!;
 
-type CreateSessionInput = {
-  feeId: string          // معرّف الفاتورة عندنا (student_fees.id)
-  amountOmr: number      // المبلغ بالريال العُماني (كسور عشرية، مثل 15.000)
-  studentName: string
-  parentEmail?: string | null
-  parentName: string
-  parentPhone: string
-  successUrl: string
-  cancelUrl: string
+// UAT = بيئة الاختبار (Sandbox) — production لما تصير المفاتيح حقيقية
+const THAWANI_ENV = process.env.THAWANI_ENV === "production" ? "production" : "uat";
+
+const API_BASE =
+  THAWANI_ENV === "production"
+    ? "https://checkout.thawani.om/api/v1"
+    : "https://uatcheckout.thawani.om/api/v1";
+
+const CHECKOUT_BASE =
+  THAWANI_ENV === "production"
+    ? "https://checkout.thawani.om"
+    : "https://uatcheckout.thawani.om";
+
+type ThawaniProduct = {
+  name: string;
+  quantity: number;
+  unit_amount: number; // بالبيسة — عدد صحيح، بدون فواصل عشرية
+};
+
+type CreateSessionParams = {
+  clientReferenceId: string; // = pending_payment.id عندنا
+  amountOMR: number; // المبلغ بالريال العماني (مثال: 25.500)
+  description: string;
+  successUrl: string;
+  cancelUrl: string;
+  customerName?: string;
+  customerPhone?: string;
+};
+
+/** يحوّل مبلغ بالريال العماني إلى بيسة (عدد صحيح) كما تتطلب ثواني */
+export function omrToBaisa(amountOMR: number): number {
+  return Math.round(amountOMR * 1000);
 }
 
-type ThawaniSessionResponse = {
-  success: boolean
-  data?: { session_id: string }
-  description?: string
-}
+export async function createCheckoutSession(params: CreateSessionParams) {
+  const products: ThawaniProduct[] = [
+    {
+      name: params.description || "رسوم دراسية",
+      quantity: 1,
+      unit_amount: omrToBaisa(params.amountOMR),
+    },
+  ];
 
-type ThawaniStatusResponse = {
-  success: boolean
-  data?: {
-    session_id: string
-    payment_status: 'paid' | 'unpaid' | 'cancelled'
-    client_reference_id: string
-    total_amount: number
-  }
-}
-
-// يحوّل ريال عُماني (كسور) إلى بيسة (عدد صحيح) — ثواني يتطلّب بيسة حصراً
-function omrToBaisa(amountOmr: number): number {
-  return Math.round(amountOmr * 1000)
-}
-
-// ينشئ جلسة دفع جديدة لدى ثواني، يرجع رابط الدفع الجاهز للتحويل إليه
-export async function createThawaniSession(input: CreateSessionInput): Promise<
-  { ok: true; sessionId: string; paymentUrl: string } | { ok: false; error: string }
-> {
-  try {
-    const res = await fetch(`${THAWANI_BASE_URL}/checkout/session`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'thawani-api-key': THAWANI_SECRET_KEY,
+  const res = await fetch(`${API_BASE}/checkout/session`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "thawani-api-key": THAWANI_SECRET_KEY,
+    },
+    body: JSON.stringify({
+      client_reference_id: params.clientReferenceId,
+      mode: "payment",
+      products,
+      success_url: params.successUrl,
+      cancel_url: params.cancelUrl,
+      metadata: {
+        customer_name: params.customerName || "ولي أمر",
+        customer_phone: params.customerPhone || "",
       },
-      body: JSON.stringify({
-        client_reference_id: input.feeId,
-        mode: 'payment',
-        products: [
-          {
-            name: `رسوم دراسية - ${input.studentName}`,
-            quantity: 1,
-            unit_amount: omrToBaisa(input.amountOmr),
-          },
-        ],
-        success_url: input.successUrl,
-        cancel_url: input.cancelUrl,
-        metadata: {
-          customer_email: input.parentEmail || undefined,
-          customer_name: input.parentName,
-          customer_phone: input.parentPhone,
-          order_id: input.feeId,
-        },
-      }),
-    })
+    }),
+  });
 
-    const json = (await res.json()) as ThawaniSessionResponse
-    if (!res.ok || !json.success || !json.data?.session_id) {
-      return { ok: false, error: json.description || 'تعذّر إنشاء جلسة الدفع' }
-    }
+  const data = await res.json();
 
-    const sessionId = json.data.session_id
-    const paymentUrl = `${THAWANI_PAY_URL}/${sessionId}?key=${THAWANI_PUBLISHABLE_KEY}`
-    return { ok: true, sessionId, paymentUrl }
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'خطأ اتصال بثواني' }
+  if (!res.ok || !data?.success) {
+    throw new Error(
+      `فشل إنشاء جلسة ثواني: ${data?.description || res.statusText}`
+    );
   }
+
+  const sessionId: string = data.data.session_id;
+  const checkoutUrl = `${CHECKOUT_BASE}/pay/${sessionId}?key=${THAWANI_PUBLISHABLE_KEY}`;
+
+  return { sessionId, checkoutUrl };
 }
 
-// يستعلم عن حالة جلسة دفع — يُستخدم كخط دفاع ثانٍ إضافةً للـwebhook
-export async function getThawaniSessionStatus(sessionId: string): Promise<
-  { ok: true; status: 'paid' | 'unpaid' | 'cancelled'; feeId: string; amountBaisa: number } | { ok: false; error: string }
-> {
-  try {
-    const res = await fetch(`${THAWANI_BASE_URL}/checkout/session/${sessionId}`, {
-      headers: { 'thawani-api-key': THAWANI_SECRET_KEY },
-    })
-    const json = (await res.json()) as ThawaniStatusResponse
-    if (!res.ok || !json.success || !json.data) {
-      return { ok: false, error: 'تعذر جلب حالة الجلسة' }
-    }
-    return {
-      ok: true,
-      status: json.data.payment_status,
-      feeId: json.data.client_reference_id,
-      amountBaisa: json.data.total_amount,
-    }
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'خطأ اتصال بثواني' }
-  }
-}
+export type ThawaniSessionStatus = "paid" | "unpaid" | "cancelled" | string;
 
+export async function retrieveSession(sessionId: string): Promise<{
+  paymentStatus: ThawaniSessionStatus;
+  clientReferenceId: string | null;
+  raw: any;
+}> {
+  const res = await fetch(`${API_BASE}/checkout/session/${sessionId}`, {
+    method: "GET",
+    headers: {
+      "thawani-api-key": THAWANI_SECRET_KEY,
+    },
+  });
+
+  const data = await res.json();
+
+  if (!res.ok || !data?.success) {
+    throw new Error(
+      `فشل التحقق من جلسة ثواني: ${data?.description || res.statusText}`
+    );
+  }
+
+  return {
+    paymentStatus: data.data.payment_status,
+    clientReferenceId: data.data.client_reference_id ?? null,
+    raw: data.data,
+  };
+}
