@@ -1,9 +1,15 @@
 // lib/invoice-html.ts
 // مولّد فاتورة بـHTML + طباعة المتصفّح — يدعم العربية وخط Cairo بشكل كامل
-// (بديل jsPDF الذي لا يدعم الخطوط العربية)
 
 export type InvoiceData = {
-  school: { name: string; vat?: string | null; address?: string | null; phone?: string | null }
+  school: {
+    name: string
+    vat?: string | null
+    address?: string | null
+    phone?: string | null
+    logoUrl?: string | null
+    branch?: string | null
+  }
   invoiceNo: string
   paidAt: string
   studentName: string
@@ -27,41 +33,67 @@ export function generateInvoice(d: InvoiceData) {
     catch { return d.paidAt }
   })()
 
+  // شعار المدرسة الفعلي، وإلا أول حرف من اسمها كبديل
+  const initial = (d.school.name || 'م').trim().charAt(0)
+  const logoBlock = d.school.logoUrl
+    ? `<img class="logo-img" src="${d.school.logoUrl}" alt="" />`
+    : `<div class="logo">${initial}</div>`
+
   const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
 <title>فاتورة ${d.invoiceNo}</title>
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=block" rel="stylesheet">
 <style>
   *{margin:0;padding:0;box-sizing:border-box;font-family:'Cairo',Tahoma,sans-serif}
-  body{padding:36px;color:#1a2530;background:#fff}
-  .head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0F2744;padding-bottom:18px;margin-bottom:26px}
-  .brand{display:flex;gap:13px;align-items:center}
-  .logo{width:50px;height:50px;border-radius:12px;background:#0F2744;color:#fff;display:grid;place-items:center;font-size:1.5rem;font-weight:800}
-  .school{font-size:1.3rem;font-weight:800;color:#0F2744}
-  .meta{font-size:.8rem;color:#667;margin-top:3px;line-height:1.7}
-  .inv-title{text-align:left}
-  .inv-title h1{font-size:1.6rem;color:#0F2744;font-weight:800}
-  .inv-title .no{font-size:.85rem;color:#667;margin-top:4px}
-  .row{display:flex;gap:20px;margin-bottom:24px}
-  .box{flex:1;background:#F7FAFC;border:1px solid #E3E8EE;border-radius:12px;padding:16px}
-  .box h3{font-size:.75rem;color:#8A94A6;font-weight:700;margin-bottom:8px;letter-spacing:.4px}
-  .box .v{font-size:1rem;font-weight:700;color:#0F2744}
-  .box .s{font-size:.8rem;color:#667;margin-top:3px}
-  table{width:100%;border-collapse:collapse;margin-bottom:22px}
-  thead{background:#0F2744;color:#fff}
-  th{padding:12px 14px;text-align:right;font-size:.82rem;font-weight:700}
-  td{padding:14px;border-bottom:1px solid #EDF1F5;font-size:.9rem}
-  .total{background:#0F2744;color:#fff;border-radius:12px;padding:18px 22px;display:flex;justify-content:space-between;align-items:center}
-  .total .lbl{font-size:.95rem;font-weight:600}
-  .total .amt{font-size:1.5rem;font-weight:800}
-  .rem{margin-top:12px;padding:12px 18px;background:#FFF6E6;border:1px solid #FFE0A3;border-radius:10px;color:#B54708;font-size:.88rem;font-weight:600}
-  .foot{margin-top:34px;padding-top:16px;border-top:1px solid #E3E8EE;text-align:center;color:#8A94A6;font-size:.75rem;line-height:1.9}
+  body{padding:38px 34px;color:#1a2530;background:#fff}
+
+  /* ═══ الترويسة ═══ */
+  .head{display:flex;justify-content:space-between;align-items:flex-start;gap:22px;border-bottom:2px solid #0A1D33;padding-bottom:20px;margin-bottom:28px;position:relative}
+  .head::after{content:'';position:absolute;bottom:-2px;right:0;width:110px;height:2px;background:#C9A227}
+  .brand{display:flex;gap:14px;align-items:center}
+  .logo{width:56px;height:56px;border-radius:14px;background:#0A1D33;color:#fff;display:grid;place-items:center;font-size:1.6rem;font-weight:800;flex-shrink:0}
+  .logo-img{width:56px;height:56px;border-radius:14px;object-fit:contain;background:#fff;border:1px solid #E6EBF1;flex-shrink:0}
+  .school{font-size:1.32rem;font-weight:800;color:#0A1D33;line-height:1.3}
+  .branch{font-size:.84rem;color:#5A6B7E;font-weight:500;margin-top:1px}
+  .meta{font-size:.76rem;color:#8A94A6;margin-top:4px;line-height:1.75}
+  .inv-title{text-align:left;flex-shrink:0}
+  .inv-title h1{font-size:1.55rem;color:#0A1D33;font-weight:800;letter-spacing:.5px}
+  .inv-title .no{font-size:.8rem;color:#8A94A6;margin-top:6px;line-height:1.7}
+  .inv-badge{display:inline-block;margin-top:8px;background:#F2F5F9;border-right:3px solid #C9A227;padding:4px 12px;border-radius:7px;font-size:.75rem;color:#0A1D33;font-weight:700}
+
+  /* ═══ البطاقات ═══ */
+  .row{display:flex;gap:16px;margin-bottom:24px}
+  .box{flex:1;background:#FAFBFD;border:1px solid #E6EBF1;border-radius:12px;padding:15px 17px}
+  .box h3{font-size:.71rem;color:#8A94A6;font-weight:700;margin-bottom:7px;letter-spacing:.5px}
+  .box .v{font-size:1rem;font-weight:700;color:#0A1D33}
+  .box .s{font-size:.78rem;color:#5A6B7E;margin-top:3px}
+
+  /* ═══ الجدول ═══ */
+  table{width:100%;border-collapse:separate;border-spacing:0;margin-bottom:20px;border:1px solid #E6EBF1;border-radius:10px;overflow:hidden}
+  thead{background:#0A1D33;color:#fff}
+  th{padding:12px 15px;text-align:right;font-size:.82rem;font-weight:600;letter-spacing:.2px}
+  td{padding:14px 15px;font-size:.9rem;color:#26333F}
+
+  /* ═══ الإجمالي ═══ */
+  .total{background:#0A1D33;border-radius:12px;padding:18px 24px;display:flex;justify-content:space-between;align-items:center;color:#fff;position:relative;overflow:hidden}
+  .total::before{content:'';position:absolute;top:0;right:0;width:4px;height:100%;background:#C9A227}
+  .total .lbl{font-size:.92rem;font-weight:600;opacity:.9}
+  .total .amt{font-size:1.5rem;font-weight:800;letter-spacing:.3px}
+  .rem{margin-top:12px;padding:12px 18px;background:#FFF8EA;border:1px solid #EAD9A0;border-radius:10px;color:#8A6D0F;font-size:.86rem;font-weight:600}
+
+  /* ═══ التذييل ═══ */
+  .foot{margin-top:36px;padding-top:16px;border-top:1px solid #E6EBF1;text-align:center;color:#9AA7B8;font-size:.72rem;line-height:2}
+  .foot-brand{font-weight:700;color:#5A6B7E}
+  .foot-dot{width:5px;height:5px;border-radius:50%;background:#C9A227;display:inline-block;margin-left:6px;vertical-align:middle}
+
   @media print{body{padding:16px}@page{margin:12mm}}
 </style></head><body>
   <div class="head">
     <div class="brand">
-      <div class="logo">R</div>
+      ${logoBlock}
       <div>
         <div class="school">${d.school.name}</div>
+        ${d.school.branch ? `<div class="branch">${d.school.branch}</div>` : ''}
         <div class="meta">
           ${d.school.address ? d.school.address + '<br>' : ''}
           ${d.school.phone ? 'هاتف: ' + d.school.phone : ''}
@@ -72,6 +104,7 @@ export function generateInvoice(d: InvoiceData) {
     <div class="inv-title">
       <h1>فاتورة</h1>
       <div class="no">رقم: ${d.invoiceNo}<br>${date}</div>
+      <div class="inv-badge">مدفوعة</div>
     </div>
   </div>
 
@@ -106,15 +139,33 @@ export function generateInvoice(d: InvoiceData) {
   ${d.remaining && d.remaining > 0 ? `<div class="rem">المتبقّي من الرسوم: ${fmt(d.remaining)} ${cur}</div>` : ''}
 
   <div class="foot">
-    هذه فاتورة صادرة إلكترونياً من نظام RusoomPay ولا تحتاج توقيعاً<br>
+    <span class="foot-dot"></span>هذه فاتورة صادرة إلكترونياً من نظام <span class="foot-brand">RusoomPay</span> ولا تحتاج توقيعاً<br>
     شكراً لثقتكم · ${d.school.name}
   </div>
-
-  <script>window.onload = () => { window.print(); }</script>
 </body></html>`
 
   const w = window.open('', '_blank')
   if (!w) { alert('يرجى السماح بالنوافذ المنبثقة لطباعة الفاتورة'); return }
   w.document.write(html)
   w.document.close()
+
+  // انتظر تحميل الخط والشعار قبل الطباعة — بدون ذلك يطبع بخط بديل أو بشعار فارغ
+  const doPrint = () => { try { w.focus(); w.print() } catch { /* نافذة أُغلقت */ } }
+
+  const waitForImages = (): Promise<void> => {
+    const imgs = Array.from(w.document.images)
+    if (imgs.length === 0) return Promise.resolve()
+    return Promise.all(
+      imgs.map((img) => img.complete
+        ? Promise.resolve()
+        : new Promise<void>((res) => { img.onload = () => res(); img.onerror = () => res() })
+      )
+    ).then(() => undefined)
+  }
+
+  const fonts = (w.document as Document & { fonts?: FontFaceSet }).fonts
+  const fontsReady = fonts && fonts.ready ? fonts.ready.then(() => undefined) : Promise.resolve()
+
+  Promise.all([fontsReady, waitForImages()]).then(() => setTimeout(doPrint, 150))
+  setTimeout(doPrint, 3000)
 }
