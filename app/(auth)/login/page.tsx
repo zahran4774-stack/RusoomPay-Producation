@@ -1,6 +1,5 @@
 'use client'
 // صفحة تسجيل الدخول — مصادقة حقيقية عبر Supabase (لا تحقق في المتصفح)
-// المنطق (المصادقة، MFA، التوجيه، الاستعادة) محفوظ كما هو؛ التحسين بصري فقط.
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
@@ -16,12 +15,10 @@ export default function LoginPage() {
   const [remember, setRemember] = useState(true)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  // حالة تحدّي المصادقة الثنائية
   const [mfaStep, setMfaStep] = useState(false)
   const [mfaCode, setMfaCode] = useState('')
   const [mfaFactorId, setMfaFactorId] = useState('')
 
-  // يتحقّق هل الحساب يحتاج تخطّي تحدّي MFA (aal1 → aal2)
   async function needsMfa(): Promise<string | null> {
     const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
     if (data && data.nextLevel === 'aal2' && data.nextLevel !== data.currentLevel) {
@@ -32,8 +29,7 @@ export default function LoginPage() {
     return null
   }
 
-  // ينقل الجلسة من الكوكي المؤقت (sb-pending-auth-token) إلى كوكيها النهائي الصحيح
-  // حسب الوجهة، ثم يمسح الكوكي المؤقت محليًا ويوجّه المستخدم
+  // ينقل الجلسة من الكوكي المؤقت إلى كوكيها النهائي حسب الوجهة
   async function settleSessionAndGo(destination: string) {
     try {
       const targetCookieName = destination.startsWith('/parent') ? 'sb-parent-auth-token' : undefined
@@ -51,53 +47,60 @@ export default function LoginPage() {
         })
         if (setErr) throw setErr
       }
-      // نمسح الكوكي المؤقت محليًا فقط — بدون إبطال الجلسة على الخادم
       await supabase.auth.signOut({ scope: 'local' })
       router.push(destination)
     } catch (err) {
       console.error('settleSessionAndGo failed:', err)
-      setError('حدث خطأ أثناء إكمال تسجيل الدخول، حاول مرة أخرى')
+      setError('خطأ في نقل الجلسة: ' + (err instanceof Error ? err.message : String(err)))
       setLoading(false)
     }
   }
 
-  // إكمال الدخول بعد اجتياز أي تحدّي مطلوب
   async function finishLogin() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setError('انتهت الجلسة، أعد المحاولة'); setLoading(false); setMfaStep(false); return }
-    // قراءة الدور عبر my_role() — موثوقة (لا تتأثّر بRLS)، تمنع تكرار إنشاء المدرسة
-    const { data: myRole } = await supabase.rpc('my_role')
-    // ربط دعوة طاقم إن وجدت (بلا دور بعد)
-    if (!myRole) {
-      const { data: accepted } = await supabase.rpc('accept_staff_invite')
-      if (accepted && (accepted as { ok?: boolean }).ok) { await settleSessionAndGo('/dashboard'); return }
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { setError('انتهت الجلسة، أعد المحاولة'); setLoading(false); setMfaStep(false); return }
+      const { data: myRole } = await supabase.rpc('my_role')
+      if (!myRole) {
+        const { data: accepted } = await supabase.rpc('accept_staff_invite')
+        if (accepted && (accepted as { ok?: boolean }).ok) { await settleSessionAndGo('/dashboard'); return }
+      }
+      if (!myRole && user.user_metadata?.school_name) {
+        const m = user.user_metadata
+        const { error: rpcErr } = await supabase.rpc('register_school', {
+          p_name: m.school_name, p_branch: m.branch || '', p_country: m.country || 'OM',
+          p_currency: m.currency || 'OMR', p_cr: m.cr || '', p_license: m.license || '',
+          p_vat: m.vat || '', p_phone: m.phone || '', p_email: email, p_address: m.address || '',
+          p_owner_name: m.owner_name || 'مدير المدرسة', p_bank_iban: m.bank_iban || null,
+        })
+        if (rpcErr) { setError('تعذّر إكمال تسجيل المدرسة: ' + rpcErr.message); setLoading(false); return }
+        await settleSessionAndGo('/subscription'); return
+      }
+      if (myRole === 'platform_admin') await settleSessionAndGo('/platform')
+      else if (myRole === 'parent') await settleSessionAndGo('/parent')
+      else await settleSessionAndGo('/dashboard')
+    } catch (err) {
+      console.error('finishLogin failed:', err)
+      setError('خطأ في إكمال الدخول: ' + (err instanceof Error ? err.message : String(err)))
+      setLoading(false)
     }
-    if (!myRole && user.user_metadata?.school_name) {
-      const m = user.user_metadata
-      const { error: rpcErr } = await supabase.rpc('register_school', {
-        p_name: m.school_name, p_branch: m.branch || '', p_country: m.country || 'OM',
-        p_currency: m.currency || 'OMR', p_cr: m.cr || '', p_license: m.license || '',
-        p_vat: m.vat || '', p_phone: m.phone || '', p_email: email, p_address: m.address || '',
-        p_owner_name: m.owner_name || 'مدير المدرسة', p_bank_iban: m.bank_iban || null,
-      })
-      if (rpcErr) { setError('تعذّر إكمال تسجيل المدرسة: ' + rpcErr.message); setLoading(false); return }
-      await settleSessionAndGo('/subscription'); return
-    }
-    if (myRole === 'platform_admin') await settleSessionAndGo('/platform')
-    else if (myRole === 'parent') await settleSessionAndGo('/parent')
-    else await settleSessionAndGo('/dashboard')
   }
 
-  // التحقّق من رمز المصادقة الثنائية
   async function verifyMfa(e: React.FormEvent) {
     e.preventDefault()
     if (mfaCode.length !== 6) { setError('أدخل الرمز المكوّن من 6 أرقام'); return }
     setLoading(true); setError('')
-    const { data: ch, error: chErr } = await supabase.auth.mfa.challenge({ factorId: mfaFactorId })
-    if (chErr) { setError('خطأ في التحقّق'); setLoading(false); return }
-    const { error: vErr } = await supabase.auth.mfa.verify({ factorId: mfaFactorId, challengeId: ch.id, code: mfaCode })
-    if (vErr) { setError('الرمز غير صحيح، حاول مجدداً'); setLoading(false); return }
-    await finishLogin()
+    try {
+      const { data: ch, error: chErr } = await supabase.auth.mfa.challenge({ factorId: mfaFactorId })
+      if (chErr) { setError('خطأ في التحقّق'); setLoading(false); return }
+      const { error: vErr } = await supabase.auth.mfa.verify({ factorId: mfaFactorId, challengeId: ch.id, code: mfaCode })
+      if (vErr) { setError('الرمز غير صحيح، حاول مجدداً'); setLoading(false); return }
+      await finishLogin()
+    } catch (err) {
+      console.error('verifyMfa failed:', err)
+      setError('خطأ في التحقّق: ' + (err instanceof Error ? err.message : String(err)))
+      setLoading(false)
+    }
   }
 
   async function handleLogin(e: React.FormEvent) {
@@ -105,32 +108,33 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
 
-    // المصادقة تتم على خادم Supabase — يصدر JWT آمن
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
 
-    if (error) {
-      // رسالة عامة لا تكشف إن كان البريد مسجلاً (وقاية من حصر الحسابات)
-      setError('البريد الإلكتروني أو كلمة المرور غير صحيحة، أو لم يُؤكَّد البريد بعد')
+      if (error) {
+        setError('البريد الإلكتروني أو كلمة المرور غير صحيحة، أو لم يُؤكَّد البريد بعد')
+        setLoading(false)
+        return
+      }
+
+      const factorId = await needsMfa()
+      if (factorId) {
+        setMfaFactorId(factorId)
+        setMfaStep(true)
+        setLoading(false)
+        return
+      }
+
+      await finishLogin()
+    } catch (err) {
+      console.error('handleLogin failed:', err)
+      setError('خطأ غير متوقع: ' + (err instanceof Error ? err.message : String(err)))
       setLoading(false)
-      return
     }
-
-    // إن كان الحساب مفعّلاً عليه المصادقة الثنائية → اطلب الرمز قبل المتابعة
-    const factorId = await needsMfa()
-    if (factorId) {
-      setMfaFactorId(factorId)
-      setMfaStep(true)
-      setLoading(false)
-      return
-    }
-
-    // لا مصادقة ثنائية → أكمل الدخول مباشرة
-    await finishLogin()
   }
 
   async function handleForgotPassword() {
     if (!email) { setError('أدخل بريدك الإلكتروني أولاً'); return }
-    // استعادة كلمة المرور الحقيقية — Supabase يرسل بريداً فعلياً
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/reset-password`,
     })
@@ -140,11 +144,9 @@ export default function LoginPage() {
 
   return (
     <div className="lp-root" dir="rtl">
-      {/* طبقة الصورة — غير مقلوبة، مُزاحة لليسار ليبقى اليمين نظيفاً */}
       <div className="lp-bg" aria-hidden="true" />
       <div className="lp-wash" aria-hidden="true" />
 
-      {/* ═══ مبدّل اللغة (بصري فقط في هذه المرحلة) ═══ */}
       <div className="lp-lang" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="16" height="16">
           <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" fill="none" />
@@ -157,7 +159,6 @@ export default function LoginPage() {
         </svg>
       </div>
 
-      {/* ═══ بطاقة الدخول — العمود الأول في RTL = اليمين ═══ */}
       <main className="lp-pane">
         <div className="lp-card">
           <div className="lp-brand">
@@ -240,7 +241,6 @@ export default function LoginPage() {
         </div>
       </main>
 
-      {/* ═══ البطل: النص + بطاقات المزايا — العمود الثاني في RTL = اليسار ═══ */}
       <section className="lp-hero">
         <div className="lp-hero-copy">
           <div className="lp-hero-mark"><Logo height={44} /></div>
@@ -295,7 +295,6 @@ export default function LoginPage() {
         </div>
       </section>
 
-      {/* ═══ شريط الإحصائيات السفلي ═══ */}
       <footer className="lp-stats" aria-label="مؤشّرات الثقة">
         <div className="lp-stat">
           <span className="lp-stat-ic blue">
