@@ -1,5 +1,8 @@
 // أداة طباعة التقارير — تفتح نافذة نظيفة بترويسة المدرسة
 // تُستخدم في كل الصفحات لطباعة الجداول كتقارير رسمية
+// تجلب بيانات المدرسة (الشعار، الفرع، الرقم الضريبي) تلقائياً — لا حاجة لتمريرها
+
+import { createClient } from './supabase-client'
 
 export type SchoolHeader = {
   name: string
@@ -10,7 +13,29 @@ export type SchoolHeader = {
 
 export type Column = { key: string; label: string }
 
-export function printReport(opts: {
+// ذاكرة مؤقتة — نتجنّب استعلام متكرر في نفس الجلسة
+let brandCache: { logoUrl: string | null; branch: string | null; vat: string | null } | null = null
+
+async function fetchBrand() {
+  if (brandCache) return brandCache
+  try {
+    const supabase = createClient()
+    const { data } = await supabase
+      .from('schools')
+      .select('logo_url, branch, vat_number')
+      .single()
+    brandCache = {
+      logoUrl: data?.logo_url ?? null,
+      branch: data?.branch ?? null,
+      vat: data?.vat_number ?? null,
+    }
+  } catch {
+    brandCache = { logoUrl: null, branch: null, vat: null }
+  }
+  return brandCache
+}
+
+export async function printReport(opts: {
   school: SchoolHeader
   title: string
   subtitle?: string
@@ -18,13 +43,24 @@ export function printReport(opts: {
   rows: Record<string, string | number>[]
 }) {
   const { school, title, subtitle, columns, rows } = opts
+
+  // نافذة تُفتح فوراً (قبل أي await) — وإلا يحجبها المتصفّح كنافذة منبثقة
+  const win = window.open('', '_blank', 'width=900,height=650')
+  if (!win) { alert('فعّل النوافذ المنبثقة للطباعة'); return }
+  win.document.write('<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"></head><body></body></html>')
+
+  // بيانات الهوية: المُمرَّرة لها الأولوية، وإلا نجلبها من قاعدة البيانات
+  const brand = await fetchBrand()
+  const logoUrl = school.logoUrl ?? brand.logoUrl
+  const branch = school.branch ?? brand.branch
+  const vat = school.vat ?? brand.vat
+
   const now = new Date()
   const dateStr = now.toLocaleDateString('en-GB') + ' — ' + now.toLocaleTimeString('ar', { hour: '2-digit', minute: '2-digit' })
   const initial = (school.name || 'م').trim().charAt(0)
 
-  // الشعار الفعلي إن وُجد، وإلا الحرف الأول كبديل
-  const logoBlock = school.logoUrl
-    ? `<img class="rep-logo-img" src="${school.logoUrl}" alt="" />`
+  const logoBlock = logoUrl
+    ? `<img class="rep-logo-img" src="${logoUrl}" alt="" />`
     : `<div class="rep-logo">${initial}</div>`
 
   const thead = columns.map((c) => `<th>${c.label}</th>`).join('')
@@ -80,8 +116,8 @@ tbody tr:nth-child(even) td{background:#FAFBFD}
   <div class="rep-brand">${logoBlock}
     <div>
       <div class="rep-school">${school.name}</div>
-      ${school.branch ? `<div class="rep-branch">${school.branch}</div>` : ''}
-      ${school.vat ? `<div class="rep-vat">الرقم الضريبي: ${school.vat}</div>` : ''}
+      ${branch ? `<div class="rep-branch">${branch}</div>` : ''}
+      ${vat ? `<div class="rep-vat">الرقم الضريبي: ${vat}</div>` : ''}
     </div>
   </div>
   <div class="rep-meta"><div class="rep-title">${title}</div><div class="rep-date">${dateStr}</div></div>
@@ -97,8 +133,7 @@ tbody tr:nth-child(even) td{background:#FAFBFD}
 </div>
 </body></html>`
 
-  const win = window.open('', '_blank', 'width=900,height=650')
-  if (!win) { alert('فعّل النوافذ المنبثقة للطباعة'); return }
+  win.document.open()
   win.document.write(html)
   win.document.close()
 
@@ -120,6 +155,5 @@ tbody tr:nth-child(even) td{background:#FAFBFD}
   const fontsReady = fonts && fonts.ready ? fonts.ready.then(() => undefined) : Promise.resolve()
 
   Promise.all([fontsReady, waitForImages()]).then(() => setTimeout(doPrint, 150))
-  // احتياط: اطبع بعد 3 ثوانٍ على أي حال
   setTimeout(doPrint, 3000)
 }
