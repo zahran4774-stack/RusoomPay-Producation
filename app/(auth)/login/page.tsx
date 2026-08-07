@@ -93,6 +93,25 @@ export default function LoginPage() {
       setLoading(false)
       return
     }
+async function settleSessionAndGo(destination: string) {
+  const targetCookieName = destination.startsWith('/parent') ? 'sb-parent-auth-token' : undefined
+  const { data: { session } } = await supabase.auth.getSession()
+
+  if (session) {
+    const targetClient = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { cookieOptions: targetCookieName ? { name: targetCookieName } : undefined }
+    )
+    await targetClient.auth.setSession({
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+    })
+  }
+  // نمسح الكوكي المؤقت محليًا فقط — بدون إبطال الجلسة على الخادم
+  await supabase.auth.signOut({ scope: 'local' })
+  router.push(destination)
+}
 
     // لا مصادقة ثنائية → أكمل الدخول مباشرة
     await finishLogin()
