@@ -2,6 +2,19 @@
 // يعمل على الخادم قبل كل طلب — لا يمكن تجاوزه من المتصفح
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { getAuthCookieName } from '@/lib/supabase/cookie-config'
+
+// داخل middleware(), قبل استدعاء createServerClient:
+const cookieName = getAuthCookieName(request.nextUrl.pathname)
+
+const supabase = createServerClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  {
+    cookieOptions: cookieName ? { name: cookieName } : undefined,
+    cookies: { /* نفس الموجود بدون أي تغيير */ },
+  }
+)
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request })
