@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
+import { createBrowserClient } from '@supabase/ssr'
 import Logo from '@/app/Logo'
 
 export default function LoginPage() {
@@ -31,16 +32,38 @@ export default function LoginPage() {
     return null
   }
 
+  // ينقل الجلسة من الكوكي المؤقت (sb-pending-auth-token) إلى كوكيها النهائي الصحيح
+  // حسب الوجهة، ثم يمسح الكوكي المؤقت محليًا ويوجّه المستخدم
+  async function settleSessionAndGo(destination: string) {
+    const targetCookieName = destination.startsWith('/parent') ? 'sb-parent-auth-token' : undefined
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (session) {
+      const targetClient = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        { cookieOptions: targetCookieName ? { name: targetCookieName } : undefined }
+      )
+      await targetClient.auth.setSession({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+      })
+    }
+    // نمسح الكوكي المؤقت محليًا فقط — بدون إبطال الجلسة على الخادم
+    await supabase.auth.signOut({ scope: 'local' })
+    router.push(destination)
+  }
+
   // إكمال الدخول بعد اجتياز أي تحدّي مطلوب
   async function finishLogin() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setError('انتهت الجلسة، أعد المحاولة'); setLoading(false); setMfaStep(false); return }
-    // قراءة الدور عبر my_role() — موثوقة (لا تتأثّر بـRLS)، تمنع تكرار إنشاء المدرسة
+    // قراءة الدور عبر my_role() — موثوقة (لا تتأثّر بRLS)، تمنع تكرار إنشاء المدرسة
     const { data: myRole } = await supabase.rpc('my_role')
     // ربط دعوة طاقم إن وجدت (بلا دور بعد)
     if (!myRole) {
       const { data: accepted } = await supabase.rpc('accept_staff_invite')
-      if (accepted && (accepted as { ok?: boolean }).ok) { router.push('/dashboard'); return }
+      if (accepted && (accepted as { ok?: boolean }).ok) { await settleSessionAndGo('/dashboard'); return }
     }
     if (!myRole && user.user_metadata?.school_name) {
       const m = user.user_metadata
@@ -51,11 +74,11 @@ export default function LoginPage() {
         p_owner_name: m.owner_name || 'مدير المدرسة', p_bank_iban: m.bank_iban || null,
       })
       if (rpcErr) { setError('تعذّر إكمال تسجيل المدرسة: ' + rpcErr.message); setLoading(false); return }
-      router.push('/subscription'); return
+      await settleSessionAndGo('/subscription'); return
     }
-    if (myRole === 'platform_admin') router.push('/platform')
-    else if (myRole === 'parent') router.push('/parent')
-    else router.push('/dashboard')
+    if (myRole === 'platform_admin') await settleSessionAndGo('/platform')
+    else if (myRole === 'parent') await settleSessionAndGo('/parent')
+    else await settleSessionAndGo('/dashboard')
   }
 
   // التحقّق من رمز المصادقة الثنائية
@@ -93,25 +116,6 @@ export default function LoginPage() {
       setLoading(false)
       return
     }
-async function settleSessionAndGo(destination: string) {
-  const targetCookieName = destination.startsWith('/parent') ? 'sb-parent-auth-token' : undefined
-  const { data: { session } } = await supabase.auth.getSession()
-
-  if (session) {
-    const targetClient = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { cookieOptions: targetCookieName ? { name: targetCookieName } : undefined }
-    )
-    await targetClient.auth.setSession({
-      access_token: session.access_token,
-      refresh_token: session.refresh_token,
-    })
-  }
-  // نمسح الكوكي المؤقت محليًا فقط — بدون إبطال الجلسة على الخادم
-  await supabase.auth.signOut({ scope: 'local' })
-  router.push(destination)
-}
 
     // لا مصادقة ثنائية → أكمل الدخول مباشرة
     await finishLogin()
