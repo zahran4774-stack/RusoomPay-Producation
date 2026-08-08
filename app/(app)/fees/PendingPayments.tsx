@@ -4,6 +4,7 @@
 // (من رقم المدرسة الرسمي عبر Twilio). لا تُرسل عند الرفض.
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase-client'
+import { toE164 } from '@/lib/phone'
 
 type Pending = {
   id: string; guardian: string; student: string
@@ -16,15 +17,6 @@ const METHOD_LABEL: Record<string, string> = {
 }
 const fmt = (n: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 
-// تطبيع الرقم العُماني: يزيل الرموز، ويضمن رمز الدولة 968
-function normalizePhone(raw: string): string {
-  let p = (raw || '').replace(/[\s\-()]/g, '')
-  if (p.startsWith('+')) p = p.slice(1)
-  if (p.startsWith('00')) p = p.slice(2)
-  if (!p.startsWith('968') && p.length === 8) p = '968' + p
-  return p
-}
-
 export default function PendingPayments({ initial }: { initial: Pending[] }) {
   const supabase = createClient()
   const [items, setItems] = useState<Pending[]>(initial)
@@ -35,7 +27,7 @@ export default function PendingPayments({ initial }: { initial: Pending[] }) {
   async function sendThankYou(p: Pending) {
     if (!p.guardian_phone) return
     try {
-      const to = `+${normalizePhone(p.guardian_phone)}`
+      const to = toE164(p.guardian_phone)
       const school = p.school_name || 'المدرسة'
       const methodLabel = METHOD_LABEL[p.method] || p.method
       const body =
