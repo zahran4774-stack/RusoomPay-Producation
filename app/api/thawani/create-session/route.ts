@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ ok: false, error: 'غير مسجّل الدخول' }, { status: 401 })
 
   const { data: profile } = await supabase
-    .from('profiles').select('role, full_name, phone, email').eq('id', user.id).single()
+    .from('profiles').select('role, full_name, phone').eq('id', user.id).single()
   if (profile?.role !== 'parent') {
     return NextResponse.json({ ok: false, error: 'هذه الخدمة لأولياء الأمور فقط' }, { status: 403 })
   }
