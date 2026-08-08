@@ -82,8 +82,8 @@ export async function POST(req: NextRequest) {
       clientReferenceId: pending.id,
       amountOMR: amount,
       description: `رسوم دراسية - ${studentName}`,
-      successUrl: `${origin}/parent/payment-result?status=success&fee=${feeId}`,
-      cancelUrl: `${origin}/parent/payment-result?status=cancel&fee=${feeId}`,
+      successUrl: `${origin}/payment-result?status=success&pending=${pending.id}`,
+      cancelUrl: `${origin}/payment-result?status=cancel&pending=${pending.id}`,
       customerName: profile.full_name ?? 'ولي الأمر',
       customerPhone: profile.phone ?? '',
     })
