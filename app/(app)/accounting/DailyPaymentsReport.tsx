@@ -2,7 +2,7 @@
 // app/(app)/accounting/DailyPaymentsReport.tsx
 // تقرير المدفوعات — يوم واحد (افتراضي: اليوم) أو فترة مخصّصة (من-إلى).
 // يعتمد على RPC daily_payments_report (معزول بالمدرسة + للطاقم المالي فقط).
-// يجلب عملة المدرسة تلقائياً (يدعم جميع عملات الخليج).
+// يجلب هوية المدرسة (الاسم/الفرع/الشعار/العملة) تلقائياً.
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase-client'
 
@@ -53,18 +53,33 @@ export default function DailyPaymentsReport() {
   const [report, setReport] = useState<Report | null>(null)
   const [loading, setLoading] = useState(false)
   const [currency, setCurrency] = useState<string>('OMR')
+  // هوية المدرسة للترويسة المطبوعة
+  const [brand, setBrand] = useState<{ name: string; branch: string | null; logoUrl: string | null; vat: string | null }>({
+    name: '', branch: null, logoUrl: null, vat: null,
+  })
 
   const sym = CUR_SYM[currency] ?? currency
   const dec = CUR_DEC[currency] ?? 2
   const fmt = (n: number) =>
     new Intl.NumberFormat('en', { minimumFractionDigits: dec, maximumFractionDigits: dec }).format(n || 0)
 
-  // جلب عملة المدرسة تلقائياً — معزول بـ RLS
+  // جلب هوية المدرسة وعملتها تلقائياً — معزول بـ RLS
   useEffect(() => {
     let active = true
     ;(async () => {
-      const { data } = await supabase.from('schools').select('currency').limit(1).single()
-      if (active && data?.currency) setCurrency(data.currency)
+      const { data } = await supabase
+        .from('schools')
+        .select('name, branch, logo_url, vat_number, currency')
+        .limit(1)
+        .single()
+      if (!active || !data) return
+      if (data.currency) setCurrency(data.currency)
+      setBrand({
+        name: data.name ?? '',
+        branch: data.branch || null,
+        logoUrl: data.logo_url || null,
+        vat: data.vat_number || null,
+      })
     })()
     return () => { active = false }
   }, [supabase])
@@ -115,6 +130,8 @@ export default function DailyPaymentsReport() {
     ? `${dateOf(report.from ?? '')} — ${dateOf(report.to ?? '')}`
     : dateOf(report?.from ?? date)
 
+  const initial = (brand.name || 'م').trim().charAt(0)
+
   return (
     <section style={{ background: '#fff', border: '1px solid #E7EBF0', borderRadius: 16, padding: 22, marginTop: 18 }} dir="rtl">
       <style>{`
@@ -123,7 +140,9 @@ export default function DailyPaymentsReport() {
           .dpr-sheet, .dpr-sheet * { visibility: visible; }
           .dpr-sheet { position: absolute; inset: 0; padding: 20px; }
           .dpr-no-print { display: none !important; }
+          .dpr-print-only { display: flex !important; }
         }
+        .dpr-print-only { display: none; }
       `}</style>
 
       {/* الرأس */}
@@ -165,8 +184,33 @@ export default function DailyPaymentsReport() {
       )}
 
       <div className="dpr-sheet">
-        {/* عنوان الطباعة */}
-        <div style={{ marginBottom: 14 }}>
+        {/* ═══ ترويسة الطباعة — تظهر عند الطباعة فقط ═══ */}
+        <div className="dpr-print-only" style={{
+          justifyContent: 'space-between', alignItems: 'flex-start', gap: 20,
+          paddingBottom: 14, borderBottom: '2px solid #0A1D33', marginBottom: 16,
+        }}>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            {brand.logoUrl ? (
+              <img src={brand.logoUrl} alt="" style={{ width: 48, height: 48, borderRadius: 12, objectFit: 'contain', border: '1px solid #E6EBF1', background: '#fff' }} />
+            ) : (
+              <div style={{ width: 48, height: 48, borderRadius: 12, background: '#0A1D33', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 20, fontWeight: 800 }}>{initial}</div>
+            )}
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: '#0A1D33', lineHeight: 1.3 }}>{brand.name}</div>
+              {brand.branch && <div style={{ fontSize: 12, color: '#5A6B7E', fontWeight: 500 }}>{brand.branch}</div>}
+              {brand.vat && <div style={{ fontSize: 11, color: '#8A94A6', marginTop: 2 }}>الرقم الضريبي: {brand.vat}</div>}
+            </div>
+          </div>
+          <div style={{ textAlign: 'left' }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: '#0A1D33', background: '#F2F5F9', borderRight: '3px solid #C9A227', padding: '5px 13px', borderRadius: 8, display: 'inline-block' }}>
+              تقرير المدفوعات
+            </div>
+            <div style={{ fontSize: 11.5, color: '#8A94A6', marginTop: 6 }}>{rangeLabel}</div>
+          </div>
+        </div>
+
+        {/* عنوان الشاشة (يختفي عند الطباعة لأن الترويسة تغني عنه) */}
+        <div className="dpr-no-print" style={{ marginBottom: 14 }}>
           <div style={{ fontWeight: 800, color: '#0F2744', fontSize: 16 }}>
             تقرير المدفوعات — {rangeLabel}
           </div>
@@ -245,8 +289,9 @@ export default function DailyPaymentsReport() {
         )}
 
         {report?.ok && items.length > 0 && (
-          <div style={{ marginTop: 14, fontSize: 12, color: '#8A94A6', textAlign: 'center' }}>
-            تقرير المدفوعات — RusoomPay · {rangeLabel}
+          <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid #E6EBF1', fontSize: 11.5, color: '#9AA7B8', display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+            <span><span style={{ width: 5, height: 5, borderRadius: '50%', background: '#C9A227', display: 'inline-block', marginLeft: 6, verticalAlign: 'middle' }}></span><span style={{ fontWeight: 600, color: '#5A6B7E' }}>RusoomPay</span> — النظام المحاسبي للمدارس</span>
+            <span>{rangeLabel}</span>
           </div>
         )}
       </div>
