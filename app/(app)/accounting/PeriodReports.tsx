@@ -2,7 +2,7 @@
 // app/(app)/accounting/PeriodReports.tsx
 // التقارير المالية الفترّية — المحاسب يختار المدى، ويولّد: ميزان المراجعة،
 // قائمة الدخل، الميزانية، دفتر اليومية. التصدير عبر HTML بخط Cairo (عربية سليمة).
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase-client'
 
 type School = { name: string; vat_number: string | null; currency: string }
@@ -28,9 +28,21 @@ export default function PeriodReports({ school }: { school: School }) {
   const [rows, setRows] = useState<Record<string, unknown>[] | null>(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  // هوية المدرسة للترويسة المطبوعة (الشعار والفرع)
+  const [brand, setBrand] = useState<{ logoUrl: string | null; branch: string | null }>({ logoUrl: null, branch: null })
 
   const sym = school.currency === 'OMR' ? 'ر.ع' : school.currency
   const fmt = (n: number) => new Intl.NumberFormat('en', { minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(n || 0)
+
+  // جلب الشعار والفرع تلقائياً — معزول بـ RLS
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      const { data } = await supabase.from('schools').select('logo_url, branch').limit(1).single()
+      if (active && data) setBrand({ logoUrl: data.logo_url || null, branch: data.branch || null })
+    })()
+    return () => { active = false }
+  }, [supabase])
 
   async function generate() {
     setBusy(true); setErr(''); setRows(null)
@@ -56,6 +68,11 @@ export default function PeriodReports({ school }: { school: School }) {
     const kindLabel = KINDS.find((k) => k.key === kind)!.label
     const period = kind === 'balance' ? `كما في ${to}` : `من ${from} إلى ${to}`
     const initial = (school.name || 'م').trim().charAt(0)
+
+    // الشعار الفعلي إن وُجد، وإلا الحرف الأول كبديل
+    const logoBlock = brand.logoUrl
+      ? `<img class="lg-img" src="${brand.logoUrl}" alt="" />`
+      : `<div class="lg">${initial}</div>`
 
     let thead = ''
     let tbody = ''
@@ -94,44 +111,90 @@ export default function PeriodReports({ school }: { school: School }) {
     }
 
     const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${kindLabel}</title>
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=block" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box;font-family:'Cairo',Tahoma,sans-serif}
-body{padding:28px;color:#1a2530}
-.h{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0F2744;padding-bottom:16px}
-.b{display:flex;gap:12px;align-items:center}
-.lg{width:46px;height:46px;border-radius:11px;background:#0F2744;color:#fff;display:grid;place-items:center;font-size:1.4rem;font-weight:800}
-.sn{font-size:1.25rem;font-weight:800;color:#0F2744}
-.vt{font-size:.8rem;color:#667;margin-top:2px}
-.m{text-align:left}
-.tl{font-size:1.1rem;font-weight:700;color:#1E5C4E}
-.pd{font-size:.82rem;color:#667;margin-top:3px}
-.ct{font-size:.8rem;color:#8A94A6;margin:12px 0}
-table{width:100%;border-collapse:collapse;font-size:.85rem}
-th{background:#0F2744;color:#fff;padding:9px 11px;text-align:right;font-weight:600}
-td{padding:8px 11px;border-bottom:1px solid #E6EBF1;text-align:right}
+body{padding:32px 30px;color:#1a2530;background:#fff}
+
+/* ═══ الترويسة ═══ */
+.h{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;padding-bottom:18px;border-bottom:2px solid #0A1D33;position:relative}
+.h::after{content:'';position:absolute;bottom:-2px;right:0;width:96px;height:2px;background:#C9A227}
+.b{display:flex;gap:13px;align-items:center}
+.lg{width:52px;height:52px;border-radius:13px;background:#0A1D33;color:#fff;display:grid;place-items:center;font-size:1.5rem;font-weight:800;flex-shrink:0}
+.lg-img{width:52px;height:52px;border-radius:13px;object-fit:contain;background:#fff;border:1px solid #E6EBF1;flex-shrink:0}
+.sn{font-size:1.3rem;font-weight:800;color:#0A1D33;line-height:1.3}
+.br{font-size:.82rem;color:#5A6B7E;margin-top:1px;font-weight:500}
+.vt{font-size:.75rem;color:#8A94A6;margin-top:3px;letter-spacing:.2px}
+.m{text-align:left;flex-shrink:0}
+.tl{font-size:1.05rem;font-weight:800;color:#0A1D33;padding:5px 14px;background:#F2F5F9;border-radius:8px;border-right:3px solid #C9A227;display:inline-block}
+.pd{font-size:.76rem;color:#8A94A6;margin-top:7px;letter-spacing:.2px}
+
+.ct{font-size:.76rem;color:#8A94A6;background:#F7F9FC;padding:4px 11px;border-radius:20px;display:inline-block;margin:18px 0 12px}
+
+/* ═══ الجدول ═══ */
+table{width:100%;border-collapse:separate;border-spacing:0;font-size:.85rem;border:1px solid #E6EBF1;border-radius:10px;overflow:hidden}
+th{background:#0A1D33;color:#fff;padding:11px 13px;text-align:right;font-weight:600;font-size:.83rem;letter-spacing:.2px}
+th:not(:last-child){border-left:1px solid rgba(255,255,255,.13)}
+td{padding:10px 13px;border-bottom:1px solid #EDF1F6;text-align:right;color:#26333F}
 td.n{direction:ltr;text-align:left;font-variant-numeric:tabular-nums}
-tr:nth-child(even) td{background:#F7F9FC}
-tr.tot td{font-weight:800;background:#EEF3F9;border-top:2px solid #0F2744}
-.f{margin-top:24px;padding-top:12px;border-top:1px solid #ccc;font-size:.72rem;color:#9AA7B8;text-align:center}
-@media print{body{padding:0}}
+tbody tr:nth-child(even) td{background:#FAFBFD}
+tr.tot td{font-weight:800;background:#F2F5F9;border-top:2px solid #0A1D33;border-bottom:none;color:#0A1D33}
+
+/* ═══ التذييل ═══ */
+.f{margin-top:28px;padding-top:13px;border-top:1px solid #E6EBF1;display:flex;justify-content:space-between;align-items:center;font-size:.7rem;color:#9AA7B8;gap:12px}
+.f-brand{font-weight:600;color:#5A6B7E}
+.f-dot{width:5px;height:5px;border-radius:50%;background:#C9A227;display:inline-block;margin-left:6px;vertical-align:middle}
+
+@media print{
+  body{padding:0}
+  table{page-break-inside:auto}
+  tr{page-break-inside:avoid;page-break-after:auto}
+  thead{display:table-header-group}
+}
 </style></head><body>
 <div class="h">
-  <div class="b"><div class="lg">${initial}</div>
-    <div><div class="sn">${school.name}</div>${school.vat_number ? `<div class="vt">الرقم الضريبي: ${school.vat_number}</div>` : ''}</div>
+  <div class="b">${logoBlock}
+    <div>
+      <div class="sn">${school.name}</div>
+      ${brand.branch ? `<div class="br">${brand.branch}</div>` : ''}
+      ${school.vat_number ? `<div class="vt">الرقم الضريبي: ${school.vat_number}</div>` : ''}
+    </div>
   </div>
   <div class="m"><div class="tl">${kindLabel}</div><div class="pd">${period}</div></div>
 </div>
 <div class="ct">عدد السجلات: ${rows.length}</div>
 <table><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>
-<div class="f">صادر عن نظام RusoomPay المحاسبي للمدارس · ${new Date().getFullYear()}</div>
+<div class="f">
+  <span><span class="f-dot"></span><span class="f-brand">RusoomPay</span> — النظام المحاسبي للمدارس</span>
+  <span>${new Date().getFullYear()} · ${school.name}</span>
+</div>
 </body></html>`
 
     const win = window.open('', '_blank', 'width=900,height=650')
     if (!win) { alert('فعّل النوافذ المنبثقة للطباعة'); return }
     win.document.write(html)
     win.document.close()
-    setTimeout(() => win.print(), 400)
+
+    // انتظر تحميل الخط والشعار قبل الطباعة
+    const doPrint = () => { try { win.focus(); win.print() } catch { /* نافذة أُغلقت */ } }
+
+    const waitForImages = (): Promise<void> => {
+      const imgs = Array.from(win.document.images)
+      if (imgs.length === 0) return Promise.resolve()
+      return Promise.all(
+        imgs.map((img) => img.complete
+          ? Promise.resolve()
+          : new Promise<void>((res) => { img.onload = () => res(); img.onerror = () => res() })
+        )
+      ).then(() => undefined)
+    }
+
+    const fonts = (win.document as Document & { fonts?: FontFaceSet }).fonts
+    const fontsReady = fonts && fonts.ready ? fonts.ready.then(() => undefined) : Promise.resolve()
+
+    Promise.all([fontsReady, waitForImages()]).then(() => setTimeout(doPrint, 150))
+    setTimeout(doPrint, 3000)
   }
 
   return (
