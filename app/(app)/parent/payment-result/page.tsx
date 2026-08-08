@@ -7,6 +7,7 @@
 import { createClient } from "@/lib/supabase-server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { retrieveSession } from "@/lib/thawani";
+import { toE164 } from "@/lib/phone";
 import Link from "next/link";
 
 const supabaseAdmin = createAdminClient(
@@ -34,7 +35,7 @@ async function sendWhatsAppConfirmation(appUrl: string, pendingId: string) {
 
     if (!phone || !amount) return;
 
-    const to = phone.startsWith("+") ? phone : `+${phone}`;
+    const to = toE164(phone);
     const body =
       `✅ تم تأكيد دفعة بمبلغ ${Number(amount).toFixed(3)} ر.ع` +
       (studentName ? ` عن ${studentName}` : "") +
