@@ -2,29 +2,21 @@
 // يعمل على الخادم قبل كل طلب — لا يمكن تجاوزه من المتصفح
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-import { getAuthCookieName } from '@/lib/supabase/cookie-config'
 
 export async function middleware(request: NextRequest) {
-  const cookieName = getAuthCookieName(request.nextUrl.pathname)
-
-  // نمرر نوع البوابة عبر هيدر داخلي — يقرأه lib/supabase-server.ts لاحقًا
-  const requestHeaders = new Headers(request.headers)
-  requestHeaders.set('x-portal-cookie', cookieName ?? 'default')
-
-  let response = NextResponse.next({ request: { headers: requestHeaders } })
+  let response = NextResponse.next({ request })
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      cookieOptions: cookieName ? { name: cookieName } : undefined,
       cookies: {
         getAll() {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-          response = NextResponse.next({ request: { headers: requestHeaders } })
+          response = NextResponse.next({ request })
           cookiesToSet.forEach(({ name, value, options }) =>
             response.cookies.set(name, value, options)
           )
@@ -36,7 +28,7 @@ export async function middleware(request: NextRequest) {
   // تحديث الجلسة
   const { data: { user } } = await supabase.auth.getUser()
 
-  // المسارات المحمية — تتطلب تسجيل دخول (بدون أي تغيير عن الأصل)
+  // المسارات المحمية — تتطلب تسجيل دخول
   const protectedPaths = ['/dashboard', '/students', '/employees', '/fees', '/subscription', '/accounting', '/platform', '/activity']
   const isProtected = protectedPaths.some((p) => request.nextUrl.pathname.startsWith(p))
 
