@@ -29,6 +29,7 @@ export default function PendingPayments({ initial }: { initial: Pending[] }) {
   const supabase = createClient()
   const [items, setItems] = useState<Pending[]>(initial)
   const [busy, setBusy] = useState<string | null>(null)
+  const [msg, setMsg] = useState<string>('')
 
   // إرسال رسالة الشكر — فشل الإرسال لا يُظهر خطأ للمستخدم (الاعتماد نفسه نجح ومستقل عنه)
   async function sendThankYou(p: Pending) {
@@ -55,26 +56,45 @@ export default function PendingPayments({ initial }: { initial: Pending[] }) {
   }
 
   async function act(id: string, approve: boolean) {
+    // الرفض إجراء لا يمكن التراجع عنه — نأكد قبل التنفيذ
+    if (!approve && !window.confirm('هل أنت متأكد من رفض هذه الدفعة؟ لا يمكن التراجع عن هذا الإجراء.')) {
+      return
+    }
     setBusy(id)
+    setMsg('')
     const { error } = await supabase.rpc(approve ? 'approve_payment' : 'reject_payment', { p_id: id })
     if (!error) {
       const target = items.find((p) => p.id === id)
       setItems((prev) => prev.filter((p) => p.id !== id))
+      setMsg(approve ? '✓ تم اعتماد الدفعة بنجاح' : 'تم رفض الدفعة')
       if (approve && target) sendThankYou(target)
+    } else {
+      setMsg('✗ تعذّر تنفيذ الإجراء: ' + error.message)
     }
     setBusy(null)
   }
 
-  if (items.length === 0) return null
+  if (items.length === 0 && !msg) return null
 
   return (
     <div style={{
       background: '#fff', border: '1px solid #E6EBF1', borderInlineStart: '4px solid #D4A017',
       borderRadius: 14, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,.05)', marginBottom: 20,
     }} dir="rtl">
-      <h3 style={{ fontSize: 16, color: '#0F2744', margin: '0 0 12px' }}>
-        🔔 دفعات بانتظار اعتمادك ({items.length})
-      </h3>
+      {items.length > 0 && (
+        <h3 style={{ fontSize: 16, color: '#0F2744', margin: '0 0 12px' }}>
+          🔔 دفعات بانتظار اعتمادك ({items.length})
+        </h3>
+      )}
+      {msg && (
+        <div style={{
+          padding: '10px 14px', borderRadius: 9, marginBottom: 12, fontSize: 13.5, fontWeight: 600,
+          background: msg.startsWith('✗') ? '#FDEDEC' : '#EAF7EF',
+          color: msg.startsWith('✗') ? '#C0392B' : '#1A7A45',
+        }}>
+          {msg}
+        </div>
+      )}
       {items.map((p) => (
         <div key={p.id} style={{
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
