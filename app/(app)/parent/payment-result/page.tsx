@@ -1,75 +1,138 @@
-'use client'
-// صفحة عودة ولي الأمر بعد الدفع عبر ثواني — تعرض رسالة فقط.
-// الحقيقة المالية مصدرها الـwebhook (record_payment)، لا هذه الصفحة —
-// هذه الصفحة قد تظهر "نجاح" بينما الـwebhook لم يصل بعد (تأخير شبكة)، وهذا متوقّع وآمن.
-import { useSearchParams, useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase-client'
-import { CheckCircle2, XCircle, Clock } from 'lucide-react'
+// app/parent/payment-result/page.tsx
+//
+// الصفحة اللي يرجع لها الوالد بعد ثواني (success_url و cancel_url في route.ts الحالي
+// يحوّلون لهذا المسار). نتحقق هنا من ثواني نفسها (Retrieve Session) قبل ما نعتمد أي دفعة —
+// لا نثق بمجرد وصول المستخدم لهذي الصفحة كدليل دفع.
 
-export default function PaymentResultPage() {
-  const params = useSearchParams()
-  const router = useRouter()
-  const supabase = createClient()
-  const status = params.get('status')
-  const feeId = params.get('fee')
-  const [confirmed, setConfirmed] = useState(false)
-  const [checking, setChecking] = useState(status === 'success')
+import { createClient } from "@/lib/supabase-server";
+import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { retrieveSession } from "@/lib/thawani";
+import Link from "next/link";
 
-  // نستطلع قاعدتنا لبضع ثوانٍ للتأكّد أن الـwebhook وصل وسجّل الدفعة فعلياً
-  useEffect(() => {
-    if (status !== 'success' || !feeId) { setChecking(false); return }
-    let tries = 0
-    const iv = setInterval(async () => {
-      tries += 1
-      const { data } = await supabase
-        .from('payments').select('id').eq('fee_id', feeId).eq('method', 'thawani')
-        .gte('created_at', new Date(Date.now() - 10 * 60 * 1000).toISOString()).limit(1)
-      if (data && data.length > 0) { setConfirmed(true); setChecking(false); clearInterval(iv) }
-      if (tries >= 8) { setChecking(false); clearInterval(iv) }
-    }, 2000)
-    return () => clearInterval(iv)
-  }, [status, feeId, supabase])
+const supabaseAdmin = createAdminClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
-  const isSuccess = status === 'success'
+async function resolvePayment(feeId: string, userId: string) {
+  // آخر دفعة معلّقة عبر ثواني لهذي الفاتورة ولهذا الوالد
+  const { data: pending } = await supabaseAdmin
+    .from("pending_payments")
+    .select("id, provider_ref, txn_state, status")
+    .eq("fee_id", feeId)
+    .eq("guardian_id", userId)
+    .eq("method", "thawani")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
 
-  return (
-    <div dir="rtl" style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', background: '#F4F6FA', padding: 24 }}>
-      <div style={{ background: '#fff', borderRadius: 18, padding: '40px 32px', maxWidth: 420, width: '100%', textAlign: 'center', boxShadow: '0 20px 50px -20px rgba(15,39,68,.2)' }}>
-        {isSuccess ? (
-          checking ? (
-            <>
-              <Clock size={52} color="#B8860B" style={{ marginBottom: 16 }} />
-              <h1 style={{ color: '#0F2744', fontSize: 20, marginBottom: 8 }}>جارٍ تأكيد الدفعة…</h1>
-              <p style={{ color: '#667', fontSize: 14, lineHeight: 1.8 }}>لحظات ونؤكّد استلام دفعتك.</p>
-            </>
-          ) : (
-            <>
-              <CheckCircle2 size={52} color="#1A7A45" style={{ marginBottom: 16 }} />
-              <h1 style={{ color: '#0F2744', fontSize: 20, marginBottom: 8 }}>
-                {confirmed ? 'تم الدفع بنجاح' : 'استلمنا طلب الدفع'}
-              </h1>
-              <p style={{ color: '#667', fontSize: 14, lineHeight: 1.8 }}>
-                {confirmed
-                  ? 'حُدِّث رصيد الفاتورة فوراً. شكراً لك.'
-                  : 'تأكيد ثواني وصل بنجاح — قد يستغرق تحديث الرصيد بضع لحظات إضافية.'}
-              </p>
-            </>
-          )
-        ) : (
-          <>
-            <XCircle size={52} color="#C0392B" style={{ marginBottom: 16 }} />
-            <h1 style={{ color: '#0F2744', fontSize: 20, marginBottom: 8 }}>لم تكتمل عملية الدفع</h1>
-            <p style={{ color: '#667', fontSize: 14, lineHeight: 1.8 }}>لم يُخصم أي مبلغ. يمكنك المحاولة مجدداً.</p>
-          </>
-        )}
+  if (!pending) return { ok: false, reason: "لم يتم العثور على الدفعة" };
 
-        <button onClick={() => router.push('/parent')}
-          style={{ marginTop: 24, background: '#163B68', color: '#fff', border: 0, padding: '11px 28px', borderRadius: 11, fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
-          العودة لبوابتي
-        </button>
-      </div>
-    </div>
-  )
+  // مؤكدة مسبقاً (مثلاً المستخدم رجع للصفحة مرتين)
+  if (pending.status === "approved" || pending.txn_state === "paid") {
+    return { ok: true, alreadyConfirmed: true };
+  }
+
+  if (!pending.provider_ref) {
+    return { ok: false, reason: "لا توجد جلسة دفع مرتبطة" };
+  }
+
+  // 🔒 التحقق الحقيقي من ثواني نفسها
+  let session;
+  try {
+    session = await retrieveSession(pending.provider_ref);
+  } catch {
+    return { ok: false, reason: "تعذّر التحقق من حالة الدفع" };
+  }
+
+  if (session.paymentStatus === "paid") {
+    const { error } = await supabaseAdmin.rpc("confirm_gateway_payment", {
+      p_id: pending.id,
+      p_provider_ref: pending.provider_ref,
+    });
+    if (error) return { ok: false, reason: error.message };
+    return { ok: true, alreadyConfirmed: false };
+  }
+
+  await supabaseAdmin.rpc("mark_gateway_payment_failed", {
+    p_id: pending.id,
+    p_reason: `thawani_status_${session.paymentStatus}`,
+  });
+  return { ok: false, reason: "لم تكتمل عملية الدفع" };
 }
 
+export default async function PaymentResultPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string; fee?: string }>;
+}) {
+  const { status, fee } = await searchParams;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  let result: { ok: boolean; reason?: string; alreadyConfirmed?: boolean } = {
+    ok: false,
+    reason: "بيانات ناقصة",
+  };
+
+  if (user && fee && status !== "cancel") {
+    result = await resolvePayment(fee, user.id);
+  } else if (status === "cancel") {
+    result = { ok: false, reason: "تم إلغاء عملية الدفع" };
+  }
+
+  const success = result.ok;
+
+  return (
+    <div
+      style={{
+        minHeight: "100dvh",
+        background: "#F4F6FA",
+        display: "grid",
+        placeItems: "center",
+        padding: 20,
+      }}
+      dir="rtl"
+    >
+      <div
+        style={{
+          background: "#fff",
+          borderRadius: 16,
+          padding: 32,
+          maxWidth: 420,
+          width: "100%",
+          textAlign: "center",
+          boxShadow: "0 2px 12px rgba(0,0,0,.08)",
+        }}
+      >
+        <div style={{ fontSize: 48, marginBottom: 12 }}>{success ? "✅" : "⚠️"}</div>
+        <h2 style={{ color: "#0A1D33", margin: "0 0 8px", fontFamily: "Cairo" }}>
+          {success ? "تم الدفع بنجاح" : "تعذّر إتمام الدفع"}
+        </h2>
+        <p style={{ color: "#667", fontSize: 14, lineHeight: 1.8, margin: "0 0 24px" }}>
+          {success
+            ? "تم تأكيد دفعتك وتحديث الفاتورة تلقائياً."
+            : result.reason || "حدث خطأ أثناء معالجة الدفعة."}
+        </p>
+        <Link
+          href="/parent"
+          style={{
+            display: "inline-block",
+            padding: "12px 28px",
+            background: "#D4A017",
+            color: "#08172B",
+            borderRadius: 10,
+            fontWeight: 700,
+            textDecoration: "none",
+            fontFamily: "inherit",
+          }}
+        >
+          الرجوع لبوابة ولي الأمر
+        </Link>
+      </div>
+    </div>
+  );
+}
