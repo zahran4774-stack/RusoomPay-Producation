@@ -14,7 +14,43 @@ const supabaseAdmin = createAdminClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-async function resolvePayment(feeId: string, userId: string) {
+// يرسل رسالة واتساب تأكيد الدفع عبر نفس الراوت الموجود عندك أصلاً (Twilio)
+// لا يوقف العملية لو فشل الإرسال — تأكيد الدفعة أهم من نجاح الرسالة نفسها
+async function sendWhatsAppConfirmation(appUrl: string, pendingId: string) {
+  try {
+    const { data: pending } = await supabaseAdmin
+      .from("pending_payments")
+      .select("amount, fee_id, student_fees ( description, students ( full_name, guardian_phone ) )")
+      .eq("id", pendingId)
+      .single();
+
+    // @ts-expect-error - shape depends on join
+    const phone: string | undefined = pending?.student_fees?.students?.guardian_phone;
+    // @ts-expect-error
+    const studentName: string = pending?.student_fees?.students?.full_name || "";
+    // @ts-expect-error
+    const description: string = pending?.student_fees?.description || "رسوم دراسية";
+    const amount = pending?.amount;
+
+    if (!phone || !amount) return;
+
+    const to = phone.startsWith("+") ? phone : `+${phone}`;
+    const body =
+      `✅ تم تأكيد دفعة بمبلغ ${Number(amount).toFixed(3)} ر.ع` +
+      (studentName ? ` عن ${studentName}` : "") +
+      ` (${description}) عبر ثواني. شكراً لكم.`;
+
+    await fetch(`${appUrl}/api/send-whatsapp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to, body }),
+    });
+  } catch (err) {
+    console.error("send-whatsapp confirmation failed:", err);
+  }
+}
+
+async function resolvePayment(feeId: string, userId: string, appUrl: string) {
   // آخر دفعة معلّقة عبر ثواني لهذي الفاتورة ولهذا الوالد
   const { data: pending } = await supabaseAdmin
     .from("pending_payments")
@@ -28,7 +64,7 @@ async function resolvePayment(feeId: string, userId: string) {
 
   if (!pending) return { ok: false, reason: "لم يتم العثور على الدفعة" };
 
-  // مؤكدة مسبقاً (مثلاً المستخدم رجع للصفحة مرتين)
+  // مؤكدة مسبقاً (مثلاً المستخدم رجع للصفحة مرتين) — ما نرسل واتساب مرة ثانية
   if (pending.status === "approved" || pending.txn_state === "paid") {
     return { ok: true, alreadyConfirmed: true };
   }
@@ -51,6 +87,8 @@ async function resolvePayment(feeId: string, userId: string) {
       p_provider_ref: pending.provider_ref,
     });
     if (error) return { ok: false, reason: error.message };
+
+    await sendWhatsAppConfirmation(appUrl, pending.id);
     return { ok: true, alreadyConfirmed: false };
   }
 
@@ -78,8 +116,10 @@ export default async function PaymentResultPage({
     reason: "بيانات ناقصة",
   };
 
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL!;
+
   if (user && fee && status !== "cancel") {
-    result = await resolvePayment(fee, user.id);
+    result = await resolvePayment(fee, user.id, appUrl);
   } else if (status === "cancel") {
     result = { ok: false, reason: "تم إلغاء عملية الدفع" };
   }
