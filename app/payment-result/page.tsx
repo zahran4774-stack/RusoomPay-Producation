@@ -60,7 +60,7 @@ async function resolvePayment(pendingId: string, appUrl: string) {
   // نجيب الدفعة عبر معرّفها مباشرة — بدون أي حاجة لهوية مستخدم مسجّل دخول
   const { data: pending } = await supabaseAdmin
     .from("pending_payments")
-    .select("id, provider_ref, txn_state, status, method")
+    .select("id, provider_ref, txn_state, status, method, amount")
     .eq("id", pendingId)
     .single();
 
@@ -85,7 +85,29 @@ async function resolvePayment(pendingId: string, appUrl: string) {
     return { ok: false, reason: "تعذّر التحقق من حالة الدفع" };
   }
 
+  // 🔒 حماية إضافية: الجلسة يجب أن تخصّ فعلاً هذه الدفعة بالذات (ضد التلاعب بالرابط)
+  if (session.clientReferenceId && session.clientReferenceId !== pending.id) {
+    await supabaseAdmin.rpc("mark_gateway_payment_failed", {
+      p_id: pending.id,
+      p_reason: "client_reference_id_mismatch",
+    });
+    return { ok: false, reason: "بيانات الجلسة غير متطابقة" };
+  }
+
   if (session.paymentStatus === "paid") {
+    // 🔒 حماية إضافية: المبلغ المدفوع فعلياً عند ثواني يجب أن يطابق المبلغ المسجّل عندنا
+    const expectedBaisa = Math.round(Number(pending.amount) * 1000);
+    if (
+      session.totalAmountBaisa !== null &&
+      session.totalAmountBaisa !== expectedBaisa
+    ) {
+      await supabaseAdmin.rpc("mark_gateway_payment_failed", {
+        p_id: pending.id,
+        p_reason: `amount_mismatch_expected_${expectedBaisa}_got_${session.totalAmountBaisa}`,
+      });
+      return { ok: false, reason: "المبلغ المدفوع لا يطابق المبلغ المطلوب" };
+    }
+
     const { error } = await supabaseAdmin.rpc("confirm_gateway_payment", {
       p_id: pending.id,
       p_provider_ref: pending.provider_ref,
