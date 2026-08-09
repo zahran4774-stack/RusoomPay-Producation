@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
   const linkedParents = ((fee as any).students?.parent_students ?? []) as { parent_id: string }[]
   const belongsToUser = linkedParents.some((p) => p.parent_id === user.id)
   if (!belongsToUser) {
-    return NextResponse.json({ ok: false, error: 'هذه الفاتورة لا تخصّ أحد أبنائك' }, { status: 403 })
+    return NextResponse.json({ ok: false, error: 'هذه الفاتورة لا تخص أحد أبنائك' }, { status: 403 })
   }
 
   const remaining = Number(fee.total) - Number(fee.paid)
@@ -52,6 +52,37 @@ export async function POST(req: NextRequest) {
   const schoolId = (fee as any).students?.school_id as string | undefined
   if (!schoolId) {
     return NextResponse.json({ ok: false, error: 'تعذّر تحديد المدرسة المرتبطة بالفاتورة' }, { status: 500 })
+  }
+
+  // 🔒 حماية ضد الدفعات المزدوجة: لو فيه جلسة ثواني شغّالة أصلاً لنفس الفاتورة
+  // (ما اكتملت ولا فشلت بعد)، ما ننشئ وحدة جديدة — نرجّع رسالة واضحة بدل ما
+  // تتراكم جلسات متوازية ويحتمل يدفع الوالد مرتين لنفس الفاتورة.
+  const { data: existing } = await supabase
+    .from('pending_payments')
+    .select('id, created_at')
+    .eq('fee_id', feeId)
+    .eq('guardian_id', user.id)
+    .eq('method', 'thawani')
+    .eq('status', 'pending')
+    .in('txn_state', ['pending', 'processing'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (existing) {
+    const ageMinutes = (Date.now() - new Date(existing.created_at).getTime()) / 60000
+    if (ageMinutes < 15) {
+      // محاولة حديثة لسه محتمل تكون شغّالة — نمنع التكرار
+      return NextResponse.json(
+        { ok: false, error: 'فيه محاولة دفع سابقة لنفس الفاتورة لسه قيد المعالجة. أكمل تلك المحاولة أو انتظر دقيقة وحاول مجدداً.' },
+        { status: 409 }
+      )
+    }
+    // محاولة قديمة (+15 دقيقة) على الأغلب متروكة بدون إكمال — نقفلها تلقائياً ونكمل
+    await supabase
+      .from('pending_payments')
+      .update({ status: 'rejected', txn_state: 'failed', failure_reason: 'stale_abandoned', state_updated_at: new Date().toISOString() })
+      .eq('id', existing.id)
   }
 
   // 1) أنشئ صفّ pending_payments أولاً — هذا مصدر الحقيقة، لا رد ثواني
