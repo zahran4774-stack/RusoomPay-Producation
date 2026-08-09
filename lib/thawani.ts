@@ -86,6 +86,7 @@ export type ThawaniSessionStatus = "paid" | "unpaid" | "cancelled" | string;
 export async function retrieveSession(sessionId: string): Promise<{
   paymentStatus: ThawaniSessionStatus;
   clientReferenceId: string | null;
+  totalAmountBaisa: number | null;
   raw: any;
 }> {
   const res = await fetch(`${API_BASE}/checkout/session/${sessionId}`, {
@@ -106,6 +107,8 @@ export async function retrieveSession(sessionId: string): Promise<{
   return {
     paymentStatus: data.data.payment_status,
     clientReferenceId: data.data.client_reference_id ?? null,
+    totalAmountBaisa:
+      typeof data.data.total_amount === "number" ? data.data.total_amount : null,
     raw: data.data,
   };
 }
