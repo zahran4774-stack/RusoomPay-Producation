@@ -3,18 +3,16 @@
 // ⚠️ هذا المسار عمداً خارج مجلد app/(app)/ المحمي بجلسة دخول إجبارية.
 // السبب: ثواني يرجّع المستخدم من دومين خارجي (checkout.thawani.om) عبر
 // تحويلة (redirect) — بعض المتصفحات (خصوصاً Safari/iOS) قد لا ترفق كوكيز
-// الجلسة بشكل موثوق مع أول طلب بعد تحويلة عابرة للنطاقات. لو كانت هذي
-// الصفحة داخل app/(app)/layout.tsx (اللي يفرض "if (!user) redirect('/login')")
-// فأي غياب مؤقت للجلسة يطرد الوالد لصفحة الدخول بدل ما يشوف نتيجة دفعته.
+// الجلسة بشكل موثوق مع أول طلب بعد تحويلة عابرة للنطاقات.
 //
-// الحل: هذي الصفحة لا تعتمد على جلسة المستخدم إطلاقاً. تتعرّف على الدفعة
-// عبر معرّفها الخاص (uuid غير قابل للتخمين، مُمرّر من route.ts) وتتحقق من
-// الدفع الحقيقي مباشرة من ثواني (Retrieve Session) — هذا أكثر أماناً
-// وموثوقية من الاعتماد على كوكيز متصفح قد لا تصل.
+// الحل: هذي الصفحة لا تعتمد على جلسة المستخدم إطلاقاً — لا لتأكيد الدفع
+// (نتحقق من ثواني نفسها)، ولا لعرض النتيجة (نعرض تفاصيل الفاتورة مباشرة
+// بهذي الصفحة، عشان ولي الأمر ما يحتاج يرجع لصفحة محمية بجلسة قد تكون ضاعت).
 
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { retrieveSession } from "@/lib/thawani";
 import { toE164 } from "@/lib/phone";
+import { sendWhatsApp } from "@/lib/whatsapp";
 import Link from "next/link";
 
 const supabaseAdmin = createAdminClient(
@@ -22,11 +20,37 @@ const supabaseAdmin = createAdminClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-async function sendWhatsAppConfirmation(appUrl: string, pendingId: string) {
+type Receipt = {
+  studentName: string;
+  description: string;
+  amount: number;
+  paidAt: string;
+};
+
+async function fetchReceipt(pendingId: string): Promise<Receipt | null> {
+  const { data } = await supabaseAdmin
+    .from("pending_payments")
+    .select("amount, resolved_at, student_fees ( description, students ( full_name ) )")
+    .eq("id", pendingId)
+    .single();
+
+  if (!data) return null;
+  return {
+    // @ts-expect-error - shape depends on join
+    studentName: data.student_fees?.students?.full_name || "",
+    // @ts-expect-error
+    description: data.student_fees?.description || "رسوم دراسية",
+    amount: Number(data.amount),
+    paidAt: data.resolved_at || new Date().toISOString(),
+  };
+}
+
+// إرسال مباشر عبر Twilio — بدون نداء HTTP ذاتي على موقعنا (كان يفشل بصمت أحياناً)
+async function sendWhatsAppConfirmation(pendingId: string) {
   try {
     const { data: pending } = await supabaseAdmin
       .from("pending_payments")
-      .select("amount, fee_id, student_fees ( description, students ( full_name, guardian_phone ) )")
+      .select("amount, student_fees ( description, students ( full_name, guardian_phone ) )")
       .eq("id", pendingId)
       .single();
 
@@ -38,7 +62,10 @@ async function sendWhatsAppConfirmation(appUrl: string, pendingId: string) {
     const description: string = pending?.student_fees?.description || "رسوم دراسية";
     const amount = pending?.amount;
 
-    if (!phone || !amount) return;
+    if (!phone || !amount) {
+      console.error("send-whatsapp skipped: missing phone or amount", { pendingId, phone, amount });
+      return;
+    }
 
     const to = toE164(phone);
     const body =
@@ -46,18 +73,16 @@ async function sendWhatsAppConfirmation(appUrl: string, pendingId: string) {
       (studentName ? ` عن ${studentName}` : "") +
       ` (${description}) عبر ثواني. شكراً لكم.`;
 
-    await fetch(`${appUrl}/api/send-whatsapp`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ to, body }),
-    });
+    const result = await sendWhatsApp(to, body);
+    if (!result.ok) {
+      console.error("send-whatsapp failed:", result.error, { pendingId, to });
+    }
   } catch (err) {
-    console.error("send-whatsapp confirmation failed:", err);
+    console.error("send-whatsapp confirmation threw:", err);
   }
 }
 
-async function resolvePayment(pendingId: string, appUrl: string) {
-  // نجيب الدفعة عبر معرّفها مباشرة — بدون أي حاجة لهوية مستخدم مسجّل دخول
+async function resolvePayment(pendingId: string) {
   const { data: pending } = await supabaseAdmin
     .from("pending_payments")
     .select("id, provider_ref, txn_state, status, method, amount")
@@ -68,7 +93,6 @@ async function resolvePayment(pendingId: string, appUrl: string) {
     return { ok: false, reason: "لم يتم العثور على الدفعة" };
   }
 
-  // مؤكدة مسبقاً (مثلاً المستخدم رجع للصفحة مرتين) — ما نرسل واتساب مرة ثانية
   if (pending.status === "approved" || pending.txn_state === "paid") {
     return { ok: true, alreadyConfirmed: true };
   }
@@ -77,7 +101,6 @@ async function resolvePayment(pendingId: string, appUrl: string) {
     return { ok: false, reason: "لا توجد جلسة دفع مرتبطة" };
   }
 
-  // 🔒 التحقق الحقيقي من ثواني نفسها — هذا هو مصدر الحقيقة الوحيد، لا الرابط
   let session;
   try {
     session = await retrieveSession(pending.provider_ref);
@@ -85,7 +108,6 @@ async function resolvePayment(pendingId: string, appUrl: string) {
     return { ok: false, reason: "تعذّر التحقق من حالة الدفع" };
   }
 
-  // 🔒 حماية إضافية: الجلسة يجب أن تخصّ فعلاً هذه الدفعة بالذات (ضد التلاعب بالرابط)
   if (session.clientReferenceId && session.clientReferenceId !== pending.id) {
     await supabaseAdmin.rpc("mark_gateway_payment_failed", {
       p_id: pending.id,
@@ -95,12 +117,8 @@ async function resolvePayment(pendingId: string, appUrl: string) {
   }
 
   if (session.paymentStatus === "paid") {
-    // 🔒 حماية إضافية: المبلغ المدفوع فعلياً عند ثواني يجب أن يطابق المبلغ المسجّل عندنا
     const expectedBaisa = Math.round(Number(pending.amount) * 1000);
-    if (
-      session.totalAmountBaisa !== null &&
-      session.totalAmountBaisa !== expectedBaisa
-    ) {
+    if (session.totalAmountBaisa !== null && session.totalAmountBaisa !== expectedBaisa) {
       await supabaseAdmin.rpc("mark_gateway_payment_failed", {
         p_id: pending.id,
         p_reason: `amount_mismatch_expected_${expectedBaisa}_got_${session.totalAmountBaisa}`,
@@ -114,7 +132,7 @@ async function resolvePayment(pendingId: string, appUrl: string) {
     });
     if (error) return { ok: false, reason: error.message };
 
-    await sendWhatsAppConfirmation(appUrl, pending.id);
+    await sendWhatsAppConfirmation(pending.id);
     return { ok: true, alreadyConfirmed: false };
   }
 
@@ -125,13 +143,14 @@ async function resolvePayment(pendingId: string, appUrl: string) {
   return { ok: false, reason: "لم تكتمل عملية الدفع" };
 }
 
+const fmt = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+
 export default async function PaymentResultPage({
   searchParams,
 }: {
   searchParams: Promise<{ status?: string; pending?: string }>;
 }) {
   const { status, pending: pendingId } = await searchParams;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL!;
 
   let result: { ok: boolean; reason?: string; alreadyConfirmed?: boolean } = {
     ok: false,
@@ -139,12 +158,13 @@ export default async function PaymentResultPage({
   };
 
   if (pendingId && status !== "cancel") {
-    result = await resolvePayment(pendingId, appUrl);
+    result = await resolvePayment(pendingId);
   } else if (status === "cancel") {
     result = { ok: false, reason: "تم إلغاء عملية الدفع" };
   }
 
   const success = result.ok;
+  const receipt = success && pendingId ? await fetchReceipt(pendingId) : null;
 
   return (
     <div
@@ -172,11 +192,43 @@ export default async function PaymentResultPage({
         <h2 style={{ color: "#0A1D33", margin: "0 0 8px", fontFamily: "Cairo" }}>
           {success ? "تم الدفع بنجاح" : "تعذّر إتمام الدفع"}
         </h2>
-        <p style={{ color: "#667", fontSize: 14, lineHeight: 1.8, margin: "0 0 24px" }}>
+        <p style={{ color: "#667", fontSize: 14, lineHeight: 1.8, margin: "0 0 20px" }}>
           {success
             ? "تم تأكيد دفعتك وتحديث الفاتورة تلقائياً."
             : result.reason || "حدث خطأ أثناء معالجة الدفعة."}
         </p>
+
+        {/* تفاصيل الفاتورة مباشرة هنا — بدون حاجة للرجوع لصفحة تتطلب تسجيل دخول */}
+        {receipt && (
+          <div
+            style={{
+              background: "#F4F8F7",
+              borderRadius: 10,
+              padding: 16,
+              marginBottom: 20,
+              textAlign: "right",
+              fontSize: 13.5,
+              lineHeight: 2,
+              color: "#334",
+            }}
+          >
+            {receipt.studentName && (
+              <div>
+                <b>الطالب:</b> {receipt.studentName}
+              </div>
+            )}
+            <div>
+              <b>البند:</b> {receipt.description}
+            </div>
+            <div>
+              <b>المبلغ:</b> {fmt(receipt.amount)} ر.ع
+            </div>
+            <div>
+              <b>التاريخ:</b> {new Date(receipt.paidAt).toLocaleDateString("en-GB")}
+            </div>
+          </div>
+        )}
+
         <Link
           href="/parent"
           style={{
