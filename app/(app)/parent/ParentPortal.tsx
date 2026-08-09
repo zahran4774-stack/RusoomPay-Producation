@@ -231,8 +231,8 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
           </div>
         )) : <div style={card_}>لا يوجد أبناء مرتبطون بحسابك. تواصل مع المدرسة لربط أبنائك.</div>)}
 
-        {/* الرسوم + الدفع */}
-        {tab === 'fees' && (byChild(fees).length ? byChild(fees).map((f) => (
+        {/* الرسوم + الدفع — نعرض المستحقّة فقط؛ المدفوعة بالكامل تظهر بتبويب "الإيصالات" */}
+        {tab === 'fees' && (byChild(fees).filter((f) => f.remaining > 0.0005).length ? byChild(fees).filter((f) => f.remaining > 0.0005).map((f) => (
           <div key={f.fee_id} style={card_}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
               <div><b style={{ color: '#0F2744' }}>{f.description}</b>
