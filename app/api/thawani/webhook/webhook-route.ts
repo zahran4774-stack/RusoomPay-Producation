@@ -2,11 +2,13 @@
 // يستقبل تأكيد الدفع من ثواني، يتحقّق منه عبر الاستعلام المباشر (لا نثق بجسم الطلب وحده)،
 // ثم يستدعي record_thawani_payment التي تجيب المبلغ والفاتورة من سجلّ pending_payments
 // عندنا (مصدر الحقيقة)، وتُنفّذ نفس منطق record_payment المحاسبي (قيد، تحديث فاتورة، تدقيق).
+//
+// طبقة دفاع إضافية للتأكيد الأساسي عبر /payment-result — لو الوالد سكّر
+// المتصفح قبل ما يرجع من ثواني، هذا الـwebhook يضمن اعتماد الدفعة برضه.
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { retrieveSession } from '@/lib/thawani'
 
-// عميل Supabase بصلاحية الخدمة (service role) — الـwebhook لا يملك جلسة مستخدم.
 function serviceClient() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,7 +23,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'session_id مفقود' }, { status: 400 })
   }
 
-  // نتحقّق من ثواني مباشرة — لا نثق بمحتوى الطلب الوارد وحده
+  // 🔒 لا نثق بمحتوى الطلب الوارد — نتحقّق من ثواني نفسها مباشرة
   let status
   try {
     status = await retrieveSession(sessionId)
@@ -35,13 +37,37 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, ignored: true, status: status.paymentStatus })
   }
 
-  // clientReferenceId هو id سجلّ pending_payments الذي أنشأناه وقت فتح الجلسة
   const pendingId = status.clientReferenceId
   if (!pendingId) {
     return NextResponse.json({ ok: false, error: 'clientReferenceId مفقود من جلسة ثواني' }, { status: 502 })
   }
 
   const supabase = serviceClient()
+
+  // 🔒 تحقّق إضافي: الدفعة المعلّقة موجودة فعلاً، طريقتها ثواني، والمبلغ الفعلي
+  // المدفوع عند ثواني يطابق المبلغ المسجّل عندنا — قبل ما نستدعي دالة الاعتماد
+  const { data: pending } = await supabase
+    .from('pending_payments')
+    .select('id, amount, method, status')
+    .eq('id', pendingId)
+    .single()
+
+  if (!pending || pending.method !== 'thawani') {
+    return NextResponse.json({ ok: false, error: 'دفعة غير موجودة أو ليست عبر ثواني' }, { status: 404 })
+  }
+
+  if (pending.status === 'approved') {
+    // مؤكدة مسبقاً (webhook مكرر أو التأكيد صار عبر /payment-result أول) — لا إجراء إضافي
+    return NextResponse.json({ ok: true, duplicate: true })
+  }
+
+  const expectedBaisa = Math.round(Number(pending.amount) * 1000)
+  if (status.totalAmountBaisa !== null && status.totalAmountBaisa !== expectedBaisa) {
+    return NextResponse.json(
+      { ok: false, error: `عدم تطابق المبلغ: متوقّع ${expectedBaisa} والفعلي ${status.totalAmountBaisa}` },
+      { status: 409 }
+    )
+  }
 
   const { data: result, error } = await supabase.rpc('record_thawani_payment', {
     p_pending_id: pendingId,
