@@ -49,11 +49,11 @@ const MONTH_NAMES = ['يناير', 'فبراير', 'مارس', 'أبريل', 'م
 // أسباب صرف شائعة — اختصار سريع، مع إمكانية كتابة سبب مخصّص
 const DISPENSE_REASONS = ['وجبة إفطار', 'وجبة غداء', 'نشاط/مناسبة', 'تحضير يومي', 'أخرى']
 
-// قائمة الأشهر: من ستة أشهر مضت إلى ستة قادمة
+// قائمة الأشهر: من ستة أشهر مضت إلى نهاية 2027 (نطاق مستقبلي أوسع للفوترة المسبقة)
 function monthOptions() {
   const out: { value: string; label: string }[] = []
   const now = new Date()
-  for (let d = -6; d <= 6; d++) {
+  for (let d = -6; d <= 18; d++) {
     const dt = new Date(now.getFullYear(), now.getMonth() + d, 1)
     const y = dt.getFullYear()
     const m = dt.getMonth()
