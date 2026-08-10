@@ -42,14 +42,18 @@ export default function CafeteriaClient({ initialPlans, initialSubscribers, stud
   // نموذج اشتراك
   const [selStudent, setSelStudent] = useState('')
   const [selPlan, setSelPlan] = useState('')
+  const [available, setAvailable] = useState<Student[]>(students)
   // الفوترة
   const [month, setMonth] = useState('2026-06')
 
   async function refresh() {
-    const [{ data: p }, { data: s }] = await Promise.all([
-      supabase.rpc('cafeteria_plans'), supabase.rpc('cafeteria_subscribers'),
+    const [{ data: p }, { data: s }, { data: avail }] = await Promise.all([
+      supabase.rpc('cafeteria_plans'),
+      supabase.rpc('cafeteria_subscribers'),
+      supabase.rpc('students_without_meal'),
     ])
     setPlans(p || []); setSubs(s || [])
+    if (avail) setAvailable(avail)
   }
 
   async function addPlan() {
@@ -64,8 +68,8 @@ export default function CafeteriaClient({ initialPlans, initialSubscribers, stud
     if (!selStudent || !selPlan) { setMsg('اختر الطالب والباقة'); return }
     setBusy(true); setMsg('')
     const { error } = await supabase.rpc('subscribe_meal', { p_student: selStudent, p_plan: selPlan })
-    if (error) { setMsg('خطأ: ' + error.message); setBusy(false); return }
-    setSelStudent(''); setSelPlan(''); await refresh(); setMsg('✓ تم تسجيل الاشتراك'); setBusy(false)
+    if (error) { setMsg('⚠ ' + error.message); setBusy(false); return }
+    setSelStudent(''); setSelPlan(''); await refresh(); setMsg('✓ تم تسجيل الاشتراك — سيُفوتر شهرياً'); setBusy(false)
   }
 
   async function removeSub(studentId: string) {
@@ -144,7 +148,7 @@ export default function CafeteriaClient({ initialPlans, initialSubscribers, stud
           <div><label style={{ fontSize: 13, fontWeight: 600, color: '#445', display: 'block', marginBottom: 6 }}>الطالب</label>
             <select style={input} value={selStudent} onChange={(e) => setSelStudent(e.target.value)}>
               <option value="">اختر الطالب</option>
-              {students.map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+              {available.map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
             </select></div>
           <div><label style={{ fontSize: 13, fontWeight: 600, color: '#445', display: 'block', marginBottom: 6 }}>الباقة</label>
             <select style={input} value={selPlan} onChange={(e) => setSelPlan(e.target.value)}>
