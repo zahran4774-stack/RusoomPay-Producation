@@ -1,11 +1,11 @@
 'use client'
-// مكوّن التغذية المدرسية — باقات + اشتراكات + فوترة شهرية
+// مكون التغذية المدرسية — باقات (سنوية/شهرية) + اشتراكات + فوترة
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import { printReport, type SchoolHeader } from '@/lib/print-report'
 import MealCost from './MealCost'
 
-type Plan = { id: string; name: string; fee: number; subscribers: number }
+type Plan = { id: string; name: string; fee: number; plan_type: 'annual' | 'monthly'; subscribers: number }
 type Sub = { student_id: string; student_name: string; guardian: string; plan_name: string }
 type Student = { id: string; full_name: string; guardian_name: string | null }
 
@@ -25,7 +25,13 @@ const btnGhost: React.CSSProperties = {
   padding: '8px 14px', borderRadius: 9, border: '1px solid #DDE3EC', cursor: 'pointer',
   background: '#fff', color: '#445', fontWeight: 600, fontSize: 13, fontFamily: 'inherit',
 }
+const badge = (type: 'annual' | 'monthly'): React.CSSProperties => ({
+  display: 'inline-block', fontSize: 11.5, fontWeight: 700, borderRadius: 7, padding: '3px 9px',
+  background: type === 'annual' ? '#FDF3E7' : '#EEF4FF',
+  color: type === 'annual' ? '#B5720E' : '#1D4ED8',
+})
 const fmt = (n: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+const typeLabel = (t: 'annual' | 'monthly') => (t === 'annual' ? 'سنوية' : 'شهرية')
 
 export default function CafeteriaClient({ initialPlans, initialSubscribers, students, school }: {
   initialPlans: Plan[]; initialSubscribers: Sub[]; students: Student[]; school: SchoolHeader
@@ -39,6 +45,7 @@ export default function CafeteriaClient({ initialPlans, initialSubscribers, stud
   // نموذج باقة جديدة
   const [pName, setPName] = useState('')
   const [pFee, setPFee] = useState('')
+  const [pType, setPType] = useState<'annual' | 'monthly'>('monthly')
   // نموذج اشتراك
   const [selStudent, setSelStudent] = useState('')
   const [selPlan, setSelPlan] = useState('')
@@ -59,9 +66,9 @@ export default function CafeteriaClient({ initialPlans, initialSubscribers, stud
   async function addPlan() {
     if (!pName.trim() || !pFee) { setMsg('أدخل اسم الباقة والرسم'); return }
     setBusy(true); setMsg('')
-    const { error } = await supabase.rpc('save_meal_plan', { p_name: pName.trim(), p_fee: parseFloat(pFee) })
+    const { error } = await supabase.rpc('save_meal_plan', { p_name: pName.trim(), p_fee: parseFloat(pFee), p_type: pType })
     if (error) { setMsg('خطأ: ' + error.message); setBusy(false); return }
-    setPName(''); setPFee(''); await refresh(); setMsg('✓ تمت إضافة الباقة'); setBusy(false)
+    setPName(''); setPFee(''); setPType('monthly'); await refresh(); setMsg('✓ تمت إضافة الباقة'); setBusy(false)
   }
 
   async function subscribe() {
@@ -69,7 +76,7 @@ export default function CafeteriaClient({ initialPlans, initialSubscribers, stud
     setBusy(true); setMsg('')
     const { error } = await supabase.rpc('subscribe_meal', { p_student: selStudent, p_plan: selPlan })
     if (error) { setMsg('⚠ ' + error.message); setBusy(false); return }
-    setSelStudent(''); setSelPlan(''); await refresh(); setMsg('✓ تم تسجيل الاشتراك — سيُفوتر شهرياً'); setBusy(false)
+    setSelStudent(''); setSelPlan(''); await refresh(); setMsg('✓ تم تسجيل الاشتراك وإصدار الفاتورة'); setBusy(false)
   }
 
   async function removeSub(studentId: string) {
@@ -96,18 +103,19 @@ export default function CafeteriaClient({ initialPlans, initialSubscribers, stud
           {plans.length > 0 && (
             <button onClick={() => printReport({
               school, title: 'تقرير باقات التغذية',
-              columns: [{ key: 'name', label: 'الباقة' }, { key: 'fee', label: 'الرسم الشهري' }, { key: 'subs', label: 'المشتركون' }],
-              rows: plans.map((p) => ({ name: p.name, fee: fmt(p.fee), subs: p.subscribers })),
+              columns: [{ key: 'name', label: 'الباقة' }, { key: 'type', label: 'النوع' }, { key: 'fee', label: 'الرسم' }, { key: 'subs', label: 'المشتركون' }],
+              rows: plans.map((p) => ({ name: p.name, type: typeLabel(p.plan_type), fee: fmt(p.fee), subs: p.subscribers })),
             })} style={{ background: '#fff', color: '#0F2744', border: '1.5px solid #DDE3EC', borderRadius: 9, padding: '7px 14px', fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>🖨 طباعة</button>
           )}
         </div>
         {plans.length > 0 && (
           <div style={{ overflowX: 'auto', marginBottom: 16 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 360 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 420 }}>
               <thead>
                 <tr style={{ background: '#F7F9FC', textAlign: 'right' }}>
                   <th style={{ padding: '10px 12px', fontSize: 13, color: '#69757F' }}>الباقة</th>
-                  <th style={{ padding: '10px 12px', fontSize: 13, color: '#69757F' }}>الرسم الشهري</th>
+                  <th style={{ padding: '10px 12px', fontSize: 13, color: '#69757F' }}>النوع</th>
+                  <th style={{ padding: '10px 12px', fontSize: 13, color: '#69757F' }}>الرسم</th>
                   <th style={{ padding: '10px 12px', fontSize: 13, color: '#69757F' }}>المشتركون</th>
                 </tr>
               </thead>
@@ -115,6 +123,7 @@ export default function CafeteriaClient({ initialPlans, initialSubscribers, stud
                 {plans.map((p) => (
                   <tr key={p.id} style={{ borderTop: '1px solid #F2F5F8' }}>
                     <td style={{ padding: '10px 12px', fontWeight: 600, color: '#0F2744' }}>{p.name}</td>
+                    <td style={{ padding: '10px 12px' }}><span style={badge(p.plan_type)}>{typeLabel(p.plan_type)}</span></td>
                     <td style={{ padding: '10px 12px' }}>{fmt(p.fee)}</td>
                     <td style={{ padding: '10px 12px' }}>{p.subscribers}</td>
                   </tr>
@@ -123,10 +132,15 @@ export default function CafeteriaClient({ initialPlans, initialSubscribers, stud
             </table>
           </div>
         )}
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: 10, alignItems: 'end' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 10, alignItems: 'end' }}>
           <div><label style={{ fontSize: 13, fontWeight: 600, color: '#445', display: 'block', marginBottom: 6 }}>اسم الباقة</label>
             <input style={input} value={pName} onChange={(e) => setPName(e.target.value)} placeholder="مثال: إفطار + غداء" /></div>
-          <div><label style={{ fontSize: 13, fontWeight: 600, color: '#445', display: 'block', marginBottom: 6 }}>الرسم الشهري</label>
+          <div><label style={{ fontSize: 13, fontWeight: 600, color: '#445', display: 'block', marginBottom: 6 }}>النوع</label>
+            <select style={input} value={pType} onChange={(e) => setPType(e.target.value as 'annual' | 'monthly')}>
+              <option value="monthly">شهرية</option>
+              <option value="annual">سنوية</option>
+            </select></div>
+          <div><label style={{ fontSize: 13, fontWeight: 600, color: '#445', display: 'block', marginBottom: 6 }}>الرسم ({pType === 'annual' ? 'سنوي' : 'شهري'})</label>
             <input style={input} type="number" step="0.001" value={pFee} onChange={(e) => setPFee(e.target.value)} placeholder="28.000" /></div>
           <button style={btnGold} onClick={addPlan} disabled={busy}>＋ إضافة</button>
         </div>
@@ -144,6 +158,9 @@ export default function CafeteriaClient({ initialPlans, initialSubscribers, stud
             })} style={{ background: '#fff', color: '#0F2744', border: '1.5px solid #DDE3EC', borderRadius: 9, padding: '7px 14px', fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>🖨 طباعة المشتركين</button>
           )}
         </div>
+        <p style={{ fontSize: 12.5, color: '#8A94A6', margin: '0 0 12px' }}>
+          💡 عند تسجيل اشتراك شهري تصدر الفاتورة الأولى فورًا. إذا كان الطالب مقيّدًا في باقة سنوية، لا يمكن تسجيله في باقة أخرى.
+        </p>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 10, alignItems: 'end' }}>
           <div><label style={{ fontSize: 13, fontWeight: 600, color: '#445', display: 'block', marginBottom: 6 }}>الطالب</label>
             <select style={input} value={selStudent} onChange={(e) => setSelStudent(e.target.value)}>
@@ -153,7 +170,7 @@ export default function CafeteriaClient({ initialPlans, initialSubscribers, stud
           <div><label style={{ fontSize: 13, fontWeight: 600, color: '#445', display: 'block', marginBottom: 6 }}>الباقة</label>
             <select style={input} value={selPlan} onChange={(e) => setSelPlan(e.target.value)}>
               <option value="">اختر الباقة</option>
-              {plans.map((p) => <option key={p.id} value={p.id}>{p.name} — {fmt(p.fee)}</option>)}
+              {plans.map((p) => <option key={p.id} value={p.id}>{p.name} — {typeLabel(p.plan_type)} — {fmt(p.fee)}</option>)}
             </select></div>
           <button style={btnGold} onClick={subscribe} disabled={busy}>حفظ</button>
         </div>
@@ -185,20 +202,22 @@ export default function CafeteriaClient({ initialPlans, initialSubscribers, stud
         )}
       </div>
 
-      {/* الفوترة الشهرية */}
+      {/* الفوترة الشهرية — فقط للمشتركين الشهريين غير المفوترين لهذا الشهر */}
       <div style={card}>
         <h3 style={{ margin: '0 0 14px', color: '#0F2744', fontSize: 16 }}>الفوترة الشهرية</h3>
         <div style={{ display: 'flex', gap: 10, alignItems: 'end', flexWrap: 'wrap' }}>
           <div><label style={{ fontSize: 13, fontWeight: 600, color: '#445', display: 'block', marginBottom: 6 }}>شهر الفوترة</label>
             <select style={input} value={month} onChange={(e) => setMonth(e.target.value)}>
               <option value="2026-06">يونيو 2026</option>
+              <option value="2026-07">يوليو 2026</option>
+              <option value="2026-08">أغسطس 2026</option>
               <option value="2026-09">سبتمبر 2026</option>
               <option value="2026-10">أكتوبر 2026</option>
             </select></div>
-          <button style={btnGold} onClick={bill} disabled={busy}>⚡ فوترة التغذية لكل المشتركين</button>
+          <button style={btnGold} onClick={bill} disabled={busy}>⚡ فوترة الشهريين غير المفوترين لهذا الشهر</button>
         </div>
         <p style={{ fontSize: 12, color: '#8A94A6', marginTop: 10 }}>
-          💡 تُنشئ رسوماً لكل طالب مشترك تدخل كإيراد للمدرسة (حساب 4220)، يدفعها ولي الأمر عبر بوابته.
+          💡 تصدر رسومًا فقط للمشتركين الشهريين اللي ما انفوترو لهذا الشهر بعد (تدخل كإيراد للمدرسة، حساب 4220). الباقات السنوية تُفوتر تلقائيًا مرة واحدة عند التسجيل ولا تظهر هنا.
         </p>
       </div>
 
