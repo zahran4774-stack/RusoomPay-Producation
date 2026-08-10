@@ -126,15 +126,18 @@ async function resolvePayment(pendingId: string) {
       return { ok: false, reason: "المبلغ المدفوع لا يطابق المبلغ المطلوب" };
     }
 
-    const { error } = await supabaseAdmin.rpc("confirm_gateway_payment", {
+        const { data: confirmResult, error } = await supabaseAdmin.rpc("confirm_gateway_payment", {
       p_id: pending.id,
       p_provider_ref: pending.provider_ref,
     });
     if (error) return { ok: false, reason: error.message };
 
-    await sendWhatsAppConfirmation(pending.id);
-    return { ok: true, alreadyConfirmed: false };
-  }
+    // لو الويب هوك سبق واعتمد الدفعة، لا نُرسل واتساب مكرر
+    if (!confirmResult?.already_confirmed) {
+      await sendWhatsAppConfirmation(pending.id);
+    }
+    return { ok: true, alreadyConfirmed: Boolean(confirmResult?.already_confirmed) };
+
 
   await supabaseAdmin.rpc("mark_gateway_payment_failed", {
     p_id: pending.id,
