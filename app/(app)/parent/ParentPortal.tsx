@@ -295,6 +295,16 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
           </div>
         )) : <div style={card_}>لا توجد إشعارات</div>)}
       </div>
+      {/* طبقة تحميل مركزية أثناء الانتقال لثواني */}
+      {redirecting && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(8,15,27,.7)', display: 'grid', placeItems: 'center', zIndex: 200 }}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: '28px 36px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+            <div className="lp-spin" style={{ width: 34, height: 34, borderWidth: 3.5, borderColor: 'rgba(20,58,49,.18)', borderTopColor: '#1E5C4E' }} />
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#0F2744' }}>جارٍ نقلك لصفحة الدفع الآمنة…</div>
+          </div>
+        </div>
+      )}
+
 
       {/* نافذة الدفع */}
       {payFee && (
