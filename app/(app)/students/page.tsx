@@ -73,7 +73,8 @@ export default async function StudentsPage() {
       {error && <div style={{ color: '#C0392B' }}>تعذّر جلب البيانات: {error.message}</div>}
 
       <div style={{ marginBottom: 18, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-        <AddStudent sectionOptions={sectionOptions} />
+                <AddStudent />
+
         <ImportStudents />
         <div id="invite-parents" style={{ scrollMarginTop: 80 }}>
           <InviteParents schoolName={school?.name ?? undefined} />
