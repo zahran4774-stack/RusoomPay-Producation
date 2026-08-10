@@ -105,7 +105,7 @@ async function resolvePayment(pendingId: string) {
   try {
     session = await retrieveSession(pending.provider_ref);
   } catch {
-    return { ok: false, reason: "تعذّر التحقق من حالة الدفع" };
+    return { ok: false, reason: "تعذر التحقق من حالة الدفع" };
   }
 
   if (session.clientReferenceId && session.clientReferenceId !== pending.id) {
@@ -126,7 +126,7 @@ async function resolvePayment(pendingId: string) {
       return { ok: false, reason: "المبلغ المدفوع لا يطابق المبلغ المطلوب" };
     }
 
-        const { data: confirmResult, error } = await supabaseAdmin.rpc("confirm_gateway_payment", {
+    const { data: confirmResult, error } = await supabaseAdmin.rpc("confirm_gateway_payment", {
       p_id: pending.id,
       p_provider_ref: pending.provider_ref,
     });
@@ -137,7 +137,7 @@ async function resolvePayment(pendingId: string) {
       await sendWhatsAppConfirmation(pending.id);
     }
     return { ok: true, alreadyConfirmed: Boolean(confirmResult?.already_confirmed) };
-
+  }
 
   await supabaseAdmin.rpc("mark_gateway_payment_failed", {
     p_id: pending.id,
