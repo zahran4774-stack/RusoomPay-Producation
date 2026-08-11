@@ -1,5 +1,6 @@
 'use client'
 // تتبّع تكلفة الوجبات — الموردون + المشتريات + تقرير التكلفة
+
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase-client'
 
@@ -69,6 +70,7 @@ export default function MealCost({ sym = 'ر.ع' }: { sym?: string }) {
 // ═══ التقرير ═══
 function ReportView({ report, sym }: { report: Report | null; sym: string }) {
   if (!report) return <div style={{ color: '#8A94A6' }}>لا بيانات</div>
+
   const cards = [
     { label: 'إجمالي التكلفة', value: fmt3(report.total_cost), unit: sym, tone: 'act' },
     { label: 'وجبات مُشتراة', value: fmt0(report.meals_purchased), unit: '' },
@@ -76,6 +78,7 @@ function ReportView({ report, sym }: { report: Report | null; sym: string }) {
     { label: 'طلاب مشتركون', value: fmt0(report.meal_students), unit: '' },
     { label: 'متوسّط التكلفة للطالب', value: fmt3(report.avg_per_student), unit: sym },
   ]
+
   return (
     <div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 12, marginBottom: 20 }}>
@@ -120,6 +123,8 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
   const [f, setF] = useState({ supplier: '', date: new Date().toISOString().slice(0, 10), type: 'daily', meals: '', unit: '', paid: false, notes: '' })
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [busyId, setBusyId] = useState<string | null>(null)
+
   const set = (k: string, v: string | boolean) => setF((p) => ({ ...p, [k]: v }))
   const total = (Number(f.meals) || 0) * (Number(f.unit) || 0)
 
@@ -142,6 +147,14 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
 
   async function del(id: string) {
     await supabase.rpc('delete_meal_purchase', { p_id: id })
+    onChange()
+  }
+
+  async function markPaid(p: Purchase) {
+    setBusyId(p.id)
+    const { error } = await supabase.rpc('mark_meal_purchase_paid', { p_id: p.id })
+    setBusyId(null)
+    if (error) { alert(error.message); return }
     onChange()
   }
 
@@ -174,7 +187,13 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
                 <td style={{ padding: 10 }}>
                   <span style={{ fontSize: 12, fontWeight: 700, color: p.paid ? '#067647' : '#B54708' }}>{p.paid ? 'مدفوع' : 'غير مدفوع'}</span>
                 </td>
-                <td style={{ padding: 10 }}>
+                <td style={{ padding: 10, display: 'flex', gap: 8 }}>
+                  {!p.paid && (
+                    <button onClick={() => markPaid(p)} disabled={busyId === p.id}
+                      style={{ background: '#EAF7EE', color: '#067647', border: 0, borderRadius: 8, padding: '6px 10px', cursor: busyId === p.id ? 'default' : 'pointer', fontSize: 12, fontWeight: 700 }}>
+                      {busyId === p.id ? '...' : '✓ تم الدفع'}
+                    </button>
+                  )}
                   <button onClick={() => del(p.id)} style={{ background: 'none', border: 0, color: '#C0392B', cursor: 'pointer', fontSize: 13 }}>حذف</button>
                 </td>
               </tr>
@@ -251,25 +270,27 @@ function SuppliersView({ suppliers, onChange }: { suppliers: Supplier[]; onChang
   const [f, setF] = useState({ id: '', name: '', contact: '', phone: '', email: '', vat: '', active: true })
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+
   const set = (k: string, v: string | boolean) => setF((p) => ({ ...p, [k]: v }))
 
   function edit(s: Supplier) {
     setF({ id: s.id, name: s.name, contact: s.contact_name ?? '', phone: s.phone ?? '', email: s.email ?? '', vat: s.vat_number ?? '', active: s.active })
     setOpen(true)
   }
+
   function add() {
     setF({ id: '', name: '', contact: '', phone: '', email: '', vat: '', active: true })
     setOpen(true)
   }
 
-  async function markPaid(p: Purchase) {
-  setBusyId(p.id)
-  const { error } = await supabase.rpc('mark_meal_purchase_paid', { p_id: p.id })
-  setBusyId(null)
-  if (error) { alert(error.message); return }
-  onChange()
-}
-
+  async function save() {
+    setErr('')
+    if (!f.name.trim()) { setErr('الاسم مطلوب'); return }
+    setBusy(true)
+    const { error } = await supabase.rpc('save_supplier', {
+      p_id: f.id || null, p_name: f.name, p_contact: f.contact || null,
+      p_phone: f.phone || null, p_email: f.email || null, p_vat: f.vat || null, p_active: f.active,
+    })
     setBusy(false)
     if (error) { setErr(error.message); return }
     setOpen(false)
