@@ -1,19 +1,47 @@
 // app/api/send-notify-admin/route.ts
-// تنبيه واتساب لمالك المنصة فقط — رقمه ثابت من متغيّر بيئة (لا يُمرَّر من الواجهة إطلاقاً).
-// يُستخدم لإشعارات تشغيلية للمنصة نفسها (مثل: اشتراك مدرسة ينتظر الاعتماد).
-// يعيد استخدام نفس بيانات اعتماد Twilio المستخدَمة في send-whatsapp.
-import { NextResponse } from 'next/server'
+// تنبيه واتساب لمالك المنصّة — رقمه ثابت من متغيّر بيئة (لا يُمرَّر من الواجهة).
+// P0-5: مصادقة إلزامية + تحديد معدّل. يمنع الغرباء من إزعاج المالك.
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase-server'
+import { checkRateLimit } from '@/lib/rate-limit'
 
-const ADMIN_PHONE = process.env.PLATFORM_ADMIN_WHATSAPP // مثال: 96895476649 (بدون + وبدون whatsapp:)
+export const dynamic = 'force-dynamic'
 
-export async function POST(req: Request) {
+const ADMIN_PHONE = process.env.PLATFORM_ADMIN_WHATSAPP
+
+export async function POST(req: NextRequest) {
   try {
-    const { body } = await req.json()
-    if (!body || typeof body !== 'string') {
+    // 1) المصادقة — لا إرسال بلا تسجيل دخول
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ success: false, error: 'يجب تسجيل الدخول' }, { status: 401 })
+    }
+
+    // 2) تحديد المعدّل — 5 تنبيهات كل 5 دقائق لكل مستخدم
+    const rl = await checkRateLimit(`notify-admin:${user.id}`, 5, 300)
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { success: false, error: 'محاولات كثيرة. حاول بعد قليل.' },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil((rl.resetAt - Date.now()) / 1000)) } }
+      )
+    }
+
+    // 3) التحقّق من المدخلات
+    let payload: { body?: string }
+    try { payload = await req.json() } catch {
+      return NextResponse.json({ success: false, error: 'جسم الطلب غير صالح' }, { status: 400 })
+    }
+    const body = String(payload?.body ?? '').trim()
+    if (!body) {
       return NextResponse.json({ success: false, error: 'نص الرسالة مطلوب' }, { status: 400 })
     }
+    if (body.length > 1000) {
+      return NextResponse.json({ success: false, error: 'الرسالة طويلة جداً' }, { status: 400 })
+    }
+
     if (!ADMIN_PHONE) {
-      return NextResponse.json({ success: false, error: 'رقم مالك المنصة غير مُعرَّف (PLATFORM_ADMIN_WHATSAPP)' }, { status: 500 })
+      return NextResponse.json({ success: false, error: 'رقم مالك المنصة غير مُعرَّف' }, { status: 500 })
     }
 
     const sid = process.env.TWILIO_ACCOUNT_SID
@@ -41,6 +69,6 @@ export async function POST(req: Request) {
     }
     return NextResponse.json({ success: true, sid: data.sid })
   } catch (e) {
-    return NextResponse.json({ success: false, error: e instanceof Error ? e.message : 'خطأ غير معروف' }, { status: 500 })
+    return NextResponse.json({ success: false, error: e instanceof Error ? e.message : 'خطأ' }, { status: 500 })
   }
 }
