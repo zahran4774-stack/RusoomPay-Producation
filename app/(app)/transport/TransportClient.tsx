@@ -1,13 +1,16 @@
 'use client'
-// مكوّن النقل المدرسي — باصات (جهة دفع) + اشتراكات
+// مكوّن النقل المدرسي — باصات (مسارات متعددة + مشرفة) + اشتراكات
 // رسوم النقل تدرج ضمن الرسوم الدراسية السنوية عند تسجيل الطالب — لا فوترة شهرية منفصلة
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import { printReport, type SchoolHeader } from '@/lib/print-report'
 import BusRoster from './BusRoster'
 
-type Bus = { id: string; route: string; driver: string; capacity: number; fee: number; pay_to: string; subscribers: number }
-type Sub = { student_id: string; student_name: string; guardian: string; route: string }
+type Bus = {
+  id: string; routes: string[]; routes_label: string; driver: string; supervisor: string | null
+  capacity: number; fee: number; pay_to: string; subscribers: number
+}
+type Sub = { id: string; full_name: string; guardian_name: string | null; routes_label: string; driver: string; supervisor: string | null }
 type Student = { id: string; full_name: string; guardian_name: string | null }
 
 const PAY_LABEL: Record<string, { t: string; bg: string; c: string }> = {
@@ -32,7 +35,14 @@ const btnGhost: React.CSSProperties = {
   padding: '8px 14px', borderRadius: 9, border: '1px solid #DDE3EC', cursor: 'pointer',
   background: '#fff', color: '#445', fontWeight: 600, fontSize: 13, fontFamily: 'inherit',
 }
+const btnSm: React.CSSProperties = {
+  background: '#EEF2F9', color: '#163B68', border: 0, borderRadius: 8, padding: '6px 12px',
+  cursor: 'pointer', fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit',
+}
 const fmt = (n: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+
+type BusForm = { id: string; routes: string[]; driver: string; supervisor: string; capacity: string; fee: string; payTo: string }
+const emptyForm: BusForm = { id: '', routes: [''], driver: '', supervisor: '', capacity: '30', fee: '', payTo: 'school' }
 
 export default function TransportClient({ initialBuses, initialSubscribers, students, school }: {
   initialBuses: Bus[]; initialSubscribers: Sub[]; students: Student[]; school: SchoolHeader
@@ -43,11 +53,8 @@ export default function TransportClient({ initialBuses, initialSubscribers, stud
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
 
-  const [route, setRoute] = useState('')
-  const [driver, setDriver] = useState('')
-  const [capacity, setCapacity] = useState('30')
-  const [fee, setFee] = useState('')
-  const [payTo, setPayTo] = useState('school')
+  const [form, setForm] = useState<BusForm>(emptyForm)
+  const [editOpen, setEditOpen] = useState(false)
 
   const [selStudent, setSelStudent] = useState('')
   const [selBus, setSelBus] = useState('')
@@ -63,16 +70,41 @@ export default function TransportClient({ initialBuses, initialSubscribers, stud
     setBuses(b || []); setSubs(s || [])
   }
 
-  async function addBus() {
-    if (!route.trim() || !driver.trim() || !fee) { setMsg('أدخل المسار والسائق والرسم'); return }
-    setBusy(true); setMsg('')
-    const { error } = await supabase.rpc('save_bus', {
-      p_route: route.trim(), p_driver: driver.trim(),
-      p_capacity: parseInt(capacity) || 30, p_fee: parseFloat(fee), p_pay_to: payTo,
+  function setRouteAt(i: number, v: string) {
+    setForm((p) => { const routes = [...p.routes]; routes[i] = v; return { ...p, routes } })
+  }
+  function addRouteField() {
+    setForm((p) => ({ ...p, routes: [...p.routes, ''] }))
+  }
+  function removeRouteField(i: number) {
+    setForm((p) => ({ ...p, routes: p.routes.length > 1 ? p.routes.filter((_, idx) => idx !== i) : p.routes }))
+  }
+
+  function openAdd() { setForm(emptyForm); setEditOpen(true); setMsg('') }
+  function openEdit(b: Bus) {
+    setForm({
+      id: b.id, routes: b.routes.length ? [...b.routes] : [''], driver: b.driver,
+      supervisor: b.supervisor || '', capacity: String(b.capacity), fee: String(b.fee), payTo: b.pay_to,
     })
+    setEditOpen(true); setMsg('')
+  }
+
+  async function saveBus() {
+    const cleanRoutes = form.routes.map((r) => r.trim()).filter(Boolean)
+    if (cleanRoutes.length === 0 || !form.driver.trim() || !form.fee) {
+      setMsg('أدخل مسارًا واحدًا على الأقل واسم السائق والرسم'); return
+    }
+    setBusy(true); setMsg('')
+    const payload = {
+      p_routes: cleanRoutes, p_driver: form.driver.trim(), p_supervisor: form.supervisor.trim() || null,
+      p_capacity: parseInt(form.capacity) || 30, p_fee: parseFloat(form.fee), p_pay_to: form.payTo,
+    }
+    const { error } = form.id
+      ? await supabase.rpc('update_bus', { p_id: form.id, ...payload })
+      : await supabase.rpc('save_bus', payload)
     if (error) { setMsg('خطأ: ' + error.message); setBusy(false); return }
-    setRoute(''); setDriver(''); setFee(''); setCapacity('30'); setPayTo('school')
-    await refresh(); setMsg('✓ تمت إضافة الباص'); setBusy(false)
+    setEditOpen(false); setForm(emptyForm)
+    await refresh(); setMsg(form.id ? '✓ تم تحديث الباص' : '✓ تمت إضافة الباص'); setBusy(false)
   }
 
   async function subscribe() {
@@ -108,30 +140,35 @@ export default function TransportClient({ initialBuses, initialSubscribers, stud
       </div>
 
       <div style={card}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
           <h3 style={{ margin: 0, color: '#0F2744', fontSize: 16 }}>الباصات</h3>
-          {buses.length > 0 && (
-            <button onClick={() => printReport({
-              school, title: 'تقرير الباصات والمسارات',
-              columns: [
-                { key: 'route', label: 'المسار' }, { key: 'driver', label: 'السائق' },
-                { key: 'capacity', label: 'السعة' }, { key: 'fee', label: 'الرسم' },
-                { key: 'subs', label: 'المشتركون' }, { key: 'payto', label: 'جهة الدفع' },
-              ],
-              rows: buses.map((b) => ({
-                route: b.route, driver: b.driver, capacity: b.capacity, fee: fmt(b.fee),
-                subs: b.subscribers, payto: (PAY_LABEL[b.pay_to] || PAY_LABEL.school).t,
-              })),
-            })} style={{ background: '#fff', color: '#0F2744', border: '1.5px solid #DDE3EC', borderRadius: 9, padding: '7px 14px', fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>🖨 طباعة</button>
-          )}
+          <div style={{ display: 'flex', gap: 8 }}>
+            {buses.length > 0 && (
+              <button onClick={() => printReport({
+                school, title: 'تقرير الباصات والمسارات',
+                columns: [
+                  { key: 'routes', label: 'المسارات' }, { key: 'driver', label: 'السائق' },
+                  { key: 'supervisor', label: 'المشرفة' },
+                  { key: 'capacity', label: 'السعة' }, { key: 'fee', label: 'الرسم' },
+                  { key: 'subs', label: 'المشتركون' }, { key: 'payto', label: 'جهة الدفع' },
+                ],
+                rows: buses.map((b) => ({
+                  routes: b.routes_label, driver: b.driver, supervisor: b.supervisor || '—',
+                  capacity: b.capacity, fee: fmt(b.fee),
+                  subs: b.subscribers, payto: (PAY_LABEL[b.pay_to] || PAY_LABEL.school).t,
+                })),
+              })} style={{ background: '#fff', color: '#0F2744', border: '1.5px solid #DDE3EC', borderRadius: 9, padding: '7px 14px', fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>🖨 طباعة</button>
+            )}
+            <button onClick={openAdd} style={{ background: '#163B68', color: '#fff', border: 0, borderRadius: 9, padding: '7px 14px', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>＋ إضافة باص</button>
+          </div>
         </div>
 
         {buses.length > 0 && (
           <div style={{ overflowX: 'auto', marginBottom: 16 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 620 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
               <thead>
                 <tr style={{ background: '#F7F9FC', textAlign: 'right' }}>
-                  {['المسار', 'السائق', 'السعة', 'الرسم', 'المشتركون', 'الإيراد الشهري', 'جهة الدفع'].map((h) => (
+                  {['المسارات', 'السائق', 'المشرفة', 'السعة', 'الرسم', 'المشتركون', 'الإيراد الشهري', 'جهة الدفع', ''].map((h) => (
                     <th key={h} style={{ padding: '10px 12px', fontSize: 13, color: '#69757F' }}>{h}</th>
                   ))}
                 </tr>
@@ -143,8 +180,9 @@ export default function TransportClient({ initialBuses, initialSubscribers, stud
                   const full = b.subscribers >= b.capacity
                   return (
                     <tr key={b.id} style={{ borderTop: '1px solid #F2F5F8' }}>
-                      <td style={{ padding: '10px 12px', fontWeight: 600, color: '#0F2744' }}>{b.route}</td>
+                      <td style={{ padding: '10px 12px', fontWeight: 600, color: '#0F2744' }}>{b.routes_label}</td>
                       <td style={{ padding: '10px 12px' }}>{b.driver}</td>
+                      <td style={{ padding: '10px 12px' }}>{b.supervisor || '—'}</td>
                       <td style={{ padding: '10px 12px' }}>{b.capacity}</td>
                       <td style={{ padding: '10px 12px' }}>{fmt(b.fee)}</td>
                       <td style={{ padding: '10px 12px' }}>
@@ -158,6 +196,9 @@ export default function TransportClient({ initialBuses, initialSubscribers, stud
                       </td>
                       <td style={{ padding: '10px 12px' }}>
                         <span style={{ background: p.bg, color: p.c, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 99 }}>{p.t}</span>
+                      </td>
+                      <td style={{ padding: '10px 12px' }}>
+                        <button style={btnSm} onClick={() => openEdit(b)}>✏️ تعديل</button>
                       </td>
                     </tr>
                   )
@@ -174,24 +215,6 @@ export default function TransportClient({ initialBuses, initialSubscribers, stud
             )}
           </div>
         )}
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <div><label style={lbl}>المسار</label><input style={input} value={route} onChange={(e) => setRoute(e.target.value)} placeholder="مسار الخوض — الموالح" /></div>
-          <div><label style={lbl}>اسم السائق</label><input style={input} value={driver} onChange={(e) => setDriver(e.target.value)} placeholder="اسم السائق" /></div>
-          <div><label style={lbl}>السعة</label><input style={input} type="number" value={capacity} onChange={(e) => setCapacity(e.target.value)} /></div>
-          <div><label style={lbl}>الرسم الشهري</label><input style={input} type="number" step="0.001" value={fee} onChange={(e) => setFee(e.target.value)} placeholder="25.000" /></div>
-          <div style={{ gridColumn: '1 / -1' }}><label style={lbl}>جهة تحصيل رسوم النقل</label>
-            <select style={input} value={payTo} onChange={(e) => setPayTo(e.target.value)}>
-              <option value="school">المدرسة (ضمن الرسوم الدراسية)</option>
-              <option value="driver">السائق مباشرةً (لا يدخل حسابات المدرسة)</option>
-              <option value="private">توصيل خاص (ترتيب خاص — خارج حسابات المدرسة)</option>
-            </select>
-          </div>
-        </div>
-        <div style={{ fontSize: 12, color: '#8A94A6', margin: '10px 0' }}>
-          💡 "السائق مباشرة" و"توصيل خاص" لا تدخلان إيرادات المدرسة.
-        </div>
-        <button style={btnGold} onClick={addBus} disabled={busy}>＋ إضافة باص</button>
       </div>
 
       <div style={card}>
@@ -200,8 +223,14 @@ export default function TransportClient({ initialBuses, initialSubscribers, stud
           {subs.length > 0 && (
             <button onClick={() => printReport({
               school, title: 'تقرير المشتركين في النقل',
-              columns: [{ key: 'student', label: 'الطالب' }, { key: 'guardian', label: 'ولي الأمر' }, { key: 'route', label: 'المسار' }],
-              rows: subs.map((s) => ({ student: s.student_name, guardian: s.guardian || '—', route: s.route })),
+              columns: [
+                { key: 'student', label: 'الطالب' }, { key: 'guardian', label: 'ولي الأمر' },
+                { key: 'routes', label: 'المسارات' }, { key: 'driver', label: 'السائق' }, { key: 'supervisor', label: 'المشرفة' },
+              ],
+              rows: subs.map((s) => ({
+                student: s.full_name, guardian: s.guardian_name || '—',
+                routes: s.routes_label, driver: s.driver, supervisor: s.supervisor || '—',
+              })),
             })} style={{ background: '#fff', color: '#0F2744', border: '1.5px solid #DDE3EC', borderRadius: 9, padding: '7px 14px', fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>🖨 طباعة المشتركين</button>
           )}
         </div>
@@ -214,28 +243,30 @@ export default function TransportClient({ initialBuses, initialSubscribers, stud
           <div><label style={lbl}>الباص</label>
             <select style={input} value={selBus} onChange={(e) => setSelBus(e.target.value)}>
               <option value="">اختر الباص</option>
-              {buses.map((b) => <option key={b.id} value={b.id}>{b.route} — {fmt(b.fee)}</option>)}
+              {buses.map((b) => <option key={b.id} value={b.id}>{b.routes_label} — {fmt(b.fee)}</option>)}
             </select></div>
           <button style={btnGold} onClick={subscribe} disabled={busy}>حفظ</button>
         </div>
         {subs.length > 0 && (
           <div style={{ overflowX: 'auto', marginTop: 16 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 420 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
               <thead>
                 <tr style={{ background: '#F7F9FC', textAlign: 'right' }}>
                   <th style={{ padding: '10px 12px', fontSize: 13, color: '#69757F' }}>الطالب</th>
                   <th style={{ padding: '10px 12px', fontSize: 13, color: '#69757F' }}>ولي الأمر</th>
-                  <th style={{ padding: '10px 12px', fontSize: 13, color: '#69757F' }}>المسار</th>
+                  <th style={{ padding: '10px 12px', fontSize: 13, color: '#69757F' }}>المسارات</th>
+                  <th style={{ padding: '10px 12px', fontSize: 13, color: '#69757F' }}>المشرفة</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {subs.map((s) => (
-                  <tr key={s.student_id} style={{ borderTop: '1px solid #F2F5F8' }}>
-                    <td style={{ padding: '10px 12px', fontWeight: 600, color: '#0F2744' }}>{s.student_name}</td>
-                    <td style={{ padding: '10px 12px' }}>{s.guardian || '—'}</td>
-                    <td style={{ padding: '10px 12px' }}>{s.route}</td>
-                    <td style={{ padding: '10px 12px' }}><button style={btnGhost} onClick={() => removeSub(s.student_id)} disabled={busy}>إلغاء</button></td>
+                  <tr key={s.id} style={{ borderTop: '1px solid #F2F5F8' }}>
+                    <td style={{ padding: '10px 12px', fontWeight: 600, color: '#0F2744' }}>{s.full_name}</td>
+                    <td style={{ padding: '10px 12px' }}>{s.guardian_name || '—'}</td>
+                    <td style={{ padding: '10px 12px' }}>{s.routes_label}</td>
+                    <td style={{ padding: '10px 12px' }}>{s.supervisor || '—'}</td>
+                    <td style={{ padding: '10px 12px' }}><button style={btnGhost} onClick={() => removeSub(s.id)} disabled={busy}>إلغاء</button></td>
                   </tr>
                 ))}
               </tbody>
@@ -243,6 +274,51 @@ export default function TransportClient({ initialBuses, initialSubscribers, stud
           </div>
         )}
       </div>
+
+      {/* نافذة إضافة/تعديل باص */}
+      {editOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(10,37,64,.45)', display: 'grid', placeItems: 'center', zIndex: 999, padding: 16 }} onClick={() => !busy && setEditOpen(false)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 18, padding: 26, width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto' }} dir="rtl">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0, color: '#0F2744' }}>{form.id ? 'تعديل باص' : 'إضافة باص'}</h3>
+              <button onClick={() => setEditOpen(false)} style={{ background: 'none', border: 0, fontSize: 22, cursor: 'pointer', color: '#667' }}>×</button>
+            </div>
+
+            <label style={lbl}>المسارات</label>
+            {form.routes.map((r, i) => (
+              <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                <input style={input} value={r} onChange={(e) => setRouteAt(i, e.target.value)} placeholder={`مسار ${i + 1} — مثال: الخوض — الموالح`} />
+                {form.routes.length > 1 && (
+                  <button onClick={() => removeRouteField(i)} style={{ background: '#FBEAE8', color: '#C0392B', border: 0, borderRadius: 9, width: 42, cursor: 'pointer', fontSize: 16, fontFamily: 'inherit' }}>×</button>
+                )}
+              </div>
+            ))}
+            <button onClick={addRouteField} style={{ background: '#F2F5F8', color: '#163B68', border: 0, borderRadius: 9, padding: '8px 14px', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit', marginBottom: 14 }}>＋ أضف مسارًا آخر</button>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div><label style={lbl}>اسم السائق</label><input style={input} value={form.driver} onChange={(e) => setForm((p) => ({ ...p, driver: e.target.value }))} placeholder="اسم السائق" /></div>
+              <div><label style={lbl}>اسم المشرفة</label><input style={input} value={form.supervisor} onChange={(e) => setForm((p) => ({ ...p, supervisor: e.target.value }))} placeholder="اسم المشرفة (اختياري)" /></div>
+              <div><label style={lbl}>السعة</label><input style={input} type="number" value={form.capacity} onChange={(e) => setForm((p) => ({ ...p, capacity: e.target.value }))} /></div>
+              <div><label style={lbl}>الرسم الشهري</label><input style={input} type="number" step="0.001" value={form.fee} onChange={(e) => setForm((p) => ({ ...p, fee: e.target.value }))} placeholder="25.000" /></div>
+              <div style={{ gridColumn: '1 / -1' }}><label style={lbl}>جهة تحصيل رسوم النقل</label>
+                <select style={input} value={form.payTo} onChange={(e) => setForm((p) => ({ ...p, payTo: e.target.value }))}>
+                  <option value="school">المدرسة (ضمن الرسوم الدراسية)</option>
+                  <option value="driver">السائق مباشرةً (لا يدخل حسابات المدرسة)</option>
+                  <option value="private">توصيل خاص (ترتيب خاص — خارج حسابات المدرسة)</option>
+                </select>
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: '#8A94A6', margin: '10px 0' }}>
+              💡 "السائق مباشرة" و"توصيل خاص" لا تدخلان إيرادات المدرسة.
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+              <button style={{ ...btnGold, flex: 1 }} onClick={saveBus} disabled={busy}>{busy ? 'جارٍ الحفظ…' : form.id ? 'حفظ التعديلات' : 'إضافة الباص'}</button>
+              <button style={btnGhost} onClick={() => setEditOpen(false)}>إلغاء</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
