@@ -10,8 +10,8 @@ type Student = {
   guardian_name: string | null; guardian_phone: string | null
 }
 type BusData = {
-  bus_id: string; route: string; driver: string; capacity: number; fee: number
-  students: Student[]; student_count: number
+  bus_id: string; routes: string[]; routes_label: string; driver: string; supervisor: string | null
+  capacity: number; fee: number; students: Student[]; student_count: number
 }
 
 export default function BusRoster({ schoolName }: { schoolName?: string }) {
@@ -52,7 +52,7 @@ export default function BusRoster({ schoolName }: { schoolName?: string }) {
         body { padding: 32px; color: #1A2530; }
         h1 { color: #0F2744; font-size: 20px; margin: 0 0 4px; }
         .meta { color: #667; font-size: 13px; margin-bottom: 4px; }
-        .info { display: flex; gap: 24px; margin: 16px 0; padding: 14px; background: #F7FAFC; border-radius: 10px; font-size: 14px; }
+        .info { display: flex; flex-wrap: wrap; gap: 24px; margin: 16px 0; padding: 14px; background: #F7FAFC; border-radius: 10px; font-size: 14px; }
         .info b { color: #0F2744; }
         table { width: 100%; border-collapse: collapse; margin-top: 12px; }
         th, td { border: 1px solid #D5DCE5; padding: 9px 12px; font-size: 13.5px; text-align: right; }
@@ -63,8 +63,9 @@ export default function BusRoster({ schoolName }: { schoolName?: string }) {
       <h1>كشف طلاب الباص</h1>
       <div class="meta">${schoolName ?? 'مدرسة'}</div>
       <div class="info">
-        <span>المسار: <b>${bus.route}</b></span>
+        <span>المسارات: <b>${bus.routes_label}</b></span>
         <span>السائق: <b>${bus.driver}</b></span>
+        <span>المشرفة: <b>${bus.supervisor ?? '—'}</b></span>
         <span>عدد الطلاب: <b>${bus.student_count}</b> / ${bus.capacity}</span>
       </div>
       <table>
@@ -110,9 +111,9 @@ export default function BusRoster({ schoolName }: { schoolName?: string }) {
                 style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 0, cursor: 'pointer', textAlign: 'right', fontFamily: 'inherit' }}>
                 <ChevronDown size={17} style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s', color: '#667' }} />
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14.5, color: '#0F2744' }}>{bus.route}</div>
+                  <div style={{ fontWeight: 700, fontSize: 14.5, color: '#0F2744' }}>{bus.routes_label}</div>
                   <div style={{ fontSize: 12.5, color: '#667', marginTop: 2 }}>
-                    السائق: {bus.driver} · <Users size={12} style={{ display: 'inline', verticalAlign: -1 }} /> {bus.student_count} طالب
+                    السائق: {bus.driver}{bus.supervisor ? ` · المشرفة: ${bus.supervisor}` : ''} · <Users size={12} style={{ display: 'inline', verticalAlign: -1 }} /> {bus.student_count} طالب
                   </div>
                 </div>
               </button>
