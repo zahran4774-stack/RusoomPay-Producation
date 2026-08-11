@@ -22,12 +22,13 @@ export default async function ParentPage() {
     .select('name, vat_number, currency, bank_iban, bank_holder, bank_name')
     .single()
 
-  const [{ data: children }, { data: fees }, { data: receipts }, { data: notifications }, { data: certificates }] = await Promise.all([
+  const [{ data: children }, { data: fees }, { data: receipts }, { data: notifications }, { data: certificates }, { data: certificateRequests }] = await Promise.all([
     supabase.rpc('parent_children'),
     supabase.rpc('parent_fees'),
     supabase.rpc('parent_receipts'),
     supabase.rpc('my_notifications', { p_limit: 20 }),
     supabase.rpc('parent_certificates'),
+    supabase.rpc('parent_certificate_requests'),
   ])
 
   return (
@@ -43,6 +44,7 @@ export default async function ParentPage() {
       receipts={receipts || []}
       notifications={notifications || []}
       certificates={certificates || []}
+      certificateRequests={certificateRequests || []}
     />
   )
 }
