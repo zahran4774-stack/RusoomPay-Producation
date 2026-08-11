@@ -262,14 +262,14 @@ function SuppliersView({ suppliers, onChange }: { suppliers: Supplier[]; onChang
     setOpen(true)
   }
 
-  async function save() {
-    setErr('')
-    if (!f.name.trim()) { setErr('الاسم مطلوب'); return }
-    setBusy(true)
-    const { error } = await supabase.rpc('save_supplier', {
-      p_id: f.id || null, p_name: f.name, p_contact: f.contact || null,
-      p_phone: f.phone || null, p_email: f.email || null, p_vat: f.vat || null, p_active: f.active,
-    })
+  async function markPaid(p: Purchase) {
+  setBusyId(p.id)
+  const { error } = await supabase.rpc('mark_meal_purchase_paid', { p_id: p.id })
+  setBusyId(null)
+  if (error) { alert(error.message); return }
+  onChange()
+}
+
     setBusy(false)
     if (error) { setErr(error.message); return }
     setOpen(false)
