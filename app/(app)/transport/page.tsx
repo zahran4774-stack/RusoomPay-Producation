@@ -1,5 +1,5 @@
 // صفحة النقل المدرسي — مكوّن خادم
-// الباصات (مسار/سائق/سعر/جهة دفع) + اشتراكات الطلاب + الفوترة الشهرية
+// الباصات (مسارات متعددة/سائق/مشرفة/سعر/جهة دفع) + اشتراكات الطلاب + الفوترة الشهرية
 import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import { isStaff, type Role } from '@/lib/roles'
