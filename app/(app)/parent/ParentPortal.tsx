@@ -1,5 +1,5 @@
 'use client'
-// بوابة ولي الأمر التفاعلية — أبناؤه، الرسوم، الدفع (5 طرق)، الإيصالات، الإشعارات
+// بوابة ولي الأمر التفاعلية — أبناؤه، الرسوم، الدفع (5 طرق)، الإيصالات، الإشعارات، طلب الشهادات
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase-client'
@@ -10,17 +10,28 @@ type Fee = { fee_id: string; student_name: string; description: string; total: n
 type Receipt = { payment_id: string; student_name: string; description: string; amount: number; method: string; paid_at: string }
 type Notif = { id: string; body: string; is_read: boolean; created_at: string }
 type Cert = { id: string; student_name: string; kind: string; title: string; serial: string; body: string | null; file_path: string | null; file_name: string | null; created_at: string }
+type CertRequest = { id: string; student_name: string; kind: string; status: string; reason: string | null; created_at: string; reviewed_at: string | null }
 type School = { name: string; vat: string | null; currency: string; bankIban: string | null; bankHolder: string | null; bankName: string | null }
 
 const METHOD_LABEL: Record<string, string> = {
   thawani: 'ادفع الآن (ثواني)', bank: 'تحويل بنكي', applepay: 'Apple Pay', googlepay: 'Google Pay', onsite: 'نقداً عند المدرسة',
 }
 
+const CERT_KIND_LABEL: Record<string, string> = {
+  enrollment: 'شهادة قيد', clearance: 'براءة ذمة مالية', fees_statement: 'إفادة رسوم',
+}
+
+const REQ_STATUS_LABEL: Record<string, { t: string; c: string; bg: string }> = {
+  pending: { t: 'قيد المراجعة', c: '#8A6D0F', bg: '#FBF3D5' },
+  approved: { t: 'اعتُمد', c: '#1A7A45', bg: '#E6F4EC' },
+  rejected: { t: 'مرفوض', c: '#C0392B', bg: '#FBEAE8' },
+}
+
 const fmt = (n: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 
-export default function ParentPortal({ parentName, school, children_, fees, receipts, notifications, certificates }: {
+export default function ParentPortal({ parentName, school, children_, fees, receipts, notifications, certificates, certificateRequests }: {
   parentName: string; school: School
-  children_: Child[]; fees: Fee[]; receipts: Receipt[]; notifications: Notif[]; certificates: Cert[]
+  children_: Child[]; fees: Fee[]; receipts: Receipt[]; notifications: Notif[]; certificates: Cert[]; certificateRequests: CertRequest[]
 }) {
   const supabase = createClient()
   const [tab, setTab] = useState<'overview' | 'fees' | 'receipts' | 'certificates' | 'notifications'>('overview')
@@ -30,6 +41,7 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
   const [amount, setAmount] = useState('')
   const [bankRef, setBankRef] = useState('')
   const [busy, setBusy] = useState(false)
+  const [reqBusyId, setReqBusyId] = useState<string | null>(null)
   const [msg, setMsg] = useState('')
   const [redirecting, setRedirecting] = useState(false)
 
@@ -86,6 +98,14 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
     setTimeout(() => window.location.reload(), 1500)
   }
 
+  async function requestCert(studentId: string, kind: string) {
+    setReqBusyId(studentId + kind); setMsg('')
+    const { error } = await supabase.rpc('request_certificate', { p_student_id: studentId, p_kind: kind })
+    if (error) { setMsg('تعذّر إرسال الطلب: ' + error.message); setReqBusyId(null); return }
+    setMsg('✓ أُرسل طلبك — بانتظار اعتماد المدرسة')
+    setTimeout(() => window.location.reload(), 1200)
+  }
+
   async function downloadCert(c: Cert) {
     if (!c.file_path) return
     const { data } = await supabase.storage.from('certificates').createSignedUrl(c.file_path, 120)
@@ -129,6 +149,14 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
     background: 'rgba(240,194,75,.15)', padding: '7px 12px',
     borderRadius: 9, width: 'fit-content',
   }
+  const btnReq: React.CSSProperties = {
+    padding: '8px 14px', background: '#EEF2F9', color: '#163B68', border: 'none',
+    borderRadius: 9, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit',
+  }
+
+  // هل يوجد طلب معلّق لهذا الطالب/النوع؟
+  const hasPendingReq = (studentName: string, kind: string) =>
+    certificateRequests.some((r) => r.student_name === studentName && r.kind === kind && r.status === 'pending')
 
   return (
     <div style={{ minHeight: '100dvh', background: '#F4F6FA' }} dir="rtl">
@@ -274,18 +302,65 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
         )) : <div style={card_}>لا توجد إيصالات بعد</div>)}
 
         {/* الشهادات */}
-        {tab === 'certificates' && (byChild(certificates).length ? byChild(certificates).map((c) => (
-          <div key={c.id} style={card_}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-              <div><b style={{ color: '#0F2744' }}>{c.title}</b>
-                <div style={{ fontSize: 12.5, color: '#8A94A6' }}>{c.student_name} · {c.serial} · {new Date(c.created_at).toLocaleDateString('en-GB')}</div></div>
-              {c.kind === 'uploaded'
-                ? <button onClick={() => downloadCert(c)} style={{ padding: '7px 14px', background: '#fff', color: '#0F2744', border: '1.5px solid #DDE3EC', borderRadius: 9, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>⬇ تحميل</button>
-                : <button onClick={() => printCert(c)} style={{ padding: '7px 14px', background: '#fff', color: '#0F2744', border: '1.5px solid #DDE3EC', borderRadius: 9, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>🖨 طباعة</button>}
-            </div>
-            {c.body && <div style={{ fontSize: 12.5, color: '#556', marginTop: 8, lineHeight: 1.8 }}>{c.body}</div>}
-          </div>
-        )) : <div style={card_}>لا توجد شهادات بعد. تصدرها المدرسة عند الحاجة.</div>)}
+        {tab === 'certificates' && (
+          <>
+            {/* طلب شهادة قيد لكل ابن */}
+            {children_.length > 0 && (
+              <div style={card_}>
+                <b style={{ color: '#0F2744', display: 'block', marginBottom: 10 }}>طلب شهادة قيد</b>
+                {byChild(children_).map((c) => {
+                  const pending = hasPendingReq(c.student_name, 'enrollment')
+                  return (
+                    <div key={c.student_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '8px 0', borderBottom: '1px solid #F2F5F8' }}>
+                      <span style={{ fontSize: 13.5, color: '#0F2744', fontWeight: 600 }}>{c.student_name}</span>
+                      {pending ? (
+                        <span style={{ ...REQ_STATUS_LABEL.pending, fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 99, background: REQ_STATUS_LABEL.pending.bg, color: REQ_STATUS_LABEL.pending.c }}>
+                          ⏳ طلبك قيد المراجعة
+                        </span>
+                      ) : (
+                        <button style={btnReq} onClick={() => requestCert(c.student_id, 'enrollment')} disabled={reqBusyId === c.student_id + 'enrollment'}>
+                          {reqBusyId === c.student_id + 'enrollment' ? '...' : '📋 طلب شهادة قيد'}
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* طلباتي السابقة */}
+            {byChild(certificateRequests).length > 0 && (
+              <div style={card_}>
+                <b style={{ color: '#0F2744', display: 'block', marginBottom: 10 }}>طلباتي</b>
+                {byChild(certificateRequests).map((r) => {
+                  const s = REQ_STATUS_LABEL[r.status] || REQ_STATUS_LABEL.pending
+                  return (
+                    <div key={r.id} style={{ padding: '8px 0', borderBottom: '1px solid #F2F5F8' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                        <span style={{ fontSize: 13, color: '#0F2744' }}>{CERT_KIND_LABEL[r.kind] || r.kind} · {r.student_name}</span>
+                        <span style={{ fontSize: 11.5, fontWeight: 700, padding: '4px 10px', borderRadius: 99, background: s.bg, color: s.c }}>{s.t}</span>
+                      </div>
+                      {r.status === 'rejected' && r.reason && <div style={{ fontSize: 12, color: '#C0392B', marginTop: 4 }}>السبب: {r.reason}</div>}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {byChild(certificates).length ? byChild(certificates).map((c) => (
+              <div key={c.id} style={card_}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                  <div><b style={{ color: '#0F2744' }}>{c.title}</b>
+                    <div style={{ fontSize: 12.5, color: '#8A94A6' }}>{c.student_name} · {c.serial} · {new Date(c.created_at).toLocaleDateString('en-GB')}</div></div>
+                  {c.kind === 'uploaded'
+                    ? <button onClick={() => downloadCert(c)} style={{ padding: '7px 14px', background: '#fff', color: '#0F2744', border: '1.5px solid #DDE3EC', borderRadius: 9, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>⬇ تحميل</button>
+                    : <button onClick={() => printCert(c)} style={{ padding: '7px 14px', background: '#fff', color: '#0F2744', border: '1.5px solid #DDE3EC', borderRadius: 9, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>🖨 طباعة</button>}
+                </div>
+                {c.body && <div style={{ fontSize: 12.5, color: '#556', marginTop: 8, lineHeight: 1.8 }}>{c.body}</div>}
+              </div>
+            )) : <div style={card_}>لا توجد شهادات صادرة بعد.</div>}
+          </>
+        )}
 
         {/* الإشعارات */}
         {tab === 'notifications' && (notifications.length ? notifications.map((n) => (
