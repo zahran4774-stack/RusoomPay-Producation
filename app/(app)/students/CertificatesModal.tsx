@@ -1,5 +1,5 @@
 'use client'
-// سجلّ شهادات الطالب — توليد نصّي (قيد/براءة ذمة/إفادة رسوم) + رفع ملفات + أرشفة + طباعة
+// سجلّ شهادات الطالب — توليد نصّي (قيد/براءة ذمة/إفادة رسوم) + رفع ملفات + أرشفة + طباعة + طلبات معلّقة
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import { printReport } from '@/lib/print-report'
@@ -7,6 +7,10 @@ import { printReport } from '@/lib/print-report'
 type Cert = {
   id: string; kind: string; title: string; serial: string
   body: string | null; file_path: string | null; file_name: string | null; created_at: string
+}
+type Req = {
+  id: string; student_id: string; student_name: string; parent_name: string
+  kind: string; status: string; reason: string | null; created_at: string; reviewed_at: string | null
 }
 type School = { name: string; vat: string | null }
 
@@ -22,15 +26,22 @@ export default function CertificatesModal({ studentId, studentName, school, onCl
 }) {
   const supabase = createClient()
   const [certs, setCerts] = useState<Cert[]>([])
+  const [pendingReqs, setPendingReqs] = useState<Req[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [reqBusyId, setReqBusyId] = useState<string | null>(null)
   const [msg, setMsg] = useState('')
   const [upTitle, setUpTitle] = useState('')
   const [file, setFile] = useState<File | null>(null)
 
   async function load() {
-    const { data } = await supabase.rpc('student_certificates', { p_student_id: studentId })
-    setCerts(data || []); setLoading(false)
+    const [c, r] = await Promise.all([
+      supabase.rpc('student_certificates', { p_student_id: studentId }),
+      supabase.rpc('certificate_requests_list', { p_status: 'pending' }),
+    ])
+    setCerts(c.data || [])
+    setPendingReqs((r.data || []).filter((x: Req) => x.student_id === studentId))
+    setLoading(false)
   }
   useEffect(() => { load() /* eslint-disable-next-line */ }, [studentId])
 
@@ -39,6 +50,23 @@ export default function CertificatesModal({ studentId, studentName, school, onCl
     const { error } = await supabase.rpc('generate_certificate', { p_student_id: studentId, p_kind: kind })
     if (error) { setMsg('تعذّر الإصدار: ' + error.message); setBusy(false); return }
     await load(); setMsg('✓ صدرت الشهادة وحُفظت في السجلّ'); setBusy(false)
+  }
+
+  async function approveReq(id: string) {
+    setReqBusyId(id); setMsg('')
+    const { error } = await supabase.rpc('approve_certificate_request', { p_request_id: id })
+    setReqBusyId(null)
+    if (error) { setMsg('تعذّر الاعتماد: ' + error.message); return }
+    await load(); setMsg('✓ اعتُمد الطلب وصدرت الشهادة في حساب ولي الأمر')
+  }
+
+  async function rejectReq(id: string) {
+    const reason = window.prompt('سبب الرفض (اختياري):') || ''
+    setReqBusyId(id); setMsg('')
+    const { error } = await supabase.rpc('reject_certificate_request', { p_request_id: id, p_reason: reason })
+    setReqBusyId(null)
+    if (error) { setMsg('تعذّر الرفض: ' + error.message); return }
+    await load(); setMsg('✓ رُفض الطلب')
   }
 
   async function upload() {
@@ -88,6 +116,8 @@ export default function CertificatesModal({ studentId, studentName, school, onCl
   const cardS: React.CSSProperties = { background: '#fff', borderRadius: 12, padding: 16, marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,.05)' }
   const btnGold: React.CSSProperties = { background: '#D4A017', color: '#08172B', border: 'none', borderRadius: 9, padding: '9px 14px', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }
   const btnSm: React.CSSProperties = { background: '#fff', color: '#0F2744', border: '1px solid #DDE3EC', borderRadius: 8, padding: '6px 12px', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }
+  const btnApprove: React.CSSProperties = { background: '#1A7A45', color: '#fff', border: 'none', borderRadius: 8, padding: '6px 14px', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }
+  const btnReject: React.CSSProperties = { background: '#fff', color: '#C0392B', border: '1px solid #EAD1CC', borderRadius: 8, padding: '6px 14px', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }
   const input: React.CSSProperties = { width: '100%', padding: 10, borderRadius: 9, border: '1.5px solid #DDE3EC', fontFamily: 'inherit', fontSize: 14, marginBottom: 10 }
 
   return (
@@ -103,6 +133,30 @@ export default function CertificatesModal({ studentId, studentName, school, onCl
 
         <div style={{ padding: 20 }}>
           {msg && <div style={{ ...cardS, color: msg.startsWith('✓') ? '#1A7A45' : '#C0392B' }}>{msg}</div>}
+
+          {/* طلبات شهادات معلّقة من ولي الأمر */}
+          {!loading && pendingReqs.length > 0 && (
+            <div style={{ ...cardS, border: '1.5px solid #F0C24B', background: '#FFFBF0' }}>
+              <b style={{ color: '#0F2744', display: 'block', marginBottom: 12 }}>⏳ طلبات شهادات من ولي الأمر ({pendingReqs.length})</b>
+              {pendingReqs.map((r) => {
+                const b = KIND_BADGE[r.kind] || KIND_BADGE.uploaded
+                return (
+                  <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '10px 0', borderBottom: '1px solid #F2F5F8' }}>
+                    <div>
+                      <span style={{ background: b.bg, color: b.c, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 99 }}>{b.t}</span>
+                      <div style={{ fontSize: 12, color: '#8A94A6', marginTop: 4 }}>طلب من: {r.parent_name} · {new Date(r.created_at).toLocaleDateString('en-GB')}</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button style={btnApprove} onClick={() => approveReq(r.id)} disabled={reqBusyId === r.id}>
+                        {reqBusyId === r.id ? '...' : '✓ اعتماد وإصدار'}
+                      </button>
+                      <button style={btnReject} onClick={() => rejectReq(r.id)} disabled={reqBusyId === r.id}>رفض</button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
 
           {/* توليد شهادة نصّية */}
           <div style={cardS}>
