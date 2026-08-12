@@ -14,8 +14,8 @@ type CertRequest = { id: string; student_name: string; kind: string; status: str
 type School = { name: string; vat: string | null; currency: string; bankIban: string | null; bankHolder: string | null; bankName: string | null }
 
 const METHOD_LABEL: Record<string, string> = {
-    thawani: 'دفع إلكتروني', bank: 'تحويل بنكي', applepay: 'Apple Pay', googlepay: 'Google Pay', onsite: 'نقداً عند المدرسة',
-
+  thawani: 'دفع إلكتروني', bank: 'تحويل بنكي', applepay: 'Apple Pay', googlepay: 'Google Pay', onsite: 'نقداً عند المدرسة',
+}
 
 const CERT_KIND_LABEL: Record<string, string> = {
   enrollment: 'شهادة قيد', clearance: 'براءة ذمة مالية', fees_statement: 'إفادة رسوم',
