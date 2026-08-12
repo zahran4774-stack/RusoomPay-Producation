@@ -6,6 +6,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase-client'
 import Logo from '@/app/Logo'
+import Captcha from '@/components/auth/Captcha'
 
 export default function StaffRegisterPage() {
   const supabase = createClient()
@@ -16,6 +17,7 @@ export default function StaffRegisterPage() {
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault()
@@ -29,6 +31,10 @@ export default function StaffRegisterPage() {
       setError('كلمتا المرور غير متطابقتين')
       return
     }
+    if (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && !captchaToken) {
+      setError('يرجى إكمال التحقق الأمني (CAPTCHA)')
+      return
+    }
 
     setLoading(true)
 
@@ -38,6 +44,7 @@ export default function StaffRegisterPage() {
       password,
       options: {
         emailRedirectTo: `${window.location.origin}/login`,
+        captchaToken: captchaToken || undefined,
       },
     })
 
@@ -137,6 +144,10 @@ export default function StaffRegisterPage() {
                   required autoComplete="new-password" placeholder="أعد إدخال كلمة المرور"
                   aria-label="تأكيد كلمة المرور"
                 />
+              </div>
+
+              <div style={{ margin: '4px 0 16px' }}>
+                <Captcha onVerify={setCaptchaToken} onExpire={() => setCaptchaToken(null)} />
               </div>
 
               {error && <div className="sr-msg err" role="alert">{error}</div>}
