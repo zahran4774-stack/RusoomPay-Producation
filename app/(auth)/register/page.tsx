@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
 import ConsentCheckbox from '@/components/legal/ConsentCheckbox'
+import Captcha from '@/components/auth/Captcha'
 import { recordConsent } from '@/app/actions/legal'
 
 const COUNTRY_CUR: Record<string, { cur: string; label: string }> = {
@@ -24,6 +25,7 @@ export default function RegisterPage() {
   const [sent, setSent] = useState(false)
   const [crAlert, setCrAlert] = useState(false)
   const [agreed, setAgreed] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   // الدول المفعّلة من مالك المنصّة (افتراضياً عمان حتى تُحمّل القائمة)
   const [allowed, setAllowed] = useState<string[]>(['OM'])
   useEffect(() => {
@@ -67,6 +69,9 @@ export default function RegisterPage() {
     e.preventDefault()
     setError('')
     if (!agreed) return setError('يجب الموافقة على شروط الخدمة وسياسة الخصوصية')
+    if (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && !captchaToken) {
+      return setError('يرجى إكمال التحقق الأمني (CAPTCHA)')
+    }
     const pwIssue = passwordIssue(f.password)
     if (pwIssue) return setError(pwIssue)
     if (f.password !== f.password2) return setError('كلمتا المرور غير متطابقتين')
@@ -81,7 +86,7 @@ export default function RegisterPage() {
       password: f.password,
       options: {
         emailRedirectTo: `${window.location.origin}/login`,
-        // captchaToken: hcaptchaToken, // فعّله بعد ربط hCaptcha (انظر الدليل)
+        captchaToken: captchaToken || undefined,
         data: {
           school_name: f.name, branch: f.branch, country: f.country,
           currency: COUNTRY_CUR[f.country].cur, cr: f.cr, license: f.license,
@@ -188,6 +193,10 @@ export default function RegisterPage() {
 
         <div style={{ margin: '4px 0 16px' }}>
           <ConsentCheckbox checked={agreed} onChange={setAgreed} disabled={loading} />
+        </div>
+
+        <div style={{ margin: '4px 0 16px' }}>
+          <Captcha onVerify={setCaptchaToken} onExpire={() => setCaptchaToken(null)} />
         </div>
 
         {error && <div style={{ color: '#C0392B', fontSize: 13, marginBottom: 12 }}>{error}</div>}
