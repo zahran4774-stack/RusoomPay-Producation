@@ -31,7 +31,15 @@ export default async function StudentsPage() {
     supabase.from('schools').select('name, vat_number, section_styles').single(),
     supabase.from('students')
       .select('id, code, full_name, grade, section, guardian_name, guardian_phone, guardian_email, birth_date, gender, status')
+      // ⚠️ إصلاح: بدون هذا الفلتر، الطلاب المحذوفين بصمت (soft_delete لا يغيّر
+      // status، فتبقى 'active') كانوا يظهرون بقائمة الطلاب كأنهم حقيقيون —
+      // اكتُشف عبر تناقض بين هذي الصفحة (32) وشاشة الاشتراك (2 فعلياً)
+      .is('deleted_at', null)
       .order('code'),
+      // لا نضع .limit() هنا: أي سقف على هذا الاستعلام يعني قطع طلاب حقيقيين
+      // بصمت (خارج الصفحة، خارج الطباعة، خارج البحث) بدون أي رسالة خطأ توضّح
+      // السبب — أخطر من مشكلة الأداء الأصلية. التنبيه أدناه (عدّاد فعلي بعد
+      // الجلب) يحذّر دون أن يُسقط أي بيانات.
   ])
 
   // التحقّق من الصلاحية بعد الجلب (الجلب المتوازي أسرع من التحقّق المتسلسل)
@@ -71,6 +79,14 @@ export default async function StudentsPage() {
       </div>
 
       {error && <div style={{ color: '#C0392B' }}>تعذّر جلب البيانات: {error.message}</div>}
+
+      {(students?.length ?? 0) >= 1500 && (
+        <div style={{ background: '#FFF8E7', border: '1.5px solid #F0DFA8', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: '#8A6D1D' }}>
+          ⚠️ عدد الطلاب ({students!.length}) صار كبيراً بما يكفي ليبدأ يؤثر على سرعة
+          تحميل هذه الصفحة. لا يوجد فقدان بيانات — كل الطلاب معروضون بلا استثناء —
+          لكن يُنصح بترقيم حقيقي للصفحة قريباً بدل الاعتماد على جلب الكل دفعة واحدة.
+        </div>
+      )}
 
       <div style={{ marginBottom: 18, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
                 <AddStudent />
