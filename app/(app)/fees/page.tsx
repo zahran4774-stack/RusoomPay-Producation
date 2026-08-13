@@ -29,7 +29,12 @@ export default async function FeesPage() {
       .single(),
     supabase.from('students')
       .select('id, code, full_name, grade, section, student_fees(id, description, total, paid, due_date)')
+      // ⚠️ إصلاح: نفس سبب صفحة الطلاب — استُثني الطلاب المحذوفون بصمت
+      .is('deleted_at', null)
       .order('code'),
+      // عمداً بلا .limit() — نفس سبب صفحة الطلاب: أي سقف هنا يعني اختفاء
+      // فواتير طلاب حقيقيين بصمت. لا حل صحيح لهذا الاستعلام غير ترقيم حقيقي
+      // (يحتاج تصميماً منفصلاً بسبب اعتماد الطباعة/التقارير على القائمة كاملة).
     supabase.rpc('pending_payments_list'),
   ])
 
