@@ -9,6 +9,35 @@ type Plan = { id: string; name: string; fee: number; plan_type: 'annual' | 'mont
 type Sub = { student_id: string; student_name: string; guardian: string; plan_name: string }
 type Student = { id: string; full_name: string; guardian_name: string | null }
 
+// أسماء الأشهر بالعربية — تُستخدم لتوليد قائمة اختيار الشهر ديناميكياً
+const MONTH_NAMES_AR = [
+  'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+  'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر',
+]
+
+// يبني قائمة أشهر من بداية السنة الحالية وحتى نهاية 2050 — بدل قائمة ثابتة
+// كانت مكتوبة يدوياً بـ5 أشهر فقط (يونيو–أكتوبر 2026) وتتوقف عن العمل بعدها
+function buildMonthOptions(): { value: string; label: string }[] {
+  const startYear = new Date().getFullYear()
+  const endYear = 2050
+  const options: { value: string; label: string }[] = []
+  for (let year = startYear; year <= endYear; year++) {
+    for (let m = 1; m <= 12; m++) {
+      const value = `${year}-${String(m).padStart(2, '0')}`
+      options.push({ value, label: `${MONTH_NAMES_AR[m - 1]} ${year}` })
+    }
+  }
+  return options
+}
+
+// الشهر الحالي الفعلي بصيغة YYYY-MM — بدل قيمة مثبّتة بالكود كانت دائماً "2026-06"
+function currentMonthValue(): string {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
+
+const MONTH_OPTIONS = buildMonthOptions()
+
 const card: React.CSSProperties = {
   background: '#fff', border: '1px solid #E6EBF1', borderRadius: 14,
   padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,.05)', marginBottom: 16,
@@ -51,7 +80,7 @@ export default function CafeteriaClient({ initialPlans, initialSubscribers, stud
   const [selPlan, setSelPlan] = useState('')
   const [available, setAvailable] = useState<Student[]>(students)
   // الفوترة
-  const [month, setMonth] = useState('2026-06')
+  const [month, setMonth] = useState(currentMonthValue())
 
   async function refresh() {
     const [{ data: p }, { data: s }, { data: avail }] = await Promise.all([
@@ -208,11 +237,9 @@ export default function CafeteriaClient({ initialPlans, initialSubscribers, stud
         <div style={{ display: 'flex', gap: 10, alignItems: 'end', flexWrap: 'wrap' }}>
           <div><label style={{ fontSize: 13, fontWeight: 600, color: '#445', display: 'block', marginBottom: 6 }}>شهر الفوترة</label>
             <select style={input} value={month} onChange={(e) => setMonth(e.target.value)}>
-              <option value="2026-06">يونيو 2026</option>
-              <option value="2026-07">يوليو 2026</option>
-              <option value="2026-08">أغسطس 2026</option>
-              <option value="2026-09">سبتمبر 2026</option>
-              <option value="2026-10">أكتوبر 2026</option>
+              {MONTH_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
             </select></div>
           <button style={btnGold} onClick={bill} disabled={busy}>⚡ فوترة الشهريين غير المفوترين لهذا الشهر</button>
         </div>
