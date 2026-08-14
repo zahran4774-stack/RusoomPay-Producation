@@ -89,7 +89,8 @@ export default async function StudentsPage() {
       )}
 
       <div style={{ marginBottom: 18, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                <AddStudent />
+      <AddStudent sectionOptions={sectionOptions} />
+ 
 
         <ImportStudents />
         <div id="invite-parents" style={{ scrollMarginTop: 80 }}>
