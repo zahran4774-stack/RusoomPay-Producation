@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
-import { GULF_COUNTRIES, DEFAULT_COUNTRY, cleanLocalNumber, isValidLocalNumber } from '@/lib/academic'
+import { GULF_COUNTRIES, DEFAULT_COUNTRY, cleanLocalNumber, isValidLocalNumber, GRADES, SECTIONS } from '@/lib/academic'
 
 export default function AddStudent() {
   const router = useRouter()
@@ -13,8 +13,21 @@ export default function AddStudent() {
   const [ok, setOk] = useState(false)
 
   const [mealPlans, setMealPlans] = useState<{ id: string; name: string; fee: number }[]>([])
-  const [mealPlan, setMealPlan] = useState('')
-  const [mealAnnual, setMealAnnual] = useState('')
+  // ⚠️ صار Record<planId, annualAmount> بدل قيمة واحدة — يدعم اختيار أكثر
+  // من خطة تغذية لنفس الطالب (فطور + غداء مثلاً)، كل خطة بمبلغها السنوي
+  // الخاص. تفعيل الدعم الفعلي تطلّب أيضاً إصلاح 3 دوال بقاعدة البيانات
+  // كانت تفترض خطة واحدة فقط لكل طالب (add_annual_meal_fee, subscribe_meal,
+  // bill_cafeteria) — بلا هذي الإصلاحات كانت الفوترة الشهرية ستفوّت الخطة
+  // الثانية بصمت كل شهر.
+  const [selectedMeals, setSelectedMeals] = useState<Record<string, string>>({})
+  const toggleMealPlan = (planId: string) => {
+    setSelectedMeals((prev) => {
+      const next = { ...prev }
+      if (planId in next) delete next[planId]
+      else next[planId] = ''
+      return next
+    })
+  }
 
   useEffect(() => {
     supabase.rpc('cafeteria_plans').then(({ data }) => { if (data) setMealPlans(data) })
@@ -63,13 +76,17 @@ export default function AddStudent() {
     setSaving(false)
     if (error) { setErr(error.message); return }
     setOk(true)
-    // تغذية سنوية تُضاف لرسوم الطالب (لا فوترة شهرية)
-    if (newId && mealPlan && mealAnnual && Number(mealAnnual) > 0) {
-      await supabase.rpc('add_annual_meal_fee', {
-        p_student: newId, p_plan: mealPlan, p_annual_amount: Number(mealAnnual),
-      })
+    // تغذية سنوية تُضاف لرسوم الطالب (لا فوترة شهرية) — خطة تلو الأخرى
+    if (newId) {
+      for (const [planId, amount] of Object.entries(selectedMeals)) {
+        if (Number(amount) > 0) {
+          await supabase.rpc('add_annual_meal_fee', {
+            p_student: newId, p_plan: planId, p_annual_amount: Number(amount),
+          })
+        }
+      }
     }
-    setMealPlan(''); setMealAnnual('')
+    setSelectedMeals({})
     setF({ full_name: '', grade: '', section: '', guardian_name: '', guardian_phone: '', guardian_email: '', birth_date: '', gender: '', code: '', annual_fee: '' })
     setCountryCode(DEFAULT_COUNTRY)
     router.refresh()
@@ -103,11 +120,17 @@ export default function AddStudent() {
         </div>
         <div style={cell}>
           <label style={label}>الصف / المرحلة *</label>
-          <input style={input} value={f.grade} onChange={(e) => set('grade', e.target.value)} placeholder="الصف الخامس" />
+          <select style={input} value={f.grade} onChange={(e) => set('grade', e.target.value)}>
+            <option value="">— اختر الصف —</option>
+            {GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
+          </select>
         </div>
         <div style={cell}>
           <label style={label}>الشعبة</label>
-          <input style={input} value={f.section} onChange={(e) => set('section', e.target.value)} placeholder="أ" />
+          <select style={input} value={f.section} onChange={(e) => set('section', e.target.value)}>
+            <option value="">— اختر الشعبة —</option>
+            {SECTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
         </div>
         <div style={cell}>
           <label style={label}>الرقم المدرسي (تلقائي إن تُرك فارغاً)</label>
@@ -160,21 +183,28 @@ export default function AddStudent() {
           <input type="number" style={input} value={f.annual_fee} onChange={(e) => set('annual_fee', e.target.value)} placeholder="0" dir="ltr" />
         </div>
         {mealPlans.length > 0 && (
-          <>
-            <div style={cell}>
-              <label style={label}>باقة التغذية (سنوية — تُضاف للرسوم)</label>
-              <select style={input} value={mealPlan} onChange={(e) => setMealPlan(e.target.value)}>
-                <option value="">— بدون تغذية —</option>
-                {mealPlans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+          <div style={{ flex: '1 1 100%' }}>
+            <label style={label}>باقات التغذية (سنوية — تُضاف للرسوم، يمكن اختيار أكثر من باقة)</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {mealPlans.map((p) => {
+                const checked = p.id in selectedMeals
+                return (
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: '1px solid #E3E8EE', borderRadius: 10, background: checked ? '#F4F8F6' : '#fff' }}>
+                    <input type="checkbox" checked={checked} onChange={() => toggleMealPlan(p.id)} style={{ width: 18, height: 18, cursor: 'pointer' }} />
+                    <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: '#0F2744' }}>{p.name}</span>
+                    {checked && (
+                      <input
+                        type="number" style={{ ...input, width: 130 }} dir="ltr"
+                        value={selectedMeals[p.id]}
+                        onChange={(e) => setSelectedMeals((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                        placeholder="المبلغ السنوي (ر.ع)"
+                      />
+                    )}
+                  </div>
+                )
+              })}
             </div>
-            {mealPlan && (
-              <div style={cell}>
-                <label style={label}>مبلغ التغذية السنوي (ر.ع)</label>
-                <input type="number" style={input} value={mealAnnual} onChange={(e) => setMealAnnual(e.target.value)} placeholder="مثال: 180" dir="ltr" />
-              </div>
-            )}
-          </>
+          </div>
         )}
       </div>
 
