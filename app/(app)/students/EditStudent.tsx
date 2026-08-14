@@ -3,7 +3,25 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
-import { GRADES, SECTIONS, isValidGrade, isValidSection } from '@/lib/academic'
+import { GRADES, SECTIONS, isValidGrade, isValidSection, GULF_COUNTRIES, DEFAULT_COUNTRY, cleanLocalNumber, isValidLocalNumber } from '@/lib/academic'
+
+// يفصل رقماً مخزَّناً (قد يكون بصيغة قديمة محلية بلا كود دولة، أو دولية
+// كاملة +XXXXXXXXXXX) إلى {كود الدولة، الرقم المحلي} لعرضهما بحقلين منفصلين.
+// بيانات الطلاب الحاليين (قبل هذا الإصلاح) أغلبها مخزّنة كرقم محلي 8 خانات
+// بلا كود — لذلك الافتراض الآمن لها هو عُمان (نفس افتراض toE164 السابق).
+function splitPhone(stored: string | null): { code: string; local: string } {
+  const raw = (stored || '').trim()
+  if (!raw) return { code: DEFAULT_COUNTRY, local: '' }
+  const digits = raw.startsWith('+') ? raw.slice(1) : raw
+  for (const c of GULF_COUNTRIES) {
+    if (digits.startsWith(c.code) && digits.length === c.code.length + c.localLen) {
+      return { code: c.code, local: digits.slice(c.code.length) }
+    }
+  }
+  // لم يطابق أي كود دولة معروف — نعرضه كما هو تحت الافتراضي، والتحقق
+  // البصري (رقم غير صالح) ينبّه الموظف ليصحّحه بنفسه
+  return { code: DEFAULT_COUNTRY, local: cleanLocalNumber(digits) }
+}
 
 export type StudentEditable = {
   id: string
@@ -30,12 +48,18 @@ export default function EditStudent({ student }: { student: StudentEditable }) {
     grade: student.grade ?? '',
     section: student.section ?? '',
     guardian_name: student.guardian_name ?? '',
-    guardian_phone: student.guardian_phone ?? '',
+    guardian_phone: splitPhone(student.guardian_phone).local,
     guardian_email: student.guardian_email ?? '',
     birth_date: student.birth_date ?? '',
     gender: student.gender ?? '',
   })
+  const [countryCode, setCountryCode] = useState(splitPhone(student.guardian_phone).code)
+  const country = GULF_COUNTRIES.find((c) => c.code === countryCode)
+  const phoneValid = f.guardian_phone === '' || isValidLocalNumber(f.guardian_phone, countryCode)
   const set = (k: string, v: string) => setF((p) => ({ ...p, [k]: v }))
+  const onPhoneChange = (raw: string) => {
+    set('guardian_phone', cleanLocalNumber(raw).slice(0, country?.localLen ?? 9))
+  }
 
   // حماية: لو حمل الطالب قيمة قديمة غير معتمدة، اعرضها كخيار مؤقت
   // كي لا تختفي القائمة فارغة — يراها المستخدم ويصحّحها.
@@ -46,14 +70,16 @@ export default function EditStudent({ student }: { student: StudentEditable }) {
     setErr(null)
     if (!f.full_name.trim()) { setErr('اسم الطالب مطلوب'); return }
     if (!f.grade.trim()) { setErr('الصف/المرحلة مطلوب'); return }
+    if (f.guardian_phone && !phoneValid) { setErr('رقم ولي الأمر غير مكتمل أو غير صالح لهذه الدولة'); return }
     setSaving(true)
+    const fullPhone = f.guardian_phone ? `+${countryCode}${f.guardian_phone}` : null
     const { error } = await supabase.rpc('update_student', {
       p_student_id: student.id,
       p_full_name: f.full_name,
       p_grade: f.grade,
       p_section: f.section || null,
       p_guardian_name: f.guardian_name || null,
-      p_guardian_phone: f.guardian_phone || null,
+      p_guardian_phone: fullPhone,
       p_guardian_email: f.guardian_email || null,
       p_birth_date: f.birth_date || null,
       p_gender: f.gender || null,
@@ -122,7 +148,25 @@ export default function EditStudent({ student }: { student: StudentEditable }) {
           </div>
           <div style={cell}>
             <label style={label}>رقم ولي الأمر</label>
-            <input style={input} value={f.guardian_phone} onChange={(e) => set('guardian_phone', e.target.value)} dir="ltr" />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <select
+                value={countryCode}
+                onChange={(e) => { setCountryCode(e.target.value); set('guardian_phone', '') }}
+                style={{ ...select, flex: '0 0 100px', padding: '0 6px' }}
+              >
+                {GULF_COUNTRIES.map((c) => (
+                  <option key={c.code} value={c.code}>{c.flag} +{c.code}</option>
+                ))}
+              </select>
+              <input
+                style={{ ...input, direction: 'ltr', textAlign: 'right', borderColor: f.guardian_phone && !phoneValid ? '#E0A3A3' : '#E3E8EE' }}
+                value={f.guardian_phone} onChange={(e) => onPhoneChange(e.target.value)}
+                inputMode="numeric" dir="ltr"
+              />
+            </div>
+            {f.guardian_phone && !phoneValid && (
+              <div style={{ color: '#C0392B', fontSize: 11, marginTop: 4 }}>رقم غير مكتمل أو غير صالح لهذه الدولة</div>
+            )}
           </div>
           <div style={cell}>
             <label style={label}>بريد ولي الأمر</label>
