@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
+import { GULF_COUNTRIES, DEFAULT_COUNTRY, cleanLocalNumber, isValidLocalNumber } from '@/lib/academic'
 
 export default function AddStudent() {
   const router = useRouter()
@@ -24,20 +25,35 @@ export default function AddStudent() {
     guardian_phone: '', guardian_email: '', birth_date: '', gender: '',
     code: '', annual_fee: '',
   })
+  // كود الدولة لرقم ولي الأمر — منفصل عن guardian_phone (اللي يبقى الرقم
+  // المحلي بس، 8-9 خانات حسب الدولة). يُدمَجان وقت الحفظ إلى صيغة دولية
+  // كاملة (+968XXXXXXXX)، فتصير التخمينات بملف lib/phone.ts غير ضرورية
+  // لأي رقم يُضاف من الآن فصاعداً — المشكلة الأصلية كانت غياب هذا الاختيار
+  // الصريح، لا الكود التلقائي نفسه.
+  const [countryCode, setCountryCode] = useState(DEFAULT_COUNTRY)
+  const country = GULF_COUNTRIES.find((c) => c.code === countryCode)
+  const phoneValid = f.guardian_phone === '' || isValidLocalNumber(f.guardian_phone, countryCode)
 
   const set = (k: string, v: string) => setF((p) => ({ ...p, [k]: v }))
+  const onPhoneChange = (raw: string) => {
+    set('guardian_phone', cleanLocalNumber(raw).slice(0, country?.localLen ?? 9))
+  }
 
   async function submit() {
     setErr(null); setOk(false)
     if (!f.full_name.trim()) { setErr('اسم الطالب مطلوب'); return }
     if (!f.grade.trim()) { setErr('الصف/المرحلة مطلوب'); return }
+    if (f.guardian_phone && !phoneValid) { setErr('رقم ولي الأمر غير مكتمل أو غير صالح لهذه الدولة'); return }
     setSaving(true)
+    // ندمج كود الدولة صراحةً مع الرقم المحلي — يُخزَّن رقماً دولياً كاملاً
+    // (+968XXXXXXXX)، فلا حاجة لاحقاً لتخمين الدولة وقت إرسال واتساب
+    const fullPhone = f.guardian_phone ? `+${countryCode}${f.guardian_phone}` : null
     const { data: newId, error } = await supabase.rpc('add_student', {
       p_full_name: f.full_name,
       p_grade: f.grade,
       p_section: f.section || null,
       p_guardian_name: f.guardian_name || null,
-      p_guardian_phone: f.guardian_phone || null,
+      p_guardian_phone: fullPhone,
       p_guardian_email: f.guardian_email || null,
       p_birth_date: f.birth_date || null,
       p_gender: f.gender || null,
@@ -55,6 +71,7 @@ export default function AddStudent() {
     }
     setMealPlan(''); setMealAnnual('')
     setF({ full_name: '', grade: '', section: '', guardian_name: '', guardian_phone: '', guardian_email: '', birth_date: '', gender: '', code: '', annual_fee: '' })
+    setCountryCode(DEFAULT_COUNTRY)
     router.refresh()
     setTimeout(() => { setOk(false); setOpen(false) }, 1200)
   }
@@ -102,7 +119,25 @@ export default function AddStudent() {
         </div>
         <div style={cell}>
           <label style={label}>رقم ولي الأمر</label>
-          <input style={input} value={f.guardian_phone} onChange={(e) => set('guardian_phone', e.target.value)} placeholder="9xxxxxxx" dir="ltr" />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <select
+              value={countryCode}
+              onChange={(e) => { setCountryCode(e.target.value); set('guardian_phone', '') }}
+              style={{ ...input, flex: '0 0 108px', cursor: 'pointer', padding: '0 8px' }}
+            >
+              {GULF_COUNTRIES.map((c) => (
+                <option key={c.code} value={c.code}>{c.flag} +{c.code}</option>
+              ))}
+            </select>
+            <input
+              style={{ ...input, direction: 'ltr', textAlign: 'right', borderColor: f.guardian_phone && !phoneValid ? '#E0A3A3' : '#E3E8EE' }}
+              value={f.guardian_phone} onChange={(e) => onPhoneChange(e.target.value)}
+              inputMode="numeric" placeholder={country?.code === '968' ? '9xxxxxxx' : 'xxxxxxxx'} dir="ltr"
+            />
+          </div>
+          {f.guardian_phone && !phoneValid && (
+            <div style={{ color: '#C0392B', fontSize: 12, marginTop: 4 }}>رقم غير مكتمل أو غير صالح لهذه الدولة</div>
+          )}
         </div>
         <div style={cell}>
           <label style={label}>بريد ولي الأمر</label>
