@@ -2,9 +2,9 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
-import { GULF_COUNTRIES, DEFAULT_COUNTRY, cleanLocalNumber, isValidLocalNumber, GRADES, SECTIONS } from '@/lib/academic'
+import { GULF_COUNTRIES, DEFAULT_COUNTRY, cleanLocalNumber, isValidLocalNumber, GRADES } from '@/lib/academic'
 
-export default function AddStudent() {
+export default function AddStudent({ sectionOptions }: { sectionOptions: string[] }) {
   const router = useRouter()
   const supabase = createClient()
   const [open, setOpen] = useState(false)
@@ -13,12 +13,6 @@ export default function AddStudent() {
   const [ok, setOk] = useState(false)
 
   const [mealPlans, setMealPlans] = useState<{ id: string; name: string; fee: number }[]>([])
-  // ⚠️ صار Record<planId, annualAmount> بدل قيمة واحدة — يدعم اختيار أكثر
-  // من خطة تغذية لنفس الطالب (فطور + غداء مثلاً)، كل خطة بمبلغها السنوي
-  // الخاص. تفعيل الدعم الفعلي تطلّب أيضاً إصلاح 3 دوال بقاعدة البيانات
-  // كانت تفترض خطة واحدة فقط لكل طالب (add_annual_meal_fee, subscribe_meal,
-  // bill_cafeteria) — بلا هذي الإصلاحات كانت الفوترة الشهرية ستفوّت الخطة
-  // الثانية بصمت كل شهر.
   const [selectedMeals, setSelectedMeals] = useState<Record<string, string>>({})
   const toggleMealPlan = (planId: string) => {
     setSelectedMeals((prev) => {
@@ -38,11 +32,6 @@ export default function AddStudent() {
     guardian_phone: '', guardian_email: '', birth_date: '', gender: '',
     code: '', annual_fee: '',
   })
-  // كود الدولة لرقم ولي الأمر — منفصل عن guardian_phone (اللي يبقى الرقم
-  // المحلي بس، 8-9 خانات حسب الدولة). يُدمَجان وقت الحفظ إلى صيغة دولية
-  // كاملة (+968XXXXXXXX)، فتصير التخمينات بملف lib/phone.ts غير ضرورية
-  // لأي رقم يُضاف من الآن فصاعداً — المشكلة الأصلية كانت غياب هذا الاختيار
-  // الصريح، لا الكود التلقائي نفسه.
   const [countryCode, setCountryCode] = useState(DEFAULT_COUNTRY)
   const country = GULF_COUNTRIES.find((c) => c.code === countryCode)
   const phoneValid = f.guardian_phone === '' || isValidLocalNumber(f.guardian_phone, countryCode)
@@ -58,8 +47,6 @@ export default function AddStudent() {
     if (!f.grade.trim()) { setErr('الصف/المرحلة مطلوب'); return }
     if (f.guardian_phone && !phoneValid) { setErr('رقم ولي الأمر غير مكتمل أو غير صالح لهذه الدولة'); return }
     setSaving(true)
-    // ندمج كود الدولة صراحةً مع الرقم المحلي — يُخزَّن رقماً دولياً كاملاً
-    // (+968XXXXXXXX)، فلا حاجة لاحقاً لتخمين الدولة وقت إرسال واتساب
     const fullPhone = f.guardian_phone ? `+${countryCode}${f.guardian_phone}` : null
     const { data: newId, error } = await supabase.rpc('add_student', {
       p_full_name: f.full_name,
@@ -76,7 +63,6 @@ export default function AddStudent() {
     setSaving(false)
     if (error) { setErr(error.message); return }
     setOk(true)
-    // تغذية سنوية تُضاف لرسوم الطالب (لا فوترة شهرية) — خطة تلو الأخرى
     if (newId) {
       for (const [planId, amount] of Object.entries(selectedMeals)) {
         if (Number(amount) > 0) {
@@ -129,7 +115,7 @@ export default function AddStudent() {
           <label style={label}>الشعبة</label>
           <select style={input} value={f.section} onChange={(e) => set('section', e.target.value)}>
             <option value="">— اختر الشعبة —</option>
-            {SECTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+            {sectionOptions.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
         <div style={cell}>
