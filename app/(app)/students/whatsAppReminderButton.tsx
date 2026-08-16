@@ -1,15 +1,21 @@
 'use client'
 // زر إرسال تذكير عبر واتساب (يستبدل زر الاتصال tel:)
+// تحديث: يستخدم قالب معتمد من Twilio (fee_reminder إذا توفرت التفاصيل، وإلا general_reminder)
+// بدل النص الحر — النص الحر يفشل خارج نافذة 24 ساعة من رسالة المستلم.
 import { useState } from 'react'
 
 export default function WhatsAppReminderButton({
   phone,
   guardianName,
   studentName,
+  schoolName,
+  amountDue,
 }: {
   phone: string | null
   guardianName?: string
   studentName?: string
+  schoolName?: string
+  amountDue?: string | number
 }) {
   const [sending, setSending] = useState(false)
 
@@ -20,14 +26,36 @@ export default function WhatsAppReminderButton({
     }
     // تنسيق الرقم: نضيف + إن ما كان موجود
     const to = phone.startsWith('+') ? phone : `+${phone}`
-    const body = `عزيزنا ${guardianName || 'ولي الأمر'}، نذكّركم بمتابعة رسوم الطالب ${studentName || ''} المستحقة. نشكر لكم تعاونكم — RusoomPay`
+
+    // إذا توفر اسم المدرسة والمبلغ واسم الطالب، نستخدم قالب التذكير التفصيلي (fee_reminder)
+    // وإلا نرجع للقالب العام (general_reminder) اللي يحتاج اسم المدرسة فقط
+    const useDetailedTemplate = Boolean(schoolName && studentName && amountDue)
+
+    const requestBody = useDetailedTemplate
+      ? {
+          to,
+          template: 'fee_reminder',
+          variables: {
+            '1': schoolName,
+            '2': guardianName || 'ولي الأمر',
+            '3': studentName,
+            '4': String(amountDue),
+          },
+        }
+      : {
+          to,
+          template: 'general_reminder',
+          variables: {
+            '1': schoolName || 'المدرسة',
+          },
+        }
 
     setSending(true)
     try {
       const res = await fetch('/api/send-whatsapp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to, body }),
+        body: JSON.stringify(requestBody),
       })
       const data = await res.json()
       alert(data.success ? 'تم إرسال التذكير عبر واتساب ✅' : 'فشل الإرسال: ' + (data.error || 'خطأ'))
@@ -60,4 +88,3 @@ export default function WhatsAppReminderButton({
     </button>
   )
 }
-
