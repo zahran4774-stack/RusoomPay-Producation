@@ -2,6 +2,8 @@
 // app/(app)/fees/RiskIndicator.tsx
 // مؤشّر خطورة التعثّر — يعرض فقط نتائج محرّك risk_scores (طبقة الذكاء).
 // لا منطق أعمال هنا. يظهر إن كان المحرّك مفعّلاً فقط.
+// تحديث: زر "إرسال تذكير ودّي" يستخدم الآن قالب fee_reminder المعتمد من Twilio
+// بدل النص الحر — النص الحر يفشل خارج نافذة 24 ساعة من رسالة المستلم.
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import { AlertTriangle, Phone } from 'lucide-react'
@@ -94,12 +96,20 @@ if (raw.startsWith('00')) raw = raw.slice(2)
 if (!raw.startsWith('968') && raw.length === 8) raw = '968' + raw  // رقم عُماني محلي (8 أرقام)
 const to = `+${raw}`
 
-                        const body = `رسالة من ${school} عبر RusoomPay:\nعزيزنا ${r.guardian || 'ولي الأمر'}، نذكّركم برسوم الطالب ${r.student_name} المستحقة بمبلغ ${fmt(r.outstanding)} ${sym}. شكراً لتعاونكم.`
                         try {
                           const res = await fetch('/api/send-whatsapp', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ to, body }),
+                            body: JSON.stringify({
+                              to,
+                              template: 'fee_reminder',
+                              variables: {
+                                '1': school,
+                                '2': r.guardian || 'ولي الأمر',
+                                '3': r.student_name,
+                                '4': fmt(r.outstanding),
+                              },
+                            }),
                           })
                           const data = await res.json()
                           alert(data.success ? 'تم إرسال التذكير عبر واتساب ✅' : 'فشل الإرسال: ' + (data.error || 'خطأ'))
