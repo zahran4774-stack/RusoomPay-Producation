@@ -11,8 +11,8 @@
 
 import type { Context, Config } from "@netlify/functions";
 
-// غيّر هذا المفتاح لأي نص عشوائي تختاره أنت قبل ما تنشر الملف
 const SECRET_KEY = "rusoom-templates-2026-x9k";
+
 
 type TemplateDef = {
   friendly_name: string;
