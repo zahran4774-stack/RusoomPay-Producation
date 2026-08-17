@@ -25,12 +25,13 @@ export default async function StudentsPage() {
     { data: myRole },
     { data: school },
     { data: students, error },
+    { data: busSubs },
   ] = await Promise.all([
     supabase.from('profiles').select('role').eq('id', user.id).single(),
     supabase.rpc('my_role'),
-    supabase.from('schools').select('name, vat_number, section_styles').single(),
+    supabase.from('schools').select('name, vat_number, section_styles, logo_url, color, card_accent_color').single(),
     supabase.from('students')
-      .select('id, code, full_name, grade, section, guardian_name, guardian_phone, guardian_email, birth_date, gender, status')
+      .select('id, code, full_name, grade, section, guardian_name, guardian_phone, guardian_email, birth_date, gender, status, father_phone, mother_phone, address')
       // ⚠️ إصلاح: بدون هذا الفلتر، الطلاب المحذوفين بصمت (soft_delete لا يغيّر
       // status، فتبقى 'active') كانوا يظهرون بقائمة الطلاب كأنهم حقيقيون —
       // اكتُشف عبر تناقض بين هذي الصفحة (32) وشاشة الاشتراك (2 فعلياً)
@@ -40,12 +41,22 @@ export default async function StudentsPage() {
       // بصمت (خارج الصفحة، خارج الطباعة، خارج البحث) بدون أي رسالة خطأ توضّح
       // السبب — أخطر من مشكلة الأداء الأصلية. التنبيه أدناه (عدّاد فعلي بعد
       // الجلب) يحذّر دون أن يُسقط أي بيانات.
+    // بيانات الباص/المشرفة لكل طالب — لبطاقة الطالب المطبوعة (نفس RPC
+    // المستخدم في صفحة النقل، فلا حاجة لتكرار المنطق).
+    supabase.rpc('transport_subscribers'),
   ])
 
   // التحقّق من الصلاحية بعد الجلب (الجلب المتوازي أسرع من التحقّق المتسلسل)
   const role = (myRole ?? profile?.role) as Role
   if (!isStaff(role)) redirect('/dashboard')
   const sectionOptions = buildSectionOptions(school?.section_styles)
+
+  // خريطة طالب ← باص/مشرفة (busSubs.id هو معرّف الطالب نفسه — نفس الاستخدام
+  // في app/(app)/transport/TransportClient.tsx)
+  const busMap = new Map<string, { label: string; supervisor: string | null }>()
+  for (const b of (busSubs ?? []) as { id: string; routes_label: string; supervisor: string | null }[]) {
+    busMap.set(b.id, { label: b.routes_label, supervisor: b.supervisor })
+  }
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }} dir="rtl">
@@ -111,7 +122,8 @@ export default async function StudentsPage() {
       <div style={{ marginTop: 18 }}>
         <StudentsByClass
           students={students ?? []}
-          school={{ name: school?.name ?? 'مدرسة', vat: school?.vat_number ?? null }}
+          school={{ name: school?.name ?? 'مدرسة', vat: school?.vat_number ?? null, logoUrl: school?.logo_url ?? null, primaryColor: school?.color ?? null, accentColor: school?.card_accent_color ?? null }}
+          busMap={Object.fromEntries(busMap)}
         />
       </div>
     </div>
