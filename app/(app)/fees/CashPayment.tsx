@@ -2,6 +2,8 @@
 // تسجيل دفعة حضورية (نقداً / بطاقة / شيك) — يسجّلها المحاسب مباشرة في المدرسة
 // بعد نجاح التسجيل: تُرسل تلقائياً رسالة شكر/إثبات سداد لولي الأمر عبر واتساب
 // (من رقم المدرسة الرسمي عبر Twilio) — بأولوية لرقم حساب ولي الأمر المفعّل، وإلا رقمه المخزّن.
+// تحديث: تستخدم الآن قوالب Twilio المعتمدة (payment_full_ar / payment_partial_ar)
+// بدل النص الحر — النص الحر يفشل خارج نافذة 24 ساعة من رسالة المستلم.
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
@@ -51,27 +53,44 @@ export default function CashPayment({
 
   const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec })
 
-  // إرسال رسالة الشكر — لا تعطّل نجاح الدفعة لو فشل الإرسال (يُسجَّل فقط في الكونسول)
+  // إرسال رسالة الشكر عبر قالب معتمد — لا تعطّل نجاح الدفعة لو فشل الإرسال
   async function sendThankYou(res: RecordPaymentResult) {
     if (!res.guardian_phone) return // لا رقم متوفّر — لا يوجد ما نرسل إليه
     try {
       const to = `+${normalizePhone(res.guardian_phone)}`
       const school = res.school_name || 'المدرسة'
-      const methodLabel = METHOD_LABEL[res.method || 'cash'] || res.method
-      const body =
-        `${school}\n\n` +
-        `شكراً لكم ${res.guardian_name || 'ولي الأمر'}\n` +
-        `نفيدكم بأنه تم استلام دفعة بمبلغ ${fmt(res.amount || 0)} ${sym} (${methodLabel}) ` +
-        `لصالح الطالب ${res.student_name || studentName}.\n\n` +
-        (res.remaining && res.remaining > 0.0005
-          ? `المتبقّي على الفاتورة: ${fmt(res.remaining)} ${sym}.`
-          : `تم سداد الفاتورة بالكامل. ✅`) +
-        `\n\nنقدّر التزامكم وحسن تعاونكم معنا.`
+      const methodLabel = METHOD_LABEL[res.method || 'cash'] || res.method || 'نقداً'
+      const isFullyPaid = !res.remaining || res.remaining <= 0.0005
+
+      const requestBody = isFullyPaid
+        ? {
+            to,
+            template: 'payment_full',
+            variables: {
+              '1': school,
+              '2': res.guardian_name || 'ولي الأمر',
+              '3': fmt(res.amount || 0),
+              '4': methodLabel,
+              '5': res.student_name || studentName,
+            },
+          }
+        : {
+            to,
+            template: 'payment_partial',
+            variables: {
+              '1': school,
+              '2': res.guardian_name || 'ولي الأمر',
+              '3': fmt(res.amount || 0),
+              '4': methodLabel,
+              '5': res.student_name || studentName,
+              '6': fmt(res.remaining || 0),
+            },
+          }
 
       await fetch('/api/send-whatsapp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to, body }),
+        body: JSON.stringify(requestBody),
       })
     } catch {
       // فشل إرسال الإشعار لا يجب أن يُظهر خطأ للمستخدم — الدفعة نفسها نجحت وسُجّلت
