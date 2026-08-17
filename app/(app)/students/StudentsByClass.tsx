@@ -5,6 +5,7 @@
 import { useState, useMemo } from 'react'
 import CertificatesButton from './CertificatesButton'
 import EditStudent from './EditStudent'
+import { printStudentCard, printClassCards } from '@/lib/print-student-card'
 
 type Student = {
   id: string; code: string; full_name: string
@@ -12,6 +13,7 @@ type Student = {
   guardian_name: string | null; status: string
   guardian_phone?: string | null; guardian_email?: string | null
   birth_date?: string | null; gender?: string | null
+  father_phone?: string | null; mother_phone?: string | null; address?: string | null
 }
 
 type ClassGroup = { key: string; grade: string; section: string; students: Student[] }
@@ -20,10 +22,11 @@ const statusLabel = (s: string) => s === 'active' ? 'منتظم' : s === 'transf
 const statusColor = (s: string) => s === 'active' ? '#067647' : s === 'transferred' ? '#B54708' : '#667085'
 
 export default function StudentsByClass({
-  students, school,
+  students, school, busMap = {},
 }: {
   students: Student[]
-  school: { name: string; vat: string | null }
+  school: { name: string; vat: string | null; logoUrl?: string | null; primaryColor?: string | null; accentColor?: string | null }
+  busMap?: Record<string, { label: string; supervisor: string | null }>
 }) {
   const [openKey, setOpenKey] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -115,10 +118,21 @@ export default function StudentsByClass({
                       <Stat label="منقول" value={g.students.filter((s) => s.status === 'transferred').length} color="#B54708" />
                       <Stat label="متخرج" value={g.students.filter((s) => s.status !== 'active' && s.status !== 'transferred').length} color="#667085" />
                     </div>
-                    <button onClick={() => exportClassPDF(g, school)}
-                      style={{ padding: '8px 14px', background: '#163B68', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12.5, fontFamily: 'inherit' }}>
-                      ⬇ تصدير قائمة الشعبة PDF
-                    </button>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button onClick={() => exportClassPDF(g, school)}
+                        style={{ padding: '8px 14px', background: '#163B68', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12.5, fontFamily: 'inherit' }}>
+                        ⬇ تصدير قائمة الشعبة PDF
+                      </button>
+                      <button
+                        onClick={() => printClassCards(
+                          school,
+                          g.students.map((s) => toCardStudent(s, busMap)),
+                          `الصف ${g.grade}${g.section !== '—' ? ` - شعبة ${g.section}` : ''}`
+                        )}
+                        style={{ padding: '8px 14px', background: '#B08D2E', color: '#0A1D33', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12.5, fontFamily: 'inherit' }}>
+                        🪪 طباعة بطاقات الشعبة
+                      </button>
+                    </div>
                   </div>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, minWidth: 560 }}>
                     <thead>
@@ -128,6 +142,7 @@ export default function StudentsByClass({
                         <th style={{ padding: 11 }}>ولي الأمر</th>
                         <th style={{ padding: 11 }}>الحالة</th>
                         <th style={{ padding: 11 }}>الشهادات</th>
+                        <th style={{ padding: 11 }}>البطاقة</th>
                         <th style={{ padding: 11 }}>تعديل</th>
                       </tr>
                     </thead>
@@ -144,6 +159,14 @@ export default function StudentsByClass({
                             <CertificatesButton studentId={s.id} studentName={s.full_name} school={school} />
                           </td>
                           <td style={{ padding: 11 }}>
+                            <button
+                              onClick={() => printStudentCard(school, toCardStudent(s, busMap))}
+                              title="طباعة بطاقة الطالب"
+                              style={{ background: '#F2F5F8', color: '#0F2744', border: 0, padding: '6px 12px', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+                              🪪 طباعة
+                            </button>
+                          </td>
+                          <td style={{ padding: 11 }}>
                             <EditStudent student={{
                               id: s.id,
                               full_name: s.full_name,
@@ -154,6 +177,9 @@ export default function StudentsByClass({
                               guardian_email: s.guardian_email ?? null,
                               birth_date: s.birth_date ?? null,
                               gender: s.gender ?? null,
+                              father_phone: s.father_phone ?? null,
+                              mother_phone: s.mother_phone ?? null,
+                              address: s.address ?? null,
                             }} />
                           </td>
                         </tr>
@@ -182,6 +208,23 @@ function Stat({ label, value, color }: { label: string; value: number; color: st
       <span style={{ fontSize: 10.5, color: '#8A94A6' }}>{label}</span>
     </span>
   )
+}
+
+// يحوّل صفّ طالب + خريطة الباص إلى الشكل اللي يحتاجه lib/print-student-card
+function toCardStudent(
+  s: Student,
+  busMap: Record<string, { label: string; supervisor: string | null }>
+) {
+  const bus = busMap[s.id]
+  return {
+    full_name: s.full_name,
+    grade: s.grade,
+    section: s.section,
+    father_phone: s.father_phone ?? null,
+    mother_phone: s.mother_phone ?? null,
+    bus_label: bus?.label ?? null,
+    bus_supervisor: bus?.supervisor ?? null,
+  }
 }
 
 // تصدير قائمة الشعبة PDF — عبر HTML + خط Cairo (يدعم العربية تماماً)
