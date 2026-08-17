@@ -2,6 +2,8 @@
 // لوحة اعتماد الدفعات المعلّقة — للمحاسب/المدير
 // بعد الاعتماد: تُرسل تلقائياً رسالة شكر/إثبات سداد لولي الأمر عبر واتساب
 // (من رقم المدرسة الرسمي عبر Twilio). لا تُرسل عند الرفض.
+// تحديث: تستخدم الآن قوالب Twilio المعتمدة (payment_full_ar / payment_partial_ar)
+// بدل النص الحر — النص الحر يفشل خارج نافذة 24 ساعة من رسالة المستلم.
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import { toE164 } from '@/lib/phone'
@@ -10,6 +12,10 @@ type Pending = {
   id: string; guardian: string; student: string
   amount: number; method: string; bank_ref: string | null; created_at: string
   guardian_phone?: string | null; school_name?: string | null
+  // مطلوب لتحديد القالب الصحيح (سداد كامل/جزئي): المتبقي على الفاتورة بعد هذه الدفعة.
+  // إذا لم تُزوَّد هذه القيمة من الاستعلام الأصلي (initial)، سيُفترض أن السداد جزئي احتياطاً
+  // (لتفادي إرسال "تم السداد بالكامل" بشكل خاطئ).
+  remaining_after?: number
 }
 
 const METHOD_LABEL: Record<string, string> = {
@@ -23,24 +29,47 @@ export default function PendingPayments({ initial }: { initial: Pending[] }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<string>('')
 
-  // إرسال رسالة الشكر — فشل الإرسال لا يُظهر خطأ للمستخدم (الاعتماد نفسه نجح ومستقل عنه)
+  // إرسال رسالة الشكر عبر قالب معتمد — فشل الإرسال لا يُظهر خطأ للمستخدم (الاعتماد نفسه نجح ومستقل عنه)
   async function sendThankYou(p: Pending) {
     if (!p.guardian_phone) return
     try {
       const to = toE164(p.guardian_phone)
       const school = p.school_name || 'المدرسة'
       const methodLabel = METHOD_LABEL[p.method] || p.method
-      const body =
-        `${school}\n\n` +
-        `شكراً لكم ${p.guardian}\n` +
-        `نفيدكم بأنه تم اعتماد واستلام دفعتكم بمبلغ ${fmt(p.amount)} (${methodLabel}) ` +
-        `لصالح الطالب ${p.student}.\n\n` +
-        `نقدّر التزامكم وحسن تعاونكم معنا.`
+
+      // إذا remaining_after غير متوفرة، نتعامل معها كسداد جزئي احتياطاً (تفادي رسالة خاطئة بأن الفاتورة اكتملت)
+      const remaining = p.remaining_after ?? 0
+      const isFullyPaid = p.remaining_after !== undefined && remaining <= 0.0005
+
+      const requestBody = isFullyPaid
+        ? {
+            to,
+            template: 'payment_full',
+            variables: {
+              '1': school,
+              '2': p.guardian,
+              '3': fmt(p.amount),
+              '4': methodLabel,
+              '5': p.student,
+            },
+          }
+        : {
+            to,
+            template: 'payment_partial',
+            variables: {
+              '1': school,
+              '2': p.guardian,
+              '3': fmt(p.amount),
+              '4': methodLabel,
+              '5': p.student,
+              '6': fmt(remaining),
+            },
+          }
 
       await fetch('/api/send-whatsapp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to, body }),
+        body: JSON.stringify(requestBody),
       })
     } catch {
       // لا نعرض خطأ — الاعتماد نجح بالفعل، الإشعار وحده فشل
