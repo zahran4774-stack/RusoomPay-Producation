@@ -3,21 +3,24 @@
 // هوية المدرسة (شعار + لون) — رفع مباشر من جهاز المستخدم إلى تخزين المدرسة.
 import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase-client'
+import { readableTextColor } from '@/lib/print-student-card'
 
 const MAX_MB = 2
 const OK_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']
 
 export default function SchoolBranding({
-  initialLogo, initialColor, canEdit,
+  initialLogo, initialColor, initialAccentColor, canEdit,
 }: {
   initialLogo: string | null
   initialColor: string | null
+  initialAccentColor: string | null
   canEdit: boolean
 }) {
   const supabase = createClient()
   const fileRef = useRef<HTMLInputElement>(null)
   const [logo, setLogo] = useState(initialLogo ?? '')
   const [color, setColor] = useState(initialColor ?? '#0F9D74')
+  const [accentColor, setAccentColor] = useState(initialAccentColor ?? '#B08D2E')
   const [schoolId, setSchoolId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -73,6 +76,7 @@ export default function SchoolBranding({
     const { error: saveErr } = await supabase.rpc('update_school_branding', {
       p_logo_url: url,
       p_color: color.trim() || null,
+      p_accent_color: accentColor.trim() || null,
     })
 
     setUploading(false)
@@ -89,6 +93,7 @@ export default function SchoolBranding({
     const { error } = await supabase.rpc('update_school_branding', {
       p_logo_url: null,
       p_color: color.trim() || null,
+      p_accent_color: accentColor.trim() || null,
     })
     setBusy(false)
     if (error) { setErr('تعذّر الحذف: ' + error.message); return }
@@ -97,11 +102,12 @@ export default function SchoolBranding({
     setTimeout(() => setMsg(''), 2500)
   }
 
-  async function saveColor() {
+  async function saveColors() {
     setBusy(true); setErr(''); setMsg('')
     const { error } = await supabase.rpc('update_school_branding', {
       p_logo_url: logo || null,
       p_color: color.trim() || null,
+      p_accent_color: accentColor.trim() || null,
     })
     setBusy(false)
     if (error) { setErr('تعذّر الحفظ: ' + error.message); return }
@@ -113,7 +119,7 @@ export default function SchoolBranding({
     <section style={{ background: '#fff', border: '1px solid #E2E7EE', borderRadius: 16, padding: 22, marginTop: 18 }} dir="rtl">
       <h2 style={{ color: '#0F2744', fontSize: '1.15rem', margin: '0 0 4px' }}>🎨 هوية المدرسة</h2>
       <p style={{ color: '#667', fontSize: 13.5, margin: '0 0 18px' }}>
-        شعار المدرسة ولونها الأساسي — يظهران في الفواتير والتقارير الرسمية.
+        شعار المدرسة وألوانها — تظهر في الفواتير والتقارير الرسمية، وفي بطاقة الطالب المطبوعة.
       </p>
 
       <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#0F2744', marginBottom: 8 }}>
@@ -163,10 +169,38 @@ export default function SchoolBranding({
           style={{ width: 52, height: 44, borderRadius: 9, border: '1px solid #E2E7EE', padding: 3, cursor: 'pointer', background: '#fff' }} />
         <input value={color} onChange={(e) => setColor(e.target.value)} dir="ltr"
           style={{ width: 120, height: 44, padding: '0 12px', borderRadius: 9, border: '1px solid #E2E7EE', fontSize: 14, fontFamily: 'inherit' }} />
-        <button onClick={saveColor} disabled={busy || uploading}
+      </div>
+
+      <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#0F2744', margin: '16px 0 4px' }}>
+        اللون الثانوي (لون بطاقة الطالب — التمييز/الشارة)
+      </label>
+      <p style={{ color: '#8A94A6', fontSize: 12, margin: '0 0 8px' }}>
+        يُستخدم للشارة والحدود على بطاقة الطالب المطبوعة، بجانب اللون الأساسي كخلفية.
+      </p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <input type="color" value={accentColor} onChange={(e) => setAccentColor(e.target.value)}
+          style={{ width: 52, height: 44, borderRadius: 9, border: '1px solid #E2E7EE', padding: 3, cursor: 'pointer', background: '#fff' }} />
+        <input value={accentColor} onChange={(e) => setAccentColor(e.target.value)} dir="ltr"
+          style={{ width: 120, height: 44, padding: '0 12px', borderRadius: 9, border: '1px solid #E2E7EE', fontSize: 14, fontFamily: 'inherit' }} />
+        <button onClick={saveColors} disabled={busy || uploading}
           style={{ background: busy ? '#8AA' : '#163B68', color: '#fff', border: 0, padding: '0 24px', height: 44, borderRadius: 10, fontWeight: 800, fontSize: 14.5, cursor: busy ? 'default' : 'pointer', fontFamily: 'inherit' }}>
-          {busy ? 'جارٍ الحفظ…' : 'حفظ'}
+          {busy ? 'جارٍ الحفظ…' : 'حفظ الألوان'}
         </button>
+      </div>
+
+      {/* معاينة سريعة — نفس الشكل اللي راح تطلع فيه البطاقة */}
+      <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: 12, color: '#8A94A6', fontWeight: 700 }}>معاينة:</span>
+        <div style={{
+          width: 44, height: 30, borderRadius: 8, background: color,
+          border: '1px solid #E2E7EE',
+        }} />
+        <div style={{
+          padding: '5px 14px', borderRadius: 16, background: accentColor,
+          color: readableTextColor(accentColor), fontWeight: 800, fontSize: 12.5,
+        }}>
+          الصف 4 — ب
+        </div>
       </div>
 
       {err && <div style={{ color: '#C0392B', fontSize: 13.5, fontWeight: 600, marginTop: 14 }}>⚠ {err}</div>}
