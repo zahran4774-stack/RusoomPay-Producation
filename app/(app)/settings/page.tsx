@@ -29,17 +29,19 @@ export default async function SettingsPage() {
 
   let logo: string | null = null
   let color: string | null = null
+  let accentColor: string | null = null
   let schoolName: string | null = null
   let sectionStyles: string[] = ['ar_letters']
 
   if (isOwner && profile?.school_id) {
     const { data: school } = await supabase
       .from('schools')
-      .select('logo_url, color, name, section_styles')
+      .select('logo_url, color, card_accent_color, name, section_styles')
       .eq('id', profile.school_id)
       .maybeSingle()
     logo = school?.logo_url ?? null
     color = school?.color ?? null
+    accentColor = school?.card_accent_color ?? null
     schoolName = school?.name ?? null
     sectionStyles = school?.section_styles ?? ['ar_letters']
   }
@@ -53,7 +55,7 @@ export default async function SettingsPage() {
       <p style={{ color: '#667', fontSize: 14, marginBottom: 24 }}>إدارة أمان حسابك وهوية مدرستك.</p>
 
       <MfaSetup />
-      <SchoolBranding initialLogo={logo} initialColor={color} canEdit={isOwner} />
+      <SchoolBranding initialLogo={logo} initialColor={color} initialAccentColor={accentColor} canEdit={isOwner} />
       {isOwner && <SectionStyleSetting initial={sectionStyles} canEdit={isOwner} />}
 
       {vat && (
