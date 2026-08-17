@@ -33,6 +33,9 @@ export type StudentEditable = {
   guardian_email: string | null
   birth_date: string | null
   gender: string | null
+  father_phone?: string | null
+  mother_phone?: string | null
+  address?: string | null
 }
 
 export default function EditStudent({ student }: { student: StudentEditable }) {
@@ -52,6 +55,11 @@ export default function EditStudent({ student }: { student: StudentEditable }) {
     guardian_email: student.guardian_email ?? '',
     birth_date: student.birth_date ?? '',
     gender: student.gender ?? '',
+    // حقول بسيطة (بدون تقسيم كود دولة) — تُستخدم للعرض على بطاقة الطالب
+    // فقط، لا للإرسال الآلي (واتساب/رسائل)، فلا تحتاج نفس تحقّق guardian_phone.
+    father_phone: student.father_phone ?? '',
+    mother_phone: student.mother_phone ?? '',
+    address: student.address ?? '',
   })
   const [countryCode, setCountryCode] = useState(splitPhone(student.guardian_phone).code)
   const country = GULF_COUNTRIES.find((c) => c.code === countryCode)
@@ -84,8 +92,17 @@ export default function EditStudent({ student }: { student: StudentEditable }) {
       p_birth_date: f.birth_date || null,
       p_gender: f.gender || null,
     })
+    if (error) { setSaving(false); setErr(error.message); return }
+
+    // حقول العائلة الجديدة — دالة منفصلة (راجع migration 35)
+    const { error: famError } = await supabase.rpc('update_student_family_info', {
+      p_student_id: student.id,
+      p_father_phone: f.father_phone || null,
+      p_mother_phone: f.mother_phone || null,
+      p_address: f.address || null,
+    })
     setSaving(false)
-    if (error) { setErr(error.message); return }
+    if (famError) { setErr(famError.message); return }
     setOk(true)
     router.refresh()
     setTimeout(() => { setOk(false); setOpen(false) }, 1000)
@@ -183,6 +200,20 @@ export default function EditStudent({ student }: { student: StudentEditable }) {
               <option value="male">ذكر</option>
               <option value="female">أنثى</option>
             </select>
+          </div>
+
+          {/* حقول إضافية — تُستخدم أساساً في بطاقة الطالب المطبوعة */}
+          <div style={cell}>
+            <label style={label}>هاتف الأب</label>
+            <input style={{ ...input, direction: 'ltr', textAlign: 'right' }} value={f.father_phone} onChange={(e) => set('father_phone', e.target.value)} inputMode="tel" />
+          </div>
+          <div style={cell}>
+            <label style={label}>هاتف الأم</label>
+            <input style={{ ...input, direction: 'ltr', textAlign: 'right' }} value={f.mother_phone} onChange={(e) => set('mother_phone', e.target.value)} inputMode="tel" />
+          </div>
+          <div style={cell}>
+            <label style={label}>السكن</label>
+            <input style={input} value={f.address} onChange={(e) => set('address', e.target.value)} placeholder="مثال: الخوض، مسقط" />
           </div>
         </div>
 
