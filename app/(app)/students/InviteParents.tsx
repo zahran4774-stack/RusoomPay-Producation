@@ -63,6 +63,9 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
   }
 
   // إرسال عبر رقم المدرسة الرسمي (Twilio) + تسجيل وقت الإرسال في قاعدة البيانات (يبقى دائماً)
+  // ملاحظة: نستخدم قالب واتساب معتمد (Content API) وليس نصاً حراً — لأن أولياء الأمور
+  // الذين لم يفعّلوا حسابهم بعد لم يراسلوا رقم المدرسة من قبل، فهم خارج نافذة الـ24 ساعة
+  // التي يسمح فيها واتساب بالنص الحر. القالب هو الطريقة الصحيحة الوحيدة لأول تواصل.
   async function sendInvite(g: Guardian) {
     setSending(g.phone)
     try {
@@ -70,7 +73,14 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
       const res = await fetch('/api/send-whatsapp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to, body: messageFor(g) }),
+        body: JSON.stringify({
+          to,
+          template: 'parent_invite',
+          variables: {
+            '1': schoolName ? `مدرسة ${schoolName}` : 'مدرستكم',
+            '2': g.phone.replace(/^968/, ''),
+          },
+        }),
       })
       const data = await res.json()
       if (data.success) {
