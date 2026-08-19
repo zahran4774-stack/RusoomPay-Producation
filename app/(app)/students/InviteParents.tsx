@@ -36,7 +36,7 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
   useEffect(() => { if (open) load() }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function messageFor(g: Guardian): string {
-    const school = schoolName ? `مدرسة ${schoolName}` : 'مدرستكم'
+    const school = schoolName ?? 'مدرستكم'
     const kids = g.children_count === 1 ? 'ابنكم/ابنتكم' : `أبنائكم (${g.children_count})`
     return (
       `السلام عليكم ${g.guardian_name}\n\n` +
@@ -62,6 +62,14 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
     } catch { /* المتصفح منع النسخ */ }
   }
 
+  // اسم المدرسة كما يُمرَّر للقالب: نزيل بادئة "مدرسة" لأن نص القالب يحتوي الكلمة مسبقاً
+  // (أسماء المدارس في قاعدة البيانات تُخزَّن أحياناً بالبادئة، مثل "مدرسة نور العلم")
+  function schoolNameForTemplate(): string {
+    const raw = (schoolName || '').trim()
+    if (!raw) return 'مدرستكم'
+    return raw.replace(/^مدرسة\s+/, '').trim() || raw
+  }
+
   // إرسال عبر رقم المدرسة الرسمي (Twilio) + تسجيل وقت الإرسال في قاعدة البيانات (يبقى دائماً)
   // ملاحظة: نستخدم قالب واتساب معتمد (Content API) وليس نصاً حراً — لأن أولياء الأمور
   // الذين لم يفعّلوا حسابهم بعد لم يراسلوا رقم المدرسة من قبل، فهم خارج نافذة الـ24 ساعة
@@ -77,7 +85,8 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
           to,
           template: 'parent_invite',
           variables: {
-            '1': schoolName ? `مدرسة ${schoolName}` : 'مدرستكم',
+            // {{1}} = اسم المدرسة بدون بادئة "مدرسة" — نص القالب يضيفها
+            '1': schoolNameForTemplate(),
             '2': g.phone.replace(/^968/, ''),
           },
         }),
