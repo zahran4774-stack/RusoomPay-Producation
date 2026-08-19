@@ -39,3 +39,52 @@ export async function sendWhatsApp(to: string, body: string): Promise<{ ok: bool
     return { ok: false, error: err instanceof Error ? err.message : "فشل الاتصال بـ Twilio" };
   }
 }
+
+// ─── إشعار صاحب المنصة عند اشتراك مدرسة جديدة ───────────────────────────────
+
+interface NewSubscriberPayload {
+  schoolName: string;
+  contactName: string;
+  phone: string;
+  plan: string;
+  email?: string;
+  city?: string;
+}
+
+export async function notifyOwnerNewSubscriber(data: NewSubscriberPayload): Promise<void> {
+  const ownerPhone = process.env.OWNER_WHATSAPP_NUMBER;
+  if (!ownerPhone) {
+    console.warn("[notifyOwnerNewSubscriber] OWNER_WHATSAPP_NUMBER غير موجود في env");
+    return;
+  }
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://rusoompay.com";
+  const adminUrl = `${appUrl}/admin/schools/pending`;
+
+  const now = new Date().toLocaleString("ar-OM", {
+    timeZone: "Asia/Muscat",
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+
+  const body = [
+    "📌 *مشترك جديد ينتظر الاعتماد*",
+    "",
+    `🏫 المدرسة: ${data.schoolName}`,
+    `👤 المسؤول: ${data.contactName}`,
+    `📱 الهاتف: ${data.phone}`,
+    data.email ? `✉️ البريد: ${data.email}` : null,
+    data.city ? `📍 المدينة: ${data.city}` : null,
+    `📦 الخطة: ${data.plan}`,
+    `🕐 الوقت: ${now}`,
+    "",
+    `🔗 للاعتماد: ${adminUrl}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const result = await sendWhatsApp(ownerPhone, body);
+  if (!result.ok) {
+    console.error("[notifyOwnerNewSubscriber] فشل الإرسال:", result.error);
+  }
+}
