@@ -1,22 +1,48 @@
-// lib/payment-config.ts — بيانات استلام مدفوعات اشتراكات المدارس في RusoomPay
-// يستهلكها: components/PaymentDetails.tsx
+// lib/payment-config.ts — بيانات استلام مدفوعات اشتراكات المدارس + أسعار الباقات
+// يستهلكها: components/PaymentDetails.tsx و lib/receipt-verifier.ts
 //
-// ⚠️⚠️ غير مُعدّة بعد — استبدل القيم أدناه ببياناتك البنكية الحقيقية قبل
-// أن تشترك أي مدرسة. القيم الحالية نصوص تنبيهية مقصودة (وليست أرقاماً وهمية)
-// حتى لا يُحوّل أحد أموالاً إلى حساب خاطئ بالخطأ.
+// مصدر البيانات البنكية: نص التحقق داخل lib/receipt-verifier.ts (بيانات فعلية).
+// مصدر الأسعار: جدول plans في Supabase (price_omr) — بتاريخ 2026-08-20.
 
 export const PAYMENT_CONFIG = {
   // التحويل الهاتفي (Mobile Transfer عبر بنوك عُمان)
   phone: {
-    number: '',                                  // ← رقمك بصيغة دولية بدون + (مثال: 96890000000)
-    display: 'لم تُضبط بعد — تواصل مع الإدارة',   // ← الشكل المعروض على الشاشة
+    number: '95476649',
+    display: '9547 6649',
+    // صيغ يقارن بها نص الإيصال بعد التطبيع (إزالة المسافات/الشرطات وتحويل الأرقام العربية)
+    variants: [
+      '95476649',
+      '+96895476649',
+      '96895476649',
+      '0096895476649',
+    ],
   },
 
   // التحويل البنكي — Bank Muscat
   bank: {
-    accountName: 'لم يُضبط بعد — تواصل مع الإدارة',   // ← اسم الحساب كما هو في البنك
-    accountNumber: 'لم يُضبط بعد',                    // ← رقم الحساب
-    iban: 'لم يُضبط بعد',                             // ← IBAN عُماني (23 خانة)
-    swift: 'لم يُضبط بعد',                            // ← SWIFT/BIC لفرعك
+    accountName: 'ZAHRAN ZAHIR HAMED AL DAGHARI',
+    accountNumber: '0368 0016 6281 0033',
+    iban: 'OM670270368001662810033',
+    swift: 'BMUSOMRXXXX',
+    bankName: 'Bank Muscat',
+    // صيغ يُقارن بها نص الإيصال
+    variants: [
+      'OM670270368001662810033',
+      '0368001662810033',
+      '0368 0016 6281 0033',
+      'ZAHRAN ZAHIR HAMED AL DAGHARI',
+      'ZAHRAN ZAHIR',
+      'AL DAGHARI',
+    ],
   },
 } as const
+
+// أسعار الباقات بالريال العُماني — مطابقة لعمود price_omr في جدول plans
+// ملاحظة: النوع Record<string, number> مقصود لأن receipt-verifier يُفهرس بـ planName من نوع string
+export const PLAN_PRICES: Record<string, number> = {
+  starter: 0,
+  small: 90,
+  basic: 180,
+  advanced: 320,
+  enterprise: 550,
+}
