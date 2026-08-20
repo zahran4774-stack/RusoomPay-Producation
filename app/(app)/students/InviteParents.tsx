@@ -47,12 +47,49 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
     )
   }
 
-  function normalizePhone(raw: string): string {
-    let p = (raw || '').replace(/[\s\-()]/g, '')
+  // يحوّل الأرقام العربية-هندية (٠-٩) إلى إنجليزية
+  function toEnglishDigits(s: string): string {
+    return s.replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+  }
+
+  // رموز دول الخليج وطول الرقم المحلي المتوقع بعد الرمز
+  const GCC_CODES: Record<string, number> = {
+    '968': 8, // عُمان
+    '971': 9, // الإمارات
+    '966': 9, // السعودية
+    '965': 8, // الكويت
+    '973': 8, // البحرين
+    '974': 8, // قطر
+  }
+
+  // تطبيع صارم لرقم هاتف خليجي: يعيد null صراحة إذا كان الرقم غير صالح
+  // بدل تمرير رقم مشوّه لـ Twilio يفشل بصمت. يقبل:
+  //   - رقم يبدأ برمز دولة خليجي صريح ويطابق الطول المحلي المتوقع لتلك الدولة
+  //   - أو 8 خانات بدون رمز دولة → يُفترض عُماني (الحالة الافتراضية التاريخية لقاعدة بياناتنا)
+  // ملاحظة: رقم محلي بدون رمز دولة من غير عُمان (مثال: إماراتي مكتوب كـ 0501234567)
+  // لا يمكن تمييزه تقنياً عن رقم عُماني ناقص — الحل الصحيح لهذا يتطلب حقل "الدولة"
+  // منفصلاً في بيانات ولي الأمر، وهو خارج نطاق هذه الدالة.
+  function normalizePhone(raw: string): string | null {
+    let p = toEnglishDigits(raw || '').replace(/[\s\-()]/g, '')
     if (p.startsWith('+')) p = p.slice(1)
     if (p.startsWith('00')) p = p.slice(2)
-    if (!p.startsWith('968') && p.length === 8) p = '968' + p
-    return p
+    p = p.replace(/\D/g, '') // إزالة أي حرف غير رقمي متبقٍ
+
+    for (const [code, localLen] of Object.entries(GCC_CODES)) {
+      if (p.startsWith(code) && p.length === code.length + localLen) return p
+    }
+
+    if (p.length === 8) return '968' + p // بدون رمز دولة: افتراض عُماني فقط
+
+    return null // رقم غير صالح أو رقم محلي من دولة خليجية أخرى بلا رمز دولة
+  }
+
+  // يزيل رمز الدولة الخليجي (أياً كان) من رقم مطبَّع مسبقاً، لعرضه كرقم محلي
+  function stripGccCode(normalized: string): string {
+    for (const code of Object.keys(GCC_CODES)) {
+      if (normalized.startsWith(code)) return normalized.slice(code.length)
+    }
+    return normalized
   }
 
   async function copyMsg(g: Guardian) {
@@ -68,9 +105,14 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
   // الذين لم يفعّلوا حسابهم بعد لم يراسلوا رقم المدرسة من قبل، فهم خارج نافذة الـ24 ساعة
   // التي يسمح فيها واتساب بالنص الحر. القالب هو الطريقة الصحيحة الوحيدة لأول تواصل.
   async function sendInvite(g: Guardian) {
+    const normalized = normalizePhone(g.phone)
+    if (!normalized) {
+      alert(`رقم هاتف غير صالح لولي الأمر "${g.guardian_name}": ${g.phone}\nصحح الرقم في بيانات الطالب أولاً (يجب أن يكون 8 أرقام عُمانية أو رقم خليجي كامل برمز الدولة).`)
+      return
+    }
     setSending(g.phone)
     try {
-      const to = `+${normalizePhone(g.phone)}`
+      const to = `+${normalized}`
       const res = await fetch('/api/send-whatsapp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -80,7 +122,8 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
           variables: {
             // {{1}} = اسم المدرسة — التطبيع (إزالة بادئة "مدرسة") يتم مركزياً في /api/send-whatsapp
             '1': schoolName || 'مدرستكم',
-            '2': g.phone.replace(/^968/, ''),
+            // {{2}} = رقم محلي بدون رمز الدولة — أيا كانت دولة الخليج
+            '2': stripGccCode(normalized),
           },
         }),
       })
@@ -217,4 +260,3 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
     </div>
   )
 }
-
