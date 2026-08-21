@@ -12,13 +12,15 @@
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { retrieveSession } from "@/lib/thawani";
 import { toE164 } from "@/lib/phone";
-import { sendWhatsApp } from "@/lib/whatsapp";
+import { sendWhatsAppTemplate } from "@/lib/whatsapp";
 import Link from "next/link";
 
 const supabaseAdmin = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+const fmt = (n: number) => Number(n).toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 
 type Receipt = {
   studentName: string;
@@ -45,37 +47,54 @@ async function fetchReceipt(pendingId: string): Promise<Receipt | null> {
   };
 }
 
-// إرسال مباشر عبر Twilio — بدون نداء HTTP ذاتي على موقعنا (كان يفشل بصمت أحياناً)
-async function sendWhatsAppConfirmation(pendingId: string) {
+// إرسال عبر قالب معتمد (ContentSid) — لا نص حر. النص الحر يفشل بـ63016 خارج نافذة
+// الـ24 ساعة من آخر رسالة من ولي الأمر. نستخدم بيانات confirm_gateway_payment
+// نفسها (اسم مدرسة/ولي أمر/متبقي) بدل استعلام منفصل قد يتأخر عن حالة الدفعة.
+async function sendWhatsAppConfirmation(confirmResult: {
+  guardian_phone?: string | null;
+  guardian_name?: string | null;
+  school_name?: string | null;
+  student_name?: string | null;
+  amount?: number | null;
+  remaining?: number | null;
+}) {
   try {
-    const { data: pending } = await supabaseAdmin
-      .from("pending_payments")
-      .select("amount, student_fees ( description, students ( full_name, guardian_phone ) )")
-      .eq("id", pendingId)
-      .single();
-
-    // @ts-expect-error - shape depends on join
-    const phone: string | undefined = pending?.student_fees?.students?.guardian_phone;
-    // @ts-expect-error
-    const studentName: string = pending?.student_fees?.students?.full_name || "";
-    // @ts-expect-error
-    const description: string = pending?.student_fees?.description || "رسوم دراسية";
-    const amount = pending?.amount;
+    const phone = confirmResult.guardian_phone;
+    const amount = confirmResult.amount;
 
     if (!phone || !amount) {
-      console.error("send-whatsapp skipped: missing phone or amount", { pendingId, phone, amount });
+      console.error("whatsapp confirmation skipped: missing phone or amount", { phone, amount });
       return;
     }
 
     const to = toE164(phone);
-    const body =
-      `✅ تم تأكيد دفعة بمبلغ ${Number(amount).toFixed(3)} ر.ع` +
-      (studentName ? ` عن ${studentName}` : "") +
-      ` (${description}) عبر ثواني. شكراً لكم.`;
+    const school = confirmResult.school_name || "المدرسة";
+    const guardianName = confirmResult.guardian_name || "ولي الأمر";
+    const remaining = Number(confirmResult.remaining || 0);
+    const isFullyPaid = remaining <= 0.0005;
 
-    const result = await sendWhatsApp(to, body);
+    const result = await sendWhatsAppTemplate(
+      to,
+      isFullyPaid ? "payment_full" : "payment_partial",
+      isFullyPaid
+        ? {
+            "1": school,
+            "2": guardianName,
+            "3": fmt(amount),
+            "4": "ثواني",
+            "5": confirmResult.student_name || "",
+          }
+        : {
+            "1": school,
+            "2": guardianName,
+            "3": fmt(amount),
+            "4": "ثواني",
+            "5": confirmResult.student_name || "",
+            "6": fmt(remaining),
+          }
+    );
     if (!result.ok) {
-      console.error("send-whatsapp failed:", result.error, { pendingId, to });
+      console.error("send-whatsapp failed:", result.error, { to });
     }
   } catch (err) {
     console.error("send-whatsapp confirmation threw:", err);
@@ -134,7 +153,7 @@ async function resolvePayment(pendingId: string) {
 
     // لو الويب هوك سبق واعتمد الدفعة، لا نُرسل واتساب مكرر
     if (!confirmResult?.already_confirmed) {
-      await sendWhatsAppConfirmation(pending.id);
+      await sendWhatsAppConfirmation(confirmResult);
     }
     return { ok: true, alreadyConfirmed: Boolean(confirmResult?.already_confirmed) };
   }
@@ -145,8 +164,6 @@ async function resolvePayment(pendingId: string) {
   });
   return { ok: false, reason: "لم تكتمل عملية الدفع" };
 }
-
-const fmt = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 
 export default async function PaymentResultPage({
   searchParams,
