@@ -3,7 +3,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { retrieveSession } from '@/lib/thawani'
 import { toE164 } from '@/lib/phone'
-import { sendWhatsApp } from '@/lib/whatsapp'
+import { sendWhatsAppTemplate } from '@/lib/whatsapp'
+
+const fmt = (n: number) => Number(n).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 
 function serviceClient() {
   return createClient(
@@ -69,13 +71,34 @@ export async function POST(req: NextRequest) {
   }
 
   // نرسل الواتساب من هنا فقط — الموثوق (سيرفر لسيرفر) — وفقط إذا نحن من اعتمد الدفعة فعلاً (مو تكرار)
+  // عبر قالب معتمد (ContentSid) لا نص حر — النص الحر يفشل بـ63016 خارج نافذة الـ24 ساعة
   if (result?.ok && !result?.duplicate && result?.guardian_phone) {
     const to = toE164(result.guardian_phone)
-    const body =
-      `✅ تم تأكيد دفعة بمبلغ ${Number(result.amount).toFixed(3)} ر.ع` +
-      (result.student_name ? ` عن ${result.student_name}` : '') +
-      ` عبر ثواني. شكراً لكم.`
-    const wa = await sendWhatsApp(to, body)
+    const school = result.school_name || 'المدرسة'
+    const guardianName = result.guardian_name || 'ولي الأمر'
+    const remaining = Number(result.remaining || 0)
+    const isFullyPaid = remaining <= 0.0005
+
+    const wa = await sendWhatsAppTemplate(
+      to,
+      isFullyPaid ? 'payment_full' : 'payment_partial',
+      isFullyPaid
+        ? {
+            '1': school,
+            '2': guardianName,
+            '3': fmt(result.amount),
+            '4': 'ثواني',
+            '5': result.student_name || '',
+          }
+        : {
+            '1': school,
+            '2': guardianName,
+            '3': fmt(result.amount),
+            '4': 'ثواني',
+            '5': result.student_name || '',
+            '6': fmt(remaining),
+          }
+    )
     if (!wa.ok) {
       console.error('webhook whatsapp failed:', wa.error, { pendingId })
     }
