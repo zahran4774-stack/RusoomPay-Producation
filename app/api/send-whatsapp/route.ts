@@ -4,6 +4,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import { checkRateLimit } from '@/lib/rate-limit'
+import {
+  TEMPLATES,
+  TEMPLATES_WITH_SCHOOL_PREFIX,
+  stripSchoolPrefix,
+  type TemplateName,
+} from '@/lib/whatsapp'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,35 +19,9 @@ function normalizePhone(p: string): string {
   return digits.replace(/^0+/, '')
 }
 
-// خريطة القوالب المعتمدة — الاسم المستخدم بالكود ↔ Content SID الحقيقي من Twilio
-// حدّث القيم هنا فقط إذا أنشأت قالب جديد أو غيّرت واحد قديم
-const TEMPLATES = {
-  fee_reminder: 'HX26a44583bfcd9f3d2f93ff88c9d7abd4', // تذكير رسوم — {{1}} مدرسة {{2}} ولي أمر {{3}} طالب {{4}} مبلغ
-  payment_full: 'HX6cf023d78afdf4050b79163f78cb823e', // تأكيد سداد كامل — {{1}} مدرسة {{2}} ولي أمر {{3}} مبلغ {{4}} طريقة {{5}} طالب
-  payment_partial: 'HX03029915d074ff446d676551c48e2416', // تأكيد سداد جزئي — نفس السابق + {{6}} متبقي
-  parent_invite: 'HX2a05e89eb4f7022b2b3b39442c82e337', // دعوة تفعيل حساب (parentinvite5 — Call to Action) — {{1}} اسم المدرسة {{2}} رقم هاتف
-  admin_new_sub: 'HX815c4c62648c90c9e502021720ba7e98', // إشعار اشتراك جديد للإدارة — {{1}} مدرسة {{2}} باقة {{3}} طريقة دفع
-  general_reminder: 'HXc750c19902eccb2ac11f5c5c6f7f1c98', // تذكير عام — {{1}} مدرسة
-} as const
-
-type TemplateName = keyof typeof TEMPLATES
-
-// القوالب التي يبدأ نصّها المعتمد بكلمة "مدرسة" قبل المتغيّر {{1}}.
-// أسماء المدارس في قاعدة البيانات تُخزَّن أحياناً بالبادئة ("مدرسة نور العلم")،
-// فيظهر التكرار "مدرسة مدرسة نور العلم". نُزيل البادئة هنا مركزياً بدل تعديل كل مكوّن.
-// لا نلمس نصّ القالب في Twilio لأنه معتمد من واتساب.
-const TEMPLATES_WITH_SCHOOL_PREFIX: readonly TemplateName[] = [
-  'fee_reminder',      // مُتحقَّق: "مدرسة {{1}} عبر RusoomPay"
-  'parent_invite',     // مُتحقَّق: "... نظام رسوم مدرسة {{1}} ..."
-  'payment_full',      // غير مُتحقَّق بصرياً — نفس النمط
-  'payment_partial',   // غير مُتحقَّق بصرياً — نفس النمط
-  'admin_new_sub',     // غير مُتحقَّق بصرياً — نفس النمط
-  'general_reminder',  // غير مُتحقَّق بصرياً — نفس النمط
-]
-
-function stripSchoolPrefix(value: string): string {
-  return value.replace(/^\s*مدرسة\s+/, '').trim() || value
-}
+// خريطة القوالب (TEMPLATES) وأدوات بادئة "مدرسة" انتقلت إلى lib/whatsapp.ts —
+// مصدر واحد للحقيقة يشاركه هذا المسار (جلسة مستخدم) مع sendWhatsAppTemplate
+// (نداءات سيرفر-لسيرفر بلا جلسة، مثل webhook ثواني وصفحة نتيجة الدفع).
 
 export async function POST(req: NextRequest) {
   try {
