@@ -26,6 +26,8 @@ export default async function StudentsPage() {
     { data: school },
     { data: students, error },
     { data: busSubs },
+    { data: buses },
+    { data: busSubRows },
   ] = await Promise.all([
     supabase.from('profiles').select('role').eq('id', user.id).single(),
     supabase.rpc('my_role'),
@@ -44,6 +46,11 @@ export default async function StudentsPage() {
     // بيانات الباص/المشرفة لكل طالب — لبطاقة الطالب المطبوعة (نفس RPC
     // المستخدم في صفحة النقل، فلا حاجة لتكرار المنطق).
     supabase.rpc('transport_subscribers'),
+    // قائمة الباصات المتاحة — لعرض خيار "ربط بمسار نقل" عند إضافة/تعديل طالب.
+    supabase.rpc('transport_buses'),
+    // معرّف الباص الحالي لكل طالب مشترك (نفس RPC أعلاه لا يرجّع bus_id، فقط
+    // التسمية النصية — نحتاج المعرّف الفعلي لتحديد الخيار مسبقاً بنموذج التعديل).
+    supabase.from('bus_subscriptions').select('student_id, bus_id'),
   ])
 
   // التحقّق من الصلاحية بعد الجلب (الجلب المتوازي أسرع من التحقّق المتسلسل)
@@ -56,6 +63,12 @@ export default async function StudentsPage() {
   const busMap = new Map<string, { label: string; supervisor: string | null }>()
   for (const b of (busSubs ?? []) as { id: string; routes_label: string; supervisor: string | null }[]) {
     busMap.set(b.id, { label: b.routes_label, supervisor: b.supervisor })
+  }
+
+  // خريطة طالب ← معرّف الباص (لتحديد الخيار مسبقاً في نموذج تعديل الطالب)
+  const busIdMap = new Map<string, string>()
+  for (const r of (busSubRows ?? []) as { student_id: string; bus_id: string }[]) {
+    busIdMap.set(r.student_id, r.bus_id)
   }
 
   return (
@@ -100,7 +113,7 @@ export default async function StudentsPage() {
       )}
 
       <div style={{ marginBottom: 18, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-      <AddStudent sectionOptions={sectionOptions} />
+      <AddStudent sectionOptions={sectionOptions} buses={buses ?? []} />
  
 
         <ImportStudents />
@@ -124,6 +137,8 @@ export default async function StudentsPage() {
           students={students ?? []}
           school={{ name: school?.name ?? 'مدرسة', vat: school?.vat_number ?? null, logoUrl: school?.logo_url ?? null, primaryColor: school?.color ?? null, accentColor: school?.card_accent_color ?? null }}
           busMap={Object.fromEntries(busMap)}
+          buses={buses ?? []}
+          studentBusIdMap={Object.fromEntries(busIdMap)}
         />
       </div>
     </div>
