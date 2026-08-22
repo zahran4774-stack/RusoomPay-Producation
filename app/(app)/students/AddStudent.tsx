@@ -4,7 +4,9 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
 import { GULF_COUNTRIES, DEFAULT_COUNTRY, cleanLocalNumber, isValidLocalNumber, GRADES } from '@/lib/academic'
 
-export default function AddStudent({ sectionOptions }: { sectionOptions: string[] }) {
+type Bus = { id: string; routes_label: string; fee: number }
+
+export default function AddStudent({ sectionOptions, buses = [] }: { sectionOptions: string[]; buses?: Bus[] }) {
   const router = useRouter()
   const supabase = createClient()
   const [open, setOpen] = useState(false)
@@ -22,6 +24,9 @@ export default function AddStudent({ sectionOptions }: { sectionOptions: string[
       return next
     })
   }
+
+  const [wantsTransport, setWantsTransport] = useState(false)
+  const [selectedBus, setSelectedBus] = useState('')
 
   useEffect(() => {
     supabase.rpc('cafeteria_plans').then(({ data }) => { if (data) setMealPlans(data) })
@@ -71,8 +76,13 @@ export default function AddStudent({ sectionOptions }: { sectionOptions: string[
           })
         }
       }
+      if (wantsTransport && selectedBus) {
+        await supabase.rpc('subscribe_bus', { p_student: newId, p_bus: selectedBus })
+      }
     }
     setSelectedMeals({})
+    setWantsTransport(false)
+    setSelectedBus('')
     setF({ full_name: '', grade: '', section: '', guardian_name: '', guardian_phone: '', guardian_email: '', birth_date: '', gender: '', code: '', annual_fee: '' })
     setCountryCode(DEFAULT_COUNTRY)
     router.refresh()
@@ -82,6 +92,7 @@ export default function AddStudent({ sectionOptions }: { sectionOptions: string[
   const label: React.CSSProperties = { fontSize: 13, fontWeight: 700, color: '#0F2744', marginBottom: 5, display: 'block' }
   const input: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #E3E8EE', fontSize: 14, fontFamily: 'inherit' }
   const cell: React.CSSProperties = { flex: '1 1 220px' }
+  const fmt = (n: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 
   if (!open) {
     return (
@@ -190,6 +201,24 @@ export default function AddStudent({ sectionOptions }: { sectionOptions: string[
                 )
               })}
             </div>
+          </div>
+        )}
+        {buses.length > 0 && (
+          <div style={{ flex: '1 1 100%' }}>
+            <label style={label}>النقل المدرسي</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: '1px solid #E3E8EE', borderRadius: 10, background: wantsTransport ? '#F4F8F6' : '#fff' }}>
+              <input type="checkbox" checked={wantsTransport} onChange={(e) => { setWantsTransport(e.target.checked); if (!e.target.checked) setSelectedBus('') }} style={{ width: 18, height: 18, cursor: 'pointer' }} />
+              <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: '#0F2744' }}>اشتراك بالنقل المدرسي</span>
+              {wantsTransport && (
+                <select style={{ ...input, width: 260 }} value={selectedBus} onChange={(e) => setSelectedBus(e.target.value)}>
+                  <option value="">— اختر المسار/الباص —</option>
+                  {buses.map((b) => <option key={b.id} value={b.id}>{b.routes_label} — {fmt(b.fee)} ر.ع</option>)}
+                </select>
+              )}
+            </div>
+            {wantsTransport && !selectedBus && (
+              <div style={{ color: '#8A6D1D', fontSize: 12, marginTop: 4 }}>اختر مساراً ليُربط الطالب بالباص عند الحفظ</div>
+            )}
           </div>
         )}
       </div>
