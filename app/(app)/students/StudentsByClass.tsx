@@ -17,16 +17,19 @@ type Student = {
 }
 
 type ClassGroup = { key: string; grade: string; section: string; students: Student[] }
+type Bus = { id: string; routes_label: string; fee: number }
 
 const statusLabel = (s: string) => s === 'active' ? 'منتظم' : s === 'transferred' ? 'منقول' : 'متخرج'
 const statusColor = (s: string) => s === 'active' ? '#067647' : s === 'transferred' ? '#B54708' : '#667085'
 
 export default function StudentsByClass({
-  students, school, busMap = {},
+  students, school, busMap = {}, buses = [], studentBusIdMap = {},
 }: {
   students: Student[]
   school: { name: string; vat: string | null; logoUrl?: string | null; primaryColor?: string | null; accentColor?: string | null }
   busMap?: Record<string, { label: string; supervisor: string | null }>
+  buses?: Bus[]
+  studentBusIdMap?: Record<string, string>
 }) {
   const [openKey, setOpenKey] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -180,7 +183,7 @@ export default function StudentsByClass({
                               father_phone: s.father_phone ?? null,
                               mother_phone: s.mother_phone ?? null,
                               address: s.address ?? null,
-                            }} />
+                            }} buses={buses} currentBusId={studentBusIdMap[s.id] ?? null} />
                           </td>
                         </tr>
                       ))}
