@@ -2,7 +2,7 @@
 // إدارة باقة المدرسة — أربع باقات بسقوف طلاب + عرض التأسيس.
 // السقف ليّن: ننبّه عند 90% ولا نقطع الخدمة.
 // كل الباقات تشمل كل الميزات — الفرق في السعة فقط.
-// عند تأكيد الدفع بتحويل بنكي (بعد إرفاق الإيصال): يُرفع الإيصال، يُسجَّل الاشتراك pending،
+// عند تأكيد الدفع بتحويل بنكي (بعد إرفاق الإيصال): يُرفع الإيصال، يُسجَل الاشتراك pending،
 // وتُرسل رسالة واتساب فورية لمالك المنصة عبر /api/send-notify-admin.
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -52,7 +52,7 @@ export default function PlansManager({ sub, schoolId, schoolName }: { sub: Sub; 
   const [usage, setUsage] = useState<Usage>({})
   const [picked, setPicked] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [msg, setMsg] = useState<{ ok: boolean; text: string; whatsapp?: string } | null>(null)
 
   // نافذة الدفع بالتحويل البنكي — تظهر بعد اختيار الباقة وقبل تسجيل الاشتراك
   const [showBankModal, setShowBankModal] = useState(false)
@@ -111,7 +111,7 @@ export default function PlansManager({ sub, schoolId, schoolName }: { sub: Sub; 
     // تحويل بنكي: نفتح نافذة بيانات الحساب + رفع الإيصال، ولا نسجّل شيئاً بعد
     if (method === 'bank') { setShowBankModal(true); setMsg(null); return }
 
-    // بطاقة/تفعيل فوري (مجاني): يسجَّل مباشرة كما كان
+    // بطاقة/تفعيل فوري (مجاني): يسجَل مباشرة كما كان
     setBusy(true); setMsg(null)
     const plan = plans.find((p) => p.code === picked)
     const renewsAt = new Date(Date.now() + 365 * 86400000).toISOString()
@@ -166,7 +166,18 @@ export default function PlansManager({ sub, schoolId, schoolName }: { sub: Sub; 
 
     if (error) { setMsg({ ok: false, text: 'تعذّر إتمام الاشتراك: ' + error.message }); return }
 
-    setMsg({ ok: true, text: `تم إرسال إيصال التحويل لباقة «${plan?.name}» — بانتظار اعتماد الإدارة.` })
+    const waText =
+      `مرحبا، أرغب في معاينة طلب ترقية الباقة واعتماده:\n` +
+      `المدرسة: ${schoolName || 'غير معروف'}\n` +
+      `الباقة المطلوبة: ${plan?.name || picked}\n` +
+      `تم إرفاق إيصال التحويل في لوحة التحكم. يرجى المراجعة والاعتماد.`
+    const waLink = `https://wa.me/96895476649?text=${encodeURIComponent(waText)}`
+
+    setMsg({
+      ok: true,
+      text: `تم إرسال إيصال التحويل لباقة «${plan?.name}» — بانتظار اعتماد الإدارة.`,
+      whatsapp: waLink,
+    })
     notifyAdmin(plan?.name || picked)
     setShowBankModal(false)
     setReceiptFile(null)
@@ -429,7 +440,23 @@ export default function PlansManager({ sub, schoolId, schoolName }: { sub: Sub; 
           background: msg.ok ? '#EAF7F0' : '#FDECEA',
           border: `1px solid ${msg.ok ? '#BFE5D0' : '#F3C9C2'}`,
           color: msg.ok ? '#15803D' : '#A5331F',
-        }}>{msg.text}</div>
+        }}>
+          {msg.text}
+          {msg.ok && msg.whatsapp && (
+            <a
+              href={msg.whatsapp}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                marginTop: 12, background: '#25D366', color: '#fff', textDecoration: 'none',
+                borderRadius: 9, padding: '10px 14px', fontSize: 13.5, fontWeight: 700,
+              }}
+            >
+              تواصل عبر واتساب لمتابعة الاعتماد
+            </a>
+          )}
+        </div>
       )}
     </div>
   )
