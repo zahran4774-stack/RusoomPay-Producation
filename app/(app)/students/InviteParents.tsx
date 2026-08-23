@@ -131,7 +131,11 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
       if (data.success) {
         // تحذير إذا قبِل Twilio الطلب لكن حالة التسليم غير مبشّرة
         if (data.status && !['queued', 'sent', 'delivered', 'accepted'].includes(data.status)) {
-          alert(`تم إرسال الطلب لكن حالته: ${data.status}\nراجع Twilio → Monitor → Logs → Messages`)
+          alert(`تم إرسال الطلب لكن حالته: ${data.status}\nSID: ${data.sid}\nراجع Twilio → Monitor → Logs → Messages وابحث عن هذا SID`)
+        } else {
+          // تشخيص مؤقت: نعرض SID لتتبّع الرسالة بدقة في سجل Twilio
+          // (القبول الفوري لا يعني التسليم الفعلي — تحقق من الحالة النهائية بالسجل)
+          alert(`تم قبول الطلب من Twilio ✅\nSID: ${data.sid}\nالحالة الأولية: ${data.status}\n\nابحث عن هذا SID في Twilio → Monitor → Logs → Messages للتأكد من التسليم الفعلي`)
         }
         // تسجيل دائم في قاعدة البيانات — يبقى حتى لو أُغلقت الصفحة
         await supabase.rpc('mark_guardian_invited', { p_phone: g.phone })
@@ -260,3 +264,4 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
     </div>
   )
 }
+      
