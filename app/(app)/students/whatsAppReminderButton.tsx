@@ -60,7 +60,7 @@ export default function WhatsAppReminderButton({
       const data = await res.json()
       alert(
         data.success
-          ? `تم قبول الطلب من Twilio ✅\nSID: ${data.sid}\nالحالة الأولية: ${data.status}\n\nتحقق من التسليم الفعلي بـ Twilio → Monitor → Logs → Messages`
+          ? 'تم الإرسال بنجاح ✅'
           : 'فشل الإرسال: ' + (data.error || 'خطأ')
       )
     } catch (e: any) {
