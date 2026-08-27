@@ -233,12 +233,12 @@ export default function LoginPage() {
                   <path d="M3.5 19a5.5 5.5 0 0111 0" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" />
                   <path d="M18 7v6M15 10h6" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" />
                 </svg>
-                إنشاء حساب جديد
+                 إنشاء حساب مدرسة
               </a>
 
               <div className="lp-foot-links">
                 <span>ولي أمر؟ <a href="/parent-register">أنشئ حساب</a></span>
-                <span>موظف مدعوّ؟ <a href="/staff-register">أنشئ حساب</a></span>
+                <span>موظف ؟ <a href="/staff-register">أنشئ حساب</a></span>
               </div>
 
               <p className="lp-terms">
