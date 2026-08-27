@@ -8,6 +8,7 @@ import IntelligencePanel from './IntelligencePanel'
 import StaffInvites from './StaffInvites'
 import SchoolBackup from './SchoolBackup'
 import SectionStyleSetting from './SectionStyleSetting'
+import BankSettings from './BankSettings'
 
 export default async function SettingsPage() {
   const supabase = await createClient()
@@ -32,11 +33,15 @@ export default async function SettingsPage() {
   let accentColor: string | null = null
   let schoolName: string | null = null
   let sectionStyles: string[] = ['ar_letters']
+  let bank: {
+    bank_name: string | null; bank_account: string | null
+    bank_iban: string | null; bank_holder: string | null; bank_enabled: boolean
+  } | null = null
 
   if (isOwner && profile?.school_id) {
     const { data: school } = await supabase
       .from('schools')
-      .select('logo_url, color, card_accent_color, name, section_styles')
+      .select('logo_url, color, card_accent_color, name, section_styles, bank_name, bank_account, bank_iban, bank_holder, bank_enabled')
       .eq('id', profile.school_id)
       .maybeSingle()
     logo = school?.logo_url ?? null
@@ -44,6 +49,13 @@ export default async function SettingsPage() {
     accentColor = school?.card_accent_color ?? null
     schoolName = school?.name ?? null
     sectionStyles = school?.section_styles ?? ['ar_letters']
+    if (school) {
+      bank = {
+        bank_name: school.bank_name, bank_account: school.bank_account,
+        bank_iban: school.bank_iban, bank_holder: school.bank_holder,
+        bank_enabled: school.bank_enabled ?? false,
+      }
+    }
   }
 
   // طبقة الذكاء — حالة المحرّكات (School Intelligence Core)
@@ -57,6 +69,8 @@ export default async function SettingsPage() {
       <MfaSetup />
       <SchoolBranding initialLogo={logo} initialColor={color} initialAccentColor={accentColor} canEdit={isOwner} />
       {isOwner && <SectionStyleSetting initial={sectionStyles} canEdit={isOwner} />}
+
+      {isOwner && bank && <BankSettings bank={bank} />}
 
       {vat && (
         <VatSetting
