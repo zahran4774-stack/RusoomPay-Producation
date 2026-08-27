@@ -21,10 +21,13 @@ const levelBg = (lvl: string) => lvl === 'عالية' ? '#FEF0F0' : lvl === 'م�
 const th: React.CSSProperties = { padding: '11px 14px', fontSize: 12.5, fontWeight: 700, color: '#475467', whiteSpace: 'nowrap' }
 const td: React.CSSProperties = { padding: '11px 14px', fontSize: 13.5, color: '#1D2939', borderTop: '1px solid #EEF1F5', verticalAlign: 'top' }
 
+const PAGE_SIZE = 6
+
 export default function RiskIndicator({ currency }: { currency: string }) {
   const supabase = createClient()
   const [items, setItems] = useState<RiskItem[] | null>(null)
   const [disabled, setDisabled] = useState(false)
+  const [page, setPage] = useState(1)
   const sym = currency === 'OMR' ? 'ر.ع' : currency
   const fmt = (n: number) => new Intl.NumberFormat('en', { minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(n || 0)
 
@@ -43,6 +46,10 @@ export default function RiskIndicator({ currency }: { currency: string }) {
   if (disabled) return null
   if (items === null) return null
   if (items.length === 0) return null
+
+  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE))
+  const safePage = Math.min(page, totalPages)
+  const pageItems = items.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
   return (
     <section style={{ background: '#fff', border: '1px solid #E7EBF0', borderRadius: 16, padding: 22, marginTop: 18 }} dir="rtl">
@@ -67,7 +74,7 @@ export default function RiskIndicator({ currency }: { currency: string }) {
             </tr>
           </thead>
           <tbody>
-            {items.slice(0, 15).map((r) => (
+            {pageItems.map((r) => (
               <tr key={r.student_id}>
                 <td style={td}>
                   <div style={{ fontWeight: 600, color: '#0F1B2D' }}>{r.student_name}</div>
@@ -130,6 +137,34 @@ const to = `+${raw}`
           </tbody>
         </table>
       </div>
+
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={safePage === 1}
+            style={{
+              padding: '9px 14px', borderRadius: 10, border: '1.5px solid #DDE3EC', background: '#fff',
+              fontSize: 13.5, fontWeight: 700, fontFamily: 'inherit',
+              cursor: safePage === 1 ? 'default' : 'pointer', opacity: safePage === 1 ? 0.5 : 1,
+            }}>
+            ‹ السابق
+          </button>
+          <span style={{ fontSize: 13.5, color: '#556', padding: '0 8px' }}>
+            صفحة {safePage} من {totalPages}
+          </span>
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={safePage === totalPages}
+            style={{
+              padding: '9px 14px', borderRadius: 10, border: '1.5px solid #DDE3EC', background: '#fff',
+              fontSize: 13.5, fontWeight: 700, fontFamily: 'inherit',
+              cursor: safePage === totalPages ? 'default' : 'pointer', opacity: safePage === totalPages ? 0.5 : 1,
+            }}>
+            التالي ›
+          </button>
+        </div>
+      )}
     </section>
   )
 }
