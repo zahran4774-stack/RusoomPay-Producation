@@ -18,7 +18,7 @@ type School = {
   bank_holder?: string | null; bank_enabled?: boolean | null
 } | null
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 6
 
 export default function FeesManager({ students, school, currency }: { students: Student[]; school: School; currency: string }) {
   const [invoice, setInvoice] = useState<{ student: Student; fee: Fee } | null>(null)
