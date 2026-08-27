@@ -1,0 +1,50 @@
+# ═══════════════════════════════════════════════════════════════
+# تشغيل اختبارات RusoomPay تلقائياً على خوادم GitHub — بلا حاجة لجهازك
+#
+# يعمل عند:
+#   - كل رفع (push) لأي فرع
+#   - يدوياً بالضغط على زر "Run workflow" من تبويب Actions
+#
+# النتائج تظهر في تبويب Actions — يفتح من متصفّح الهاتف بسهولة.
+# ═══════════════════════════════════════════════════════════════
+name: اختبارات RusoomPay
+
+on:
+  push:
+    branches: ['**']       # كل رفع لأي فرع يُشغّل الاختبارات تلقائياً
+  workflow_dispatch:        # يسمح بالتشغيل اليدوي بضغطة زر من تبويب Actions
+
+jobs:
+  test:
+    name: تشغيل مجموعة الاختبارات
+    runs-on: ubuntu-latest
+    timeout-minutes: 15     # حماية: لو تعلّق اختبار (مثل حارس التكرار 10 ثوانٍ)، لا يستمر للأبد
+
+    steps:
+      - name: تنزيل الكود
+        uses: actions/checkout@v4
+
+      - name: تجهيز Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: تثبيت الحزم
+        run: npm ci
+
+      - name: تشغيل الاختبارات
+        run: npm test
+        env:
+          # تُقرأ من GitHub Secrets — لا تظهر أبداً في السجلّات أو الكود
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+      - name: ملخّص النتيجة
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ كل الاختبارات نجحت"
+          else
+            echo "❌ فشل اختبار واحد أو أكثر — راجع السجلّ أعلاه لتفاصيل الخطأ"
+          fi
