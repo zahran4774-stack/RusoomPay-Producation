@@ -22,6 +22,8 @@ type Bus = { id: string; routes_label: string; fee: number }
 const statusLabel = (s: string) => s === 'active' ? 'منتظم' : s === 'transferred' ? 'منقول' : 'متخرج'
 const statusColor = (s: string) => s === 'active' ? '#067647' : s === 'transferred' ? '#B54708' : '#667085'
 
+const PAGE_SIZE = 10
+
 export default function StudentsByClass({
   students, school, busMap = {}, buses = [], studentBusIdMap = {},
 }: {
@@ -33,6 +35,7 @@ export default function StudentsByClass({
 }) {
   const [openKey, setOpenKey] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  const [pageMap, setPageMap] = useState<Record<string, number>>({})   // صفحة كل شعبة (مستقلّة لكل كرت)
 
   // تجميع الطلاب في شعب صفّية (مرّة واحدة، مخزّن)
   const groups = useMemo<ClassGroup[]>(() => {
@@ -85,7 +88,7 @@ export default function StudentsByClass({
             <div key={g.key} style={{ gridColumn: isOpen ? '1 / -1' : 'auto' }}>
               {/* الكرت */}
               <button
-                onClick={() => setOpenKey(isOpen && !query ? null : g.key)}
+                onClick={() => { setOpenKey(isOpen && !query ? null : g.key); setPageMap((m) => ({ ...m, [g.key]: 1 })) }}
                 aria-expanded={isOpen}
                 style={{
                   width: '100%', textAlign: 'right', cursor: 'pointer', fontFamily: 'inherit',
@@ -111,7 +114,12 @@ export default function StudentsByClass({
               </button>
 
               {/* جدول طلاب الشعبة (يظهر عند الفتح) */}
-              {isOpen && (
+              {isOpen && (() => {
+                const gPage = pageMap[g.key] ?? 1
+                const gTotalPages = Math.max(1, Math.ceil(g.students.length / PAGE_SIZE))
+                const gSafePage = Math.min(gPage, gTotalPages)
+                const gPageStudents = g.students.slice((gSafePage - 1) * PAGE_SIZE, gSafePage * PAGE_SIZE)
+                return (
                 <div style={{ background: '#fff', borderRadius: 14, marginTop: 10, overflow: 'auto', boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
                   {/* شريط إحصائيات + تصدير */}
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderBottom: '1px solid #EEF2F1' }}>
@@ -150,7 +158,7 @@ export default function StudentsByClass({
                       </tr>
                     </thead>
                     <tbody>
-                      {g.students.map((s) => (
+                      {gPageStudents.map((s) => (
                         <tr key={s.id} style={{ borderBottom: '1px solid #EEF2F1' }}>
                           <td style={{ padding: 11, fontWeight: 700 }}>{s.code}</td>
                           <td style={{ padding: 11 }}>{s.full_name}</td>
@@ -189,8 +197,37 @@ export default function StudentsByClass({
                       ))}
                     </tbody>
                   </table>
+
+                  {gTotalPages > 1 && (
+                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: '12px 14px', borderTop: '1px solid #EEF2F1' }}>
+                      <button
+                        onClick={() => setPageMap((m) => ({ ...m, [g.key]: Math.max(1, gSafePage - 1) }))}
+                        disabled={gSafePage === 1}
+                        style={{
+                          padding: '7px 13px', borderRadius: 8, border: '1.5px solid #DDE3EC', background: '#fff',
+                          fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
+                          cursor: gSafePage === 1 ? 'default' : 'pointer', opacity: gSafePage === 1 ? 0.5 : 1,
+                        }}>
+                        ‹ السابق
+                      </button>
+                      <span style={{ fontSize: 13, color: '#556', padding: '0 6px' }}>
+                        صفحة {gSafePage} من {gTotalPages}
+                      </span>
+                      <button
+                        onClick={() => setPageMap((m) => ({ ...m, [g.key]: Math.min(gTotalPages, gSafePage + 1) }))}
+                        disabled={gSafePage === gTotalPages}
+                        style={{
+                          padding: '7px 13px', borderRadius: 8, border: '1.5px solid #DDE3EC', background: '#fff',
+                          fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
+                          cursor: gSafePage === gTotalPages ? 'default' : 'pointer', opacity: gSafePage === gTotalPages ? 0.5 : 1,
+                        }}>
+                        التالي ›
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
+                )
+              })()}
             </div>
           )
         })}
