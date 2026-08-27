@@ -4,26 +4,22 @@
 import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import FeesManager from './FeesManager'
-import BankSettings from './BankSettings'
 import PendingPayments from './PendingPayments'
 import FocusScroller from '../FocusScroller'
 import RiskIndicator from './RiskIndicator'
 import PrintButton from '../PrintButton'
-import { isOwner, type Role } from '@/lib/roles'
 
 export default async function FeesPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // ═══ كل الاستعلامات المستقلّة معاً — بدل أربع رحلات متتابعة ═══
+  // ═══ كل الاستعلامات المستقلّة معاً — بدل ثلاث رحلات متتابعة ═══
   const [
-    { data: profile },
     { data: school },
     { data: students },
     { data: pending },
   ] = await Promise.all([
-    supabase.from('profiles').select('role').eq('id', user.id).single(),
     supabase.from('schools')
       .select('name, branch, currency, cr_number, moe_license, vat_number, phone, email, address, logo_url, color, bank_name, bank_account, bank_iban, bank_holder, bank_enabled')
       .single(),
@@ -37,8 +33,6 @@ export default async function FeesPage() {
       // (يحتاج تصميماً منفصلاً بسبب اعتماد الطباعة/التقارير على القائمة كاملة).
     supabase.rpc('pending_payments_list'),
   ])
-
-  const role = profile?.role ?? 'admin'
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }} dir="rtl">
@@ -78,13 +72,6 @@ export default async function FeesPage() {
         <PendingPayments initial={pending || []} />
       </div>
       <RiskIndicator currency={school?.currency ?? 'OMR'} />
-      {isOwner(role as Role) && school && (
-        <BankSettings bank={{
-          bank_name: school.bank_name, bank_account: school.bank_account,
-          bank_iban: school.bank_iban, bank_holder: school.bank_holder,
-          bank_enabled: school.bank_enabled ?? false,
-        }} />
-      )}
       <div id="fees-table" style={{ scrollMarginTop: 80 }}>
         <div id="overdue" style={{ scrollMarginTop: 80 }} />
         <FeesManager students={students ?? []} school={school} currency={school?.currency ?? 'OMR'} />
