@@ -66,6 +66,7 @@ describe('Thawani webhook (منطق مباشر) — الحالة الناجحة'
     }))
 
     const res = await simulateWebhook(fakeSessionId)
+    if (!res.ok) console.error('=== سبب فشل simulateWebhook ===', JSON.stringify(res))
     expect(res.ok).toBe(true)
 
     const { data: fee } = await sb.from('student_fees').select('paid').eq('id', fx.feeId).single()
