@@ -1,6 +1,8 @@
 // أدوات مساعدة مشتركة للاختبارات التكاملية —
-// تُنشئ عميل Supabase بصلاحية الخدمة (service role) للوصول المباشر أثناء الاختبار،
-// وتوفّر دوال لإنشاء/تنظيف بيانات اختبار معزولة (مدرسة، طالب، فاتورة) لكل تشغيلة.
+// تُنشئ عميل Supabase بصلاحية الخدمة (service role) لإعداد/تنظيف بيانات الاختبار،
+// وعميلاً آخر بجلسة مستخدم حقيقية (JWT) لاستدعاء دوال RPC —
+// لأن الدوال مثل record_payment تعتمد داخلياً على my_school_id()/my_role()
+// المبنيّتين على auth.uid()، وهذا غير متاح عبر service_role مباشرة.
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { randomUUID } from 'node:crypto'
 
@@ -9,27 +11,39 @@ export function serviceClient(): SupabaseClient {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!url || !key) {
     throw new Error(
-      'متغيّرات البيئة مفقودة: NEXT_PUBLIC_SUPABASE_URL و SUPABASE_SERVICE_ROLE_KEY مطلوبان لتشغيل الاختبارات التكاملية.\n' +
-      'أضفهما في ملف .env.test.local (لا يُرفع لـ GitHub أبداً).'
+      'متغيّرات البيئة مفقودة: NEXT_PUBLIC_SUPABASE_URL و SUPABASE_SERVICE_ROLE_KEY مطلوبان لتشغيل الاختبارات التكاملية.'
     )
   }
   return createClient(url, key, { auth: { persistSession: false } })
 }
 
-// كل اختبار يعمل داخل "بيئة معزولة" خاصة به: مدرسة اختبار + مستخدم محاسب + طالب + فاتورة.
-// نُسمّي كل شيء ببادئة TEST_ فريدة (uuid) حتى يسهل حذفها كاملة بعد كل اختبار،
-// ولا تتعارض مع بيانات مدرسة حقيقية أبداً.
+// عميل عادي (anon key) — نستخدمه لاحقاً لتسجيل دخول المحاسب الوهمي بجلسة JWT حقيقية
+function anonClient(): SupabaseClient {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!anonKey) {
+    throw new Error('NEXT_PUBLIC_SUPABASE_ANON_KEY مطلوب أيضاً لإنشاء جلسات اختبار حقيقية.')
+  }
+  return createClient(url, anonKey, { auth: { persistSession: false } })
+}
+
 export type TestFixture = {
   schoolId: string
   accountantUserId: string
   studentId: string
   feeId: string
+  password: string
+  email: string
+  // عميل بجلسة المحاسب الحقيقية — استخدمه لاستدعاء RPC (record_payment، إلخ)
+  asAccountant: SupabaseClient
   cleanup: () => Promise<void>
 }
 
 export async function createTestFixture(sb: SupabaseClient, opts?: { feeTotal?: number }): Promise<TestFixture> {
   const tag = `TEST_${randomUUID().slice(0, 8)}`
   const feeTotal = opts?.feeTotal ?? 100
+  const password = randomUUID()
+  const email = `${tag.toLowerCase()}@test.rusoompay.invalid`
 
   // 1) مدرسة اختبار
   const { data: school, error: schoolErr } = await sb
@@ -38,8 +52,7 @@ export async function createTestFixture(sb: SupabaseClient, opts?: { feeTotal?: 
     .select('id').single()
   if (schoolErr || !school) throw new Error('فشل إنشاء مدرسة الاختبار: ' + schoolErr?.message)
 
-  // 2) دليل حسابات أساسي (1110 نقد، 1120 بنك، 1210 ذمم مدينة/إيراد الرسوم، 5520، 1310)
-  //    مطلوب لأن record_payment وinventory_sell يبحثان عن هذه الأكواد بالضبط.
+  // 2) دليل حسابات أساسي
   const accounts = [
     { code: '1110', name: 'الصندوق' },
     { code: '1120', name: 'البنك' },
@@ -51,10 +64,9 @@ export async function createTestFixture(sb: SupabaseClient, opts?: { feeTotal?: 
     await sb.from('accounts').insert({ school_id: school.id, code: a.code, name: a.name })
   }
 
-  // 3) مستخدم محاسب اختبار (auth.users + profiles) — يحتاج صلاحية service role
-  const email = `${tag.toLowerCase()}@test.rusoompay.invalid`
+  // 3) مستخدم محاسب اختبار — بريد مؤكَّد + كلمة مرور معروفة لنا لتسجيل الدخول لاحقاً
   const { data: authUser, error: authErr } = await sb.auth.admin.createUser({
-    email, password: randomUUID(), email_confirm: true,
+    email, password, email_confirm: true,
   })
   if (authErr || !authUser.user) throw new Error('فشل إنشاء مستخدم الاختبار: ' + authErr?.message)
 
@@ -62,7 +74,7 @@ export async function createTestFixture(sb: SupabaseClient, opts?: { feeTotal?: 
     id: authUser.user.id, school_id: school.id, role: 'accountant', full_name: tag,
   })
 
-  // 4) طالب اختبار — grade إلزامي (NOT NULL) في هذا المخطّط، نمرّر قيمة ثابتة بسيطة
+  // 4) طالب اختبار
   const { data: student, error: stuErr } = await sb
     .from('students').insert({
       school_id: school.id, full_name: `${tag}_Student`, status: 'active', code: tag, grade: 'الأول',
@@ -77,13 +89,20 @@ export async function createTestFixture(sb: SupabaseClient, opts?: { feeTotal?: 
     }).select('id').single()
   if (feeErr || !fee) throw new Error('فشل إنشاء فاتورة الاختبار: ' + feeErr?.message)
 
+  // 6) جلسة حقيقية للمحاسب — عميل منفصل، auth.uid() سيكون صحيحاً فيه فعلياً
+  const accClient = anonClient()
+  const { error: signInErr } = await accClient.auth.signInWithPassword({ email, password })
+  if (signInErr) throw new Error('فشل تسجيل دخول المحاسب الوهمي: ' + signInErr.message)
+
   return {
     schoolId: school.id,
     accountantUserId: authUser.user.id,
     studentId: student.id,
     feeId: fee.id,
+    email,
+    password,
+    asAccountant: accClient,
     cleanup: async () => {
-      // الحذف بالترتيب العكسي لتفادي قيود المفاتيح الأجنبية
       await sb.from('journal_lines').delete().eq('school_id', school.id)
       await sb.from('journal_entries').delete().eq('school_id', school.id)
       await sb.from('payments').delete().eq('school_id', school.id)
@@ -98,12 +117,6 @@ export async function createTestFixture(sb: SupabaseClient, opts?: { feeTotal?: 
   }
 }
 
-// يستدعي دالة RPC "كأن" المستخدم هو من ينفّذها — عبر إعداد جلسة مؤقتة.
-// ملاحظة: بما أن اختباراتنا تستخدم service role مباشرة (تتجاوز RLS)،
-// نستدعي my_school_id/my_role ضمنياً عبر تمرير معاملات الدالة كما تفعل،
-// لكن التحقّق من الصلاحيات داخل الدالة نفسها (public.my_role()) يعتمد على auth.uid()
-// الذي لا يُحاكى بسهولة عبر service role. لهذا اختبارات "الرفض بسبب الصلاحية"
-// تُختبر عبر anon/authenticated client حقيقي، لا service role — انظر rls.test.ts.
 export async function callRpc(sb: SupabaseClient, fn: string, args: Record<string, unknown>) {
   return sb.rpc(fn, args)
 }
