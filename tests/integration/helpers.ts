@@ -53,15 +53,16 @@ export async function createTestFixture(sb: SupabaseClient, opts?: { feeTotal?: 
   if (schoolErr || !school) throw new Error('فشل إنشاء مدرسة الاختبار: ' + schoolErr?.message)
 
   // 2) دليل حسابات أساسي
+  // type إلزامي (NOT NULL) — القيم مطابقة تماماً لما هو مستخدم فعلياً في حساباتك الحقيقية
   const accounts = [
-    { code: '1110', name: 'الصندوق' },
-    { code: '1120', name: 'البنك' },
-    { code: '1210', name: 'ذمم الطلاب' },
-    { code: '5520', name: 'تكلفة المبيعات' },
-    { code: '1310', name: 'المخزون' },
+    { code: '1110', name: 'الصندوق', type: 'asset' },
+    { code: '1120', name: 'البنك', type: 'asset' },
+    { code: '1210', name: 'ذمم الطلاب', type: 'asset' },
+    { code: '1310', name: 'المخزون', type: 'asset' },
+    { code: '5520', name: 'تكلفة المبيعات', type: 'expense' },
   ]
   for (const a of accounts) {
-    const { error: accErr } = await sb.from('accounts').insert({ school_id: school.id, code: a.code, name: a.name })
+    const { error: accErr } = await sb.from('accounts').insert({ school_id: school.id, code: a.code, name: a.name, type: a.type })
     if (accErr) throw new Error(`فشل إنشاء حساب ${a.code}: ${accErr.message}`)
   }
 
