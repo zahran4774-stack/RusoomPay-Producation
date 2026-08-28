@@ -61,7 +61,8 @@ export async function createTestFixture(sb: SupabaseClient, opts?: { feeTotal?: 
     { code: '1310', name: 'المخزون' },
   ]
   for (const a of accounts) {
-    await sb.from('accounts').insert({ school_id: school.id, code: a.code, name: a.name })
+    const { error: accErr } = await sb.from('accounts').insert({ school_id: school.id, code: a.code, name: a.name })
+    if (accErr) throw new Error(`فشل إنشاء حساب ${a.code}: ${accErr.message}`)
   }
 
   // 3) مستخدم محاسب اختبار — بريد مؤكَّد + كلمة مرور معروفة لنا لتسجيل الدخول لاحقاً
@@ -103,8 +104,10 @@ export async function createTestFixture(sb: SupabaseClient, opts?: { feeTotal?: 
     password,
     asAccountant: accClient,
     cleanup: async () => {
-      await sb.from('journal_lines').delete().eq('school_id', school.id)
-      await sb.from('journal_entries').delete().eq('school_id', school.id)
+      // ملاحظة مهمة: القيود المحاسبية (journal_entries/journal_lines) محميّة عمداً
+      // بحارس block_journal_mutation — لا تُحذف ولا تُعدَّل أبداً، حتى لبيانات الاختبار.
+      // هذا سلوك صحيح ومقصود لحماية بياناتك الحقيقية، فلا نحاول حذفها هنا إطلاقاً
+      // (المحاولة السابقة كانت تفشل بصمت وتترك باقي التنظيف معلّقاً خلفها).
       await sb.from('payments').delete().eq('school_id', school.id)
       await sb.from('pending_payments').delete().eq('school_id', school.id)
       await sb.from('student_fees').delete().eq('school_id', school.id)
@@ -112,7 +115,8 @@ export async function createTestFixture(sb: SupabaseClient, opts?: { feeTotal?: 
       await sb.from('accounts').delete().eq('school_id', school.id)
       await sb.from('profiles').delete().eq('school_id', school.id)
       await sb.auth.admin.deleteUser(authUser.user.id)
-      await sb.from('schools').delete().eq('id', school.id)
+      // لا نحذف المدرسة نفسها (قد ترتبط بها قيود محاسبية) — نعزلها بإعادة التسمية بدلاً من ذلك
+      await sb.from('schools').update({ name: 'ARCHIVED_' + tag }).eq('id', school.id)
     },
   }
 }
