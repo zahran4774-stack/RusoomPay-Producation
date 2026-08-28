@@ -62,10 +62,10 @@ export async function createTestFixture(sb: SupabaseClient, opts?: { feeTotal?: 
     id: authUser.user.id, school_id: school.id, role: 'accountant', full_name: tag,
   })
 
-  // 4) طالب اختبار
+  // 4) طالب اختبار — grade إلزامي (NOT NULL) في هذا المخطّط، نمرّر قيمة ثابتة بسيطة
   const { data: student, error: stuErr } = await sb
     .from('students').insert({
-      school_id: school.id, full_name: `${tag}_Student`, status: 'active', code: tag,
+      school_id: school.id, full_name: `${tag}_Student`, status: 'active', code: tag, grade: 'الأول',
     }).select('id').single()
   if (stuErr || !student) throw new Error('فشل إنشاء طالب الاختبار: ' + stuErr?.message)
 
