@@ -34,7 +34,10 @@ describe('العزل بين المدارس', () => {
   it('حسابات المدرسة A (1110, 1120...) منفصلة تماماً عن حسابات المدرسة B رغم تطابق الأكواد', async () => {
     const { data: accountsA } = await sb.from('accounts').select('id, code').eq('school_id', schoolA.schoolId).eq('code', '1110')
     const { data: accountsB } = await sb.from('accounts').select('id, code').eq('school_id', schoolB.schoolId).eq('code', '1110')
-    expect(accountsA?.[0]?.id).not.toBe(accountsB?.[0]?.id) // نفس الكود "1110"، لكن صفّان مختلفان تماماً
+    // تأكيد الوجود أولاً — لو الحسابان غير موجودين، الاختبار السابق (المقارنة) لا معنى له أصلاً
+    expect(accountsA?.length).toBeGreaterThan(0)
+    expect(accountsB?.length).toBeGreaterThan(0)
+    expect(accountsA![0].id).not.toBe(accountsB![0].id) // نفس الكود "1110"، لكن صفّان مختلفان تماماً
   })
 
   it('دفعة في مدرسة A لا تُنشئ أي قيد محاسبي في مدرسة B', async () => {
