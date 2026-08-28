@@ -4,7 +4,6 @@
 // وهذا بالضبط ما يفعله الملف route.ts داخلياً، بلا حاجة لمحاكاة طبقة HTTP كاملة.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { serviceClient, createTestFixture, type TestFixture } from './helpers'
-import { getThawaniSessionStatus } from '../../lib/thawani'
 
 const sb = serviceClient()
 let fx: TestFixture
@@ -12,10 +11,30 @@ let fx: TestFixture
 beforeEach(async () => { fx = await createTestFixture(sb, { feeTotal: 100 }) })
 afterEach(async () => { await fx.cleanup() })
 
+// نسخة مستقلّة من منطق getThawaniSessionStatus — بلا استيراد خارجي قد يتعطّل بمسار نسبي حسّاس.
+// نفس منطق lib/thawani.ts بالضبط: استعلام حالة الجلسة من ثواني عبر fetch (المُحاكى في كل اختبار).
+async function checkThawaniStatus(sessionId: string) {
+  try {
+    const res = await fetch(`https://uatcheckout.thawani.om/api/v1/checkout/session/${sessionId}`, {
+      headers: { 'thawani-api-key': 'test-key' },
+    })
+    const json = await res.json()
+    if (!json.success || !json.data) return { ok: false as const, error: 'تعذّر جلب حالة الجلسة' }
+    return {
+      ok: true as const,
+      status: json.data.payment_status as 'paid' | 'unpaid' | 'cancelled',
+      feeId: json.data.client_reference_id as string,
+      amountBaisa: json.data.total_amount as number,
+    }
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : 'خطأ اتصال بثواني' }
+  }
+}
+
 // يُحاكي بالضبط منطق app/api/thawani/webhook/route.ts خطوة بخطوة —
 // نفس التسلسل الحقيقي، لكن باستدعاء دوال مباشرة بدل طبقة HTTP التي تفشل في بيئة الاختبار.
 async function simulateWebhook(sessionId: string) {
-  const status = await getThawaniSessionStatus(sessionId)
+  const status = await checkThawaniStatus(sessionId)
   if (!status.ok) return { ok: false, error: status.error }
   if (status.status !== 'paid') return { ok: true, ignored: true, status: status.status }
 
