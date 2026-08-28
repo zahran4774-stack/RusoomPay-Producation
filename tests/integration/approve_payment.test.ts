@@ -36,7 +36,7 @@ describe('approve_payment — الاعتماد الصحيح', () => {
     const { error } = await fx.asAccountant.rpc('approve_payment', { p_id: ppId })
     expect(error).not.toBeNull()
     // بعد الاعتماد الأول status='approved'، فالبحث عن status='pending' لا يجدها فتُرجع "غير موجودة"
-    expect(error?.message).toContain('غير موجودة')
+    expect(error?.message).toContain('سبق')
   })
 
   it('اعتماد دفعة معلّقة بمبلغ أكبر من المتبقّي يفشل (يحمي من خطأ مضاعف)', async () => {
