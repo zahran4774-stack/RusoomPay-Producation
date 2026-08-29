@@ -2,7 +2,7 @@
 // (NextResponse لا يعمل بشكل كامل خارج بيئة تشغيل Next.js الفعلية، فتفشل .text()/.json())،
 // نختبر المنطق الجوهري نفسه مباشرة: تحقّق حالة الجلسة من ثواني، ثم استدعاء record_payment —
 // وهذا بالضبط ما يفعله الملف route.ts داخلياً، بلا حاجة لمحاكاة طبقة HTTP كاملة.
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { serviceClient, createTestFixture, type TestFixture } from './helpers'
 
 const sb = serviceClient()
@@ -13,9 +13,11 @@ afterEach(async () => { await fx.cleanup() })
 
 // نسخة مستقلّة من منطق getThawaniSessionStatus — بلا استيراد خارجي قد يتعطّل بمسار نسبي حسّاس.
 // نفس منطق lib/thawani.ts بالضبط: استعلام حالة الجلسة من ثواني عبر fetch (المُحاكى في كل اختبار).
-async function checkThawaniStatus(sessionId: string) {
+type FetchLike = (url: string, init?: RequestInit) => Promise<{ json: () => Promise<any> }>
+
+async function checkThawaniStatus(sessionId: string, fetchImpl: FetchLike) {
   try {
-    const res = await fetch(`https://uatcheckout.thawani.om/api/v1/checkout/session/${sessionId}`, {
+    const res = await fetchImpl(`https://uatcheckout.thawani.om/api/v1/checkout/session/${sessionId}`, {
       headers: { 'thawani-api-key': 'test-key' },
     })
     const json = await res.json()
@@ -33,8 +35,8 @@ async function checkThawaniStatus(sessionId: string) {
 
 // يُحاكي بالضبط منطق app/api/thawani/webhook/route.ts خطوة بخطوة —
 // نفس التسلسل الحقيقي، لكن باستدعاء دوال مباشرة بدل طبقة HTTP التي تفشل في بيئة الاختبار.
-async function simulateWebhook(sessionId: string) {
-  const status = await checkThawaniStatus(sessionId)
+async function simulateWebhook(sessionId: string, fetchImpl: FetchLike) {
+  const status = await checkThawaniStatus(sessionId, fetchImpl)
   if (!status.ok) return { ok: false, error: status.error }
   if (status.status !== 'paid') return { ok: true, ignored: true, status: status.status }
 
@@ -57,15 +59,15 @@ async function simulateWebhook(sessionId: string) {
 describe('Thawani webhook (منطق مباشر) — الحالة الناجحة', () => {
   it('دفعة مؤكَّدة (paid) من ثواني تُسجَّل عبر record_payment وتُحدَّث الفاتورة', async () => {
     const fakeSessionId = 'checkout_test_' + fx.feeId.slice(0, 8)
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+    const mockFetch: FetchLike = async () => ({
       ok: true,
       json: async () => ({
         success: true,
         data: { session_id: fakeSessionId, payment_status: 'paid', client_reference_id: fx.feeId, total_amount: 50000 },
       }),
-    }))
+    })
 
-    const res = await simulateWebhook(fakeSessionId)
+    const res = await simulateWebhook(fakeSessionId, mockFetch)
     if (!res.ok) console.error('=== سبب فشل simulateWebhook ===', JSON.stringify(res))
     expect(res.ok).toBe(true)
 
@@ -74,54 +76,47 @@ describe('Thawani webhook (منطق مباشر) — الحالة الناجحة'
 
     const { data: payment } = await sb.from('payments').select('method').eq('fee_id', fx.feeId).single()
     expect(payment?.method).toBe('thawani')
-
-    vi.unstubAllGlobals()
   })
 
   it('استدعاء الـwebhook مرّتين لنفس الجلسة لا يُسجّل الدفعة مرّتين (منع الازدواج)', async () => {
     const fakeSessionId = 'checkout_test_dup_' + fx.feeId.slice(0, 8)
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+    const mockFetch: FetchLike = async () => ({
       ok: true,
       json: async () => ({
         success: true,
         data: { session_id: fakeSessionId, payment_status: 'paid', client_reference_id: fx.feeId, total_amount: 30000 },
       }),
-    }))
+    })
 
-    await simulateWebhook(fakeSessionId)
-    await simulateWebhook(fakeSessionId)
+    await simulateWebhook(fakeSessionId, mockFetch)
+    await simulateWebhook(fakeSessionId, mockFetch)
 
     const { data: fee } = await sb.from('student_fees').select('paid').eq('id', fx.feeId).single()
     expect(fee?.paid).toBeCloseTo(30, 3)
-
-    vi.unstubAllGlobals()
   })
 })
 
 describe('Thawani webhook (منطق مباشر) — الحالات غير المدفوعة', () => {
   it('حالة unpaid تُتجاهَل بصمت ولا تُسجّل أي دفعة', async () => {
     const fakeSessionId = 'checkout_test_unpaid'
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+    const mockFetch: FetchLike = async () => ({
       ok: true,
       json: async () => ({
         success: true,
         data: { session_id: fakeSessionId, payment_status: 'unpaid', client_reference_id: fx.feeId, total_amount: 50000 },
       }),
-    }))
+    })
 
-    const res = await simulateWebhook(fakeSessionId)
+    const res = await simulateWebhook(fakeSessionId, mockFetch)
     expect(res.ignored).toBe(true)
 
     const { data: fee } = await sb.from('student_fees').select('paid').eq('id', fx.feeId).single()
     expect(fee?.paid).toBeCloseTo(0, 3)
-
-    vi.unstubAllGlobals()
   })
 
   it('فشل الاتصال بثواني عند الاستعلام يُرجع خطأً واضحاً لا "نجاحاً" كاذباً', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))
-    const res = await simulateWebhook('checkout_network_fail')
+    const mockFetch: FetchLike = async () => { throw new Error('network down') }
+    const res = await simulateWebhook('checkout_network_fail', mockFetch)
     expect(res.ok).toBe(false)
-    vi.unstubAllGlobals()
   })
 })
