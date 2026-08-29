@@ -35,7 +35,9 @@ async function checkThawaniStatus(sessionId: string, fetchImpl: FetchLike) {
 
 // يُحاكي بالضبط منطق app/api/thawani/webhook/route.ts خطوة بخطوة —
 // نفس التسلسل الحقيقي، لكن باستدعاء دوال مباشرة بدل طبقة HTTP التي تفشل في بيئة الاختبار.
-async function simulateWebhook(sessionId: string, fetchImpl: FetchLike) {
+// asAccountant: جلسة JWT حقيقية — record_payment تعتمد داخلياً على my_school_id()/auth.uid()،
+// فلا تعمل عبر service_role مباشرة (نفس السبب الذي اكتشفناه في بقية ملفات الاختبار).
+async function simulateWebhook(sessionId: string, fetchImpl: FetchLike, asAccountant: TestFixture['asAccountant']) {
   const status = await checkThawaniStatus(sessionId, fetchImpl)
   if (!status.ok) return { ok: false, error: status.error }
   if (status.status !== 'paid') return { ok: true, ignored: true, status: status.status }
@@ -48,7 +50,7 @@ async function simulateWebhook(sessionId: string, fetchImpl: FetchLike) {
     .gte('created_at', new Date(Date.now() - 5 * 60 * 1000).toISOString()).limit(1)
   if (already && already.length > 0) return { ok: true, duplicate: true }
 
-  const { data: result, error } = await sb.rpc('record_payment', {
+  const { data: result, error } = await asAccountant.rpc('record_payment', {
     p_fee_id: feeId, p_amount: amountOmr, p_method: 'thawani',
     p_paid_at: new Date().toISOString().slice(0, 10),
   })
@@ -67,7 +69,7 @@ describe('Thawani webhook (منطق مباشر) — الحالة الناجحة'
       }),
     })
 
-    const res = await simulateWebhook(fakeSessionId, mockFetch)
+    const res = await simulateWebhook(fakeSessionId, mockFetch, fx.asAccountant)
     if (!res.ok) console.error('=== سبب فشل simulateWebhook ===', JSON.stringify(res))
     expect(res.ok).toBe(true)
 
@@ -88,8 +90,8 @@ describe('Thawani webhook (منطق مباشر) — الحالة الناجحة'
       }),
     })
 
-    await simulateWebhook(fakeSessionId, mockFetch)
-    await simulateWebhook(fakeSessionId, mockFetch)
+    await simulateWebhook(fakeSessionId, mockFetch, fx.asAccountant)
+    await simulateWebhook(fakeSessionId, mockFetch, fx.asAccountant)
 
     const { data: fee } = await sb.from('student_fees').select('paid').eq('id', fx.feeId).single()
     expect(fee?.paid).toBeCloseTo(30, 3)
@@ -107,7 +109,7 @@ describe('Thawani webhook (منطق مباشر) — الحالات غير الم
       }),
     })
 
-    const res = await simulateWebhook(fakeSessionId, mockFetch)
+    const res = await simulateWebhook(fakeSessionId, mockFetch, fx.asAccountant)
     expect(res.ignored).toBe(true)
 
     const { data: fee } = await sb.from('student_fees').select('paid').eq('id', fx.feeId).single()
@@ -116,7 +118,7 @@ describe('Thawani webhook (منطق مباشر) — الحالات غير الم
 
   it('فشل الاتصال بثواني عند الاستعلام يُرجع خطأً واضحاً لا "نجاحاً" كاذباً', async () => {
     const mockFetch: FetchLike = async () => { throw new Error('network down') }
-    const res = await simulateWebhook('checkout_network_fail', mockFetch)
+    const res = await simulateWebhook('checkout_network_fail', mockFetch, fx.asAccountant)
     expect(res.ok).toBe(false)
   })
 })
