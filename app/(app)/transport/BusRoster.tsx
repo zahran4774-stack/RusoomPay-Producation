@@ -21,11 +21,17 @@ export default function BusRoster({ schoolName }: { schoolName?: string }) {
   const [loading, setLoading] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
 
+  const [loadError, setLoadError] = useState(false)
+
   async function load() {
-    setLoading(true)
-    const { data } = await supabase.rpc('transport_roster')
-    const res = (data ?? {}) as { ok?: boolean; buses?: BusData[] }
-    setBuses(res.ok && res.buses ? res.buses : [])
+    setLoading(true); setLoadError(false)
+    try {
+      const { data } = await supabase.rpc('transport_roster')
+      const res = (data ?? {}) as { ok?: boolean; buses?: BusData[] }
+      setBuses(res.ok && res.buses ? res.buses : [])
+    } catch {
+      setLoadError(true)
+    }
     setLoading(false)
   }
 
@@ -98,11 +104,18 @@ export default function BusRoster({ schoolName }: { schoolName?: string }) {
 
       {loading && <div style={{ color: '#8A94A6', fontSize: 14, padding: 14 }}>جارٍ التحميل…</div>}
 
-      {!loading && buses.length === 0 && (
+      {!loading && loadError && (
+        <div style={{ background: '#FDECEA', border: '1px solid #F3C9C2', borderRadius: 10, padding: '12px 14px', color: '#A5331F', fontSize: 13.5, fontWeight: 600 }}>
+          تعذّر الاتصال — تحقّق من الإنترنت وأعد المحاولة.
+          <button onClick={load} style={{ marginRight: 8, background: 'none', border: 0, color: '#A5331F', textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700 }}>إعادة المحاولة</button>
+        </div>
+      )}
+
+      {!loading && !loadError && buses.length === 0 && (
         <div style={{ color: '#8A94A6', fontSize: 14, padding: 14, textAlign: 'center' }}>لا توجد باصات مسجّلة.</div>
       )}
 
-      {!loading && buses.map((bus) => {
+      {!loading && !loadError && buses.map((bus) => {
         const isOpen = expanded === bus.bus_id
         return (
           <div key={bus.bus_id} style={{ border: '1px solid #EEF1F5', borderRadius: 12, marginBottom: 10, overflow: 'hidden' }}>
