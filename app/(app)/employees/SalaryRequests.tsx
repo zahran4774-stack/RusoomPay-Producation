@@ -17,22 +17,36 @@ export default function SalaryRequests({ requests }: { requests: Req[] }) {
   const supabase = createClient()
   const [busy, setBusy] = useState<string | null>(null)
 
+  const [msg, setMsg] = useState('')
+
   async function approve(id: string) {
-    setBusy(id)
-    // دالة الخادم: تطبّق التغيير وتغلق الطلب ذرّياً، وترفض إن لم يكن المستخدم مديراً
-    const { error } = await supabase.rpc('approve_salary_request', { p_request_id: id })
-    setBusy(null)
-    if (error) { alert('تعذّر الاعتماد: ' + error.message); return }
-    router.refresh()
+    setBusy(id); setMsg('')
+    try {
+      // دالة الخادم: تطبّق التغيير وتغلق الطلب ذرّياً، وترفض إن لم يكن المستخدم مديراً
+      const { error } = await supabase.rpc('approve_salary_request', { p_request_id: id })
+      setBusy(null)
+      if (error) { setMsg('تعذّر الاعتماد: ' + error.message); return }
+      router.refresh()
+    } catch {
+      setBusy(null)
+      setMsg('تعذّر الاتصال — تحقّق من الإنترنت وحاول مجدداً')
+    }
   }
 
   async function reject(id: string) {
-    setBusy(id)
-    await supabase.from('salary_requests')
-      .update({ status: 'rejected', decided_at: new Date().toISOString() })
-      .eq('id', id)
-    setBusy(null)
-    router.refresh()
+    setBusy(id); setMsg('')
+    try {
+      // كانت هذه الدالة لا تتحقّق من الخطأ إطلاقاً — فشل الرفض كان يمرّ بصمت تام بلا أي إشعار
+      const { error } = await supabase.from('salary_requests')
+        .update({ status: 'rejected', decided_at: new Date().toISOString() })
+        .eq('id', id)
+      setBusy(null)
+      if (error) { setMsg('تعذّر الرفض: ' + error.message); return }
+      router.refresh()
+    } catch {
+      setBusy(null)
+      setMsg('تعذّر الاتصال — تحقّق من الإنترنت وحاول مجدداً')
+    }
   }
 
   return (
@@ -40,6 +54,11 @@ export default function SalaryRequests({ requests }: { requests: Req[] }) {
       <b style={{ color: '#0F2744', display: 'block', marginBottom: 12 }}>
         🔔 طلبات تعديل رواتب بانتظار اعتمادك ({requests.length})
       </b>
+      {msg && (
+        <div style={{ background: '#FDECEA', color: '#A5331F', padding: '8px 12px', borderRadius: 8, fontSize: 13, marginBottom: 10, fontWeight: 600 }}>
+          {msg}
+        </div>
+      )}
       {requests.map((r) => {
         const oldT = r.old_basic + r.old_allow, newT = r.new_basic + r.new_allow
         const diff = newT - oldT
