@@ -88,28 +88,44 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
     if (amt <= 0 || amt > payFee.remaining + 0.0005) { setMsg('مبلغ غير صحيح'); return }
     if (method === 'bank' && !bankRef.trim()) { setMsg('أدخل رقم مرجع التحويل'); return }
     setBusy(true); setMsg('')
-    const { error } = await supabase.rpc('submit_payment', {
-      p_fee_id: payFee.fee_id, p_amount: amt, p_method: method,
-      p_bank_ref: method === 'bank' ? bankRef.trim() : null,
-    })
-    if (error) { setMsg('تعذّر الإرسال: ' + error.message); setBusy(false); return }
-    setBusy(false); setPayFee(null)
-    setMsg(method === 'onsite' ? '✓ سُجّلت نيّة الدفع — ادفع عند المحاسب' : '✓ تم استلام دفعتك — بانتظار اعتماد المحاسب')
-    setTimeout(() => window.location.reload(), 1500)
+    try {
+      const { error } = await supabase.rpc('submit_payment', {
+        p_fee_id: payFee.fee_id, p_amount: amt, p_method: method,
+        p_bank_ref: method === 'bank' ? bankRef.trim() : null,
+      })
+      if (error) { setMsg('تعذّر الإرسال: ' + error.message); setBusy(false); return }
+      setBusy(false); setPayFee(null)
+      setMsg(method === 'onsite' ? '✓ سُجّلت نيّة الدفع — ادفع عند المحاسب' : '✓ تم استلام دفعتك — بانتظار اعتماد المحاسب')
+      setTimeout(() => window.location.reload(), 1500)
+    } catch {
+      // انقطاع اتصال قبل وصول الرد — بلا هذا يبقى الزر عالقاً على "جارٍ الإرسال" للأبد
+      setMsg('تعذّر الاتصال — تحقّق من الإنترنت وحاول مجدداً')
+      setBusy(false)
+    }
   }
 
   async function requestCert(studentId: string, kind: string) {
     setReqBusyId(studentId + kind); setMsg('')
-    const { error } = await supabase.rpc('request_certificate', { p_student_id: studentId, p_kind: kind })
-    if (error) { setMsg('تعذّر إرسال الطلب: ' + error.message); setReqBusyId(null); return }
-    setMsg('✓ أُرسل طلبك — بانتظار اعتماد المدرسة')
-    setTimeout(() => window.location.reload(), 1200)
+    try {
+      const { error } = await supabase.rpc('request_certificate', { p_student_id: studentId, p_kind: kind })
+      if (error) { setMsg('تعذّر إرسال الطلب: ' + error.message); setReqBusyId(null); return }
+      setMsg('✓ أُرسل طلبك — بانتظار اعتماد المدرسة')
+      setTimeout(() => window.location.reload(), 1200)
+    } catch {
+      setMsg('تعذّر الاتصال — تحقّق من الإنترنت وحاول مجدداً')
+      setReqBusyId(null)
+    }
   }
 
   async function downloadCert(c: Cert) {
     if (!c.file_path) return
-    const { data } = await supabase.storage.from('certificates').createSignedUrl(c.file_path, 120)
-    if (data?.signedUrl) window.open(data.signedUrl, '_blank')
+    try {
+      const { data, error } = await supabase.storage.from('certificates').createSignedUrl(c.file_path, 120)
+      if (error || !data?.signedUrl) { setMsg('تعذّر تحميل الشهادة — حاول مجدداً'); return }
+      window.open(data.signedUrl, '_blank')
+    } catch {
+      setMsg('تعذّر الاتصال — تحقّق من الإنترنت وحاول مجدداً')
+    }
   }
 
   function printCert(c: Cert) {
