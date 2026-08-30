@@ -58,51 +58,61 @@ export default function EmployeesTable({ employees, role, rates }: { employees: 
     const original = employees.find((e) => e.id === form.id)
     const salaryChanged = original && (form.basic !== original.basic || form.allowance !== original.allowance)
 
-    if (role === 'accountant' && salaryChanged) {
-      // المحاسب: الحقول غير المالية (بما فيها البيانات البنكية) مباشرة · الراتب يصبح طلباً معلّقاً
-      const { error: e1 } = await supabase.rpc('update_employee', {
-        p_id: form.id,
-        p_full_name: form.full_name,
-        p_job_title: form.job_title,
-        p_nationality: form.nationality,
-        p_iban: form.iban,
-        p_bank_name: form.bank_name,
-        p_bank_account_no: form.bank_account_no,
-        p_department: form.department,
-        p_org_level: form.org_level,
-      })
-      if (e1) { setErr(e1.message); return }
+    try {
+      if (role === 'accountant' && salaryChanged) {
+        // المحاسب: الحقول غير المالية (بما فيها البيانات البنكية) مباشرة · الراتب يصبح طلباً معلّقاً
+        const { error: e1 } = await supabase.rpc('update_employee', {
+          p_id: form.id,
+          p_full_name: form.full_name,
+          p_job_title: form.job_title,
+          p_nationality: form.nationality,
+          p_iban: form.iban,
+          p_bank_name: form.bank_name,
+          p_bank_account_no: form.bank_account_no,
+          p_department: form.department,
+          p_org_level: form.org_level,
+        })
+        if (e1) { setErr(e1.message); return }
 
-      const { data: prof } = await supabase.from('profiles').select('school_id').single()
-      const { error: e2 } = await supabase.from('salary_requests').insert({
-        school_id: prof?.school_id,
-        employee_id: form.id,
-        old_basic: original!.basic, old_allow: original!.allowance,
-        new_basic: form.basic, new_allow: form.allowance,
-        status: 'pending',
-      })
-      if (e2) { setErr(e2.message); return }
-      setMsg('📩 تم إرسال طلب تعديل الراتب لاعتماد مدير المدرسة — تُحدَّث البيانات الأخرى فوراً')
-    } else {
-      // المدير/الإداري: تعديل مباشر معتمد (شامل البيانات البنكية)
-      const { error } = await supabase.rpc('update_employee', {
-        p_id: form.id,
-        p_full_name: form.full_name,
-        p_job_title: form.job_title,
-        p_nationality: form.nationality,
-        p_basic: form.basic,
-        p_allowance: form.allowance,
-        p_iban: form.iban,
-        p_bank_name: form.bank_name,
-        p_bank_account_no: form.bank_account_no,
-        p_department: form.department,
-        p_org_level: form.org_level,
-      })
-      if (error) { setErr(error.message); return }
-      setMsg('✓ تم تحديث بيانات الموظف')
+        const { data: prof } = await supabase.from('profiles').select('school_id').single()
+        const { error: e2 } = await supabase.from('salary_requests').insert({
+          school_id: prof?.school_id,
+          employee_id: form.id,
+          old_basic: original!.basic, old_allow: original!.allowance,
+          new_basic: form.basic, new_allow: form.allowance,
+          status: 'pending',
+        })
+        if (e2) {
+          // البيانات غير المالية حُدِّثت بنجاح، لكن طلب الراتب فشل — نوضّح هذا بدقّة بدل رسالة عامة مضلِّلة
+          setErr('حُدِّثت البيانات الأخرى، لكن تعذّر إرسال طلب تعديل الراتب: ' + e2.message)
+          return
+        }
+        setMsg('📩 تم إرسال طلب تعديل الراتب لاعتماد مدير المدرسة — تُحدَّث البيانات الأخرى فوراً')
+      } else {
+        // المدير/الإداري: تعديل مباشر معتمد (شامل البيانات البنكية)
+        const { error } = await supabase.rpc('update_employee', {
+          p_id: form.id,
+          p_full_name: form.full_name,
+          p_job_title: form.job_title,
+          p_nationality: form.nationality,
+          p_basic: form.basic,
+          p_allowance: form.allowance,
+          p_iban: form.iban,
+          p_bank_name: form.bank_name,
+          p_bank_account_no: form.bank_account_no,
+          p_department: form.department,
+          p_org_level: form.org_level,
+        })
+        if (error) { setErr(error.message); return }
+        setMsg('✓ تم تحديث بيانات الموظف')
+      }
+      setEditing(null)
+      router.refresh()
+    } catch {
+      // انقطاع اتصال قبل وصول أي رد — بلا هذا كان الوعد يبقى معلّقاً، وزر الحفظ في EditModal
+      // (المُقيَّد بـ disabled={saving}) يبقى معطّلاً للأبد لأن await onSave() لا يكتمل أبداً.
+      setErr('تعذّر الاتصال — تحقّق من الإنترنت وحاول مجدداً')
     }
-    setEditing(null)
-    router.refresh()
   }
 
   return (
