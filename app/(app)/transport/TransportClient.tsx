@@ -95,31 +95,44 @@ export default function TransportClient({ initialBuses, initialSubscribers, stud
       setMsg('أدخل مسارًا واحدًا على الأقل واسم السائق والرسم'); return
     }
     setBusy(true); setMsg('')
-    const payload = {
-      p_routes: cleanRoutes, p_driver: form.driver.trim(), p_supervisor: form.supervisor.trim() || null,
-      p_capacity: parseInt(form.capacity) || 30, p_fee: parseFloat(form.fee), p_pay_to: form.payTo,
+    try {
+      const payload = {
+        p_routes: cleanRoutes, p_driver: form.driver.trim(), p_supervisor: form.supervisor.trim() || null,
+        p_capacity: parseInt(form.capacity) || 30, p_fee: parseFloat(form.fee), p_pay_to: form.payTo,
+      }
+      const { error } = form.id
+        ? await supabase.rpc('update_bus', { p_id: form.id, ...payload })
+        : await supabase.rpc('save_bus', payload)
+      if (error) { setMsg('خطأ: ' + error.message); setBusy(false); return }
+      setEditOpen(false); setForm(emptyForm)
+      await refresh(); setMsg(form.id ? '✓ تم تحديث الباص' : '✓ تمت إضافة الباص'); setBusy(false)
+    } catch {
+      // انقطاع اتصال قبل وصول أي رد — بلا هذا يبقى الزر معطّلاً للأبد
+      setMsg('تعذّر الاتصال — تحقّق من الإنترنت وحاول مجدداً'); setBusy(false)
     }
-    const { error } = form.id
-      ? await supabase.rpc('update_bus', { p_id: form.id, ...payload })
-      : await supabase.rpc('save_bus', payload)
-    if (error) { setMsg('خطأ: ' + error.message); setBusy(false); return }
-    setEditOpen(false); setForm(emptyForm)
-    await refresh(); setMsg(form.id ? '✓ تم تحديث الباص' : '✓ تمت إضافة الباص'); setBusy(false)
   }
 
   async function subscribe() {
     if (!selStudent || !selBus) { setMsg('اختر الطالب والباص'); return }
     setBusy(true); setMsg('')
-    const { error } = await supabase.rpc('subscribe_bus', { p_student: selStudent, p_bus: selBus })
-    if (error) { setMsg('خطأ: ' + error.message); setBusy(false); return }
-    setSelStudent(''); setSelBus(''); await refresh(); setMsg('✓ تم تسجيل الاشتراك'); setBusy(false)
+    try {
+      const { error } = await supabase.rpc('subscribe_bus', { p_student: selStudent, p_bus: selBus })
+      if (error) { setMsg('خطأ: ' + error.message); setBusy(false); return }
+      setSelStudent(''); setSelBus(''); await refresh(); setMsg('✓ تم تسجيل الاشتراك'); setBusy(false)
+    } catch {
+      setMsg('تعذّر الاتصال — تحقّق من الإنترنت وحاول مجدداً'); setBusy(false)
+    }
   }
 
   async function removeSub(studentId: string) {
     setBusy(true); setMsg('')
-    const { error } = await supabase.rpc('unsubscribe_bus', { p_student: studentId })
-    if (error) { setMsg('خطأ: ' + error.message); setBusy(false); return }
-    await refresh(); setBusy(false)
+    try {
+      const { error } = await supabase.rpc('unsubscribe_bus', { p_student: studentId })
+      if (error) { setMsg('خطأ: ' + error.message); setBusy(false); return }
+      await refresh(); setBusy(false)
+    } catch {
+      setMsg('تعذّر الاتصال — تحقّق من الإنترنت وحاول مجدداً'); setBusy(false)
+    }
   }
 
   return (
