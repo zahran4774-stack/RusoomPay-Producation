@@ -137,34 +137,35 @@ export default function PlansManager({ sub, schoolId, schoolName }: { sub: Sub; 
     if (!picked || !schoolId || !receiptFile) return
     setUploading(true); setMsg(null)
 
-    const plan = plans.find((p) => p.code === picked)
-    const renewsAt = new Date(Date.now() + 365 * 86400000).toISOString()
-    const ext = receiptFile.name.split('.').pop() || 'jpg'
-    const path = `${schoolId}/${Date.now()}.${ext}`
+    try {
+      const plan = plans.find((p) => p.code === picked)
+      const renewsAt = new Date(Date.now() + 365 * 86400000).toISOString()
+      const ext = receiptFile.name.split('.').pop() || 'jpg'
+      const path = `${schoolId}/${Date.now()}.${ext}`
 
-    // ١) رفع الإيصال إلى bucket خاص (subscription-receipts)
-    const { error: uploadError } = await supabase.storage
-      .from('subscription-receipts')
-      .upload(path, receiptFile, { upsert: false })
+      // ١) رفع الإيصال إلى bucket خاص (subscription-receipts)
+      const { error: uploadError } = await supabase.storage
+        .from('subscription-receipts')
+        .upload(path, receiptFile, { upsert: false })
 
-    if (uploadError) {
+      if (uploadError) {
+        setUploading(false)
+        setMsg({ ok: false, text: 'تعذّر رفع الإيصال: ' + uploadError.message })
+        return
+      }
+
+      // ٢) تسجيل/تحديث الاشتراك بحالة pending + رابط الإيصال
+      const hasExisting = sub && ['active', 'trial', 'pending'].includes(sub.status)
+      const { error } = hasExisting
+        ? await supabase.from('subscriptions').update({
+            plan: picked, status: 'pending', pay_method: 'bank', renews_at: renewsAt, receipt_url: path,
+          }).eq('id', sub!.id)
+        : await supabase.from('subscriptions').insert({
+            school_id: schoolId, plan: picked, status: 'pending', pay_method: 'bank', renews_at: renewsAt, receipt_url: path,
+          })
       setUploading(false)
-      setMsg({ ok: false, text: 'تعذّر رفع الإيصال: ' + uploadError.message })
-      return
-    }
 
-    // ٢) تسجيل/تحديث الاشتراك بحالة pending + رابط الإيصال
-    const hasExisting = sub && ['active', 'trial', 'pending'].includes(sub.status)
-    const { error } = hasExisting
-      ? await supabase.from('subscriptions').update({
-          plan: picked, status: 'pending', pay_method: 'bank', renews_at: renewsAt, receipt_url: path,
-        }).eq('id', sub!.id)
-      : await supabase.from('subscriptions').insert({
-          school_id: schoolId, plan: picked, status: 'pending', pay_method: 'bank', renews_at: renewsAt, receipt_url: path,
-        })
-    setUploading(false)
-
-    if (error) { setMsg({ ok: false, text: 'تعذّر إتمام الاشتراك: ' + error.message }); return }
+      if (error) { setMsg({ ok: false, text: 'تعذّر إتمام الاشتراك: ' + error.message }); return }
 
     const waText =
       `مرحبا، أرغب في معاينة طلب ترقية الباقة واعتماده:\n` +
@@ -174,15 +175,20 @@ export default function PlansManager({ sub, schoolId, schoolName }: { sub: Sub; 
     const waLink = `https://wa.me/96895476649?text=${encodeURIComponent(waText)}`
 
     setMsg({
-      ok: true,
-      text: `تم إرسال إيصال التحويل لباقة «${plan?.name}» — بانتظار اعتماد الإدارة.`,
-      whatsapp: waLink,
-    })
-    notifyAdmin(plan?.name || picked)
-    setShowBankModal(false)
-    setReceiptFile(null)
-    setPicked(null)
-    router.refresh()
+        ok: true,
+        text: `تم إرسال إيصال التحويل لباقة «${plan?.name}» — بانتظار اعتماد الإدارة.`,
+        whatsapp: waLink,
+      })
+      notifyAdmin(plan?.name || picked)
+      setShowBankModal(false)
+      setReceiptFile(null)
+      setPicked(null)
+      router.refresh()
+    } catch {
+      // انقطاع اتصال أثناء الرفع أو التسجيل — بلا هذا يبقى "جارٍ الرفع" عالقاً للأبد
+      setUploading(false)
+      setMsg({ ok: false, text: 'تعذّر الاتصال — تحقّق من الإنترنت وحاول مجدداً' })
+    }
   }
 
   function copyText(label: string, text: string) {
