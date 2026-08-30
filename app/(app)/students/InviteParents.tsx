@@ -25,11 +25,18 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
   const siteUrl = typeof window !== 'undefined' ? window.location.origin : 'https://rusoompay.com'
   const registerUrl = `${siteUrl}/parent-register`
 
+  const [loadError, setLoadError] = useState(false)
+
   async function load() {
-    setLoading(true)
-    const { data } = await supabase.rpc('unlinked_guardians')
-    const res = (data ?? {}) as { ok?: boolean; guardians?: Guardian[] }
-    setList(res.ok && res.guardians ? res.guardians : [])
+    setLoading(true); setLoadError(false)
+    try {
+      const { data } = await supabase.rpc('unlinked_guardians')
+      const res = (data ?? {}) as { ok?: boolean; guardians?: Guardian[] }
+      setList(res.ok && res.guardians ? res.guardians : [])
+    } catch {
+      // انقطاع اتصال كامل — بلا هذا تبقى دوّامة التحميل تدور للأبد
+      setLoadError(true)
+    }
     setLoading(false)
   }
 
@@ -195,13 +202,20 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
 
       {loading && <div style={{ color: '#8A94A6', fontSize: 14, padding: '14px 0' }}>جارٍ التحميل…</div>}
 
-      {!loading && list.length === 0 && (
+      {!loading && loadError && (
+        <div style={{ background: '#FDECEA', border: '1px solid #F3C9C2', borderRadius: 10, padding: '12px 14px', color: '#A5331F', fontSize: 13.5, fontWeight: 600 }}>
+          تعذّر الاتصال — تحقّق من الإنترنت وأعد المحاولة.
+          <button onClick={load} style={{ marginRight: 8, background: 'none', border: 0, color: '#A5331F', textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700 }}>إعادة المحاولة</button>
+        </div>
+      )}
+
+      {!loading && !loadError && list.length === 0 && (
         <div style={{ background: '#EAF7F0', border: '1px solid #BFE5D0', borderRadius: 12, padding: '16px 18px', color: '#15803D', fontSize: 14, fontWeight: 600 }}>
           ✓ كل أولياء الأمور فعّلوا حساباتهم — لا دعوات معلّقة.
         </div>
       )}
 
-      {!loading && list.length > 0 && (
+      {!loading && !loadError && list.length > 0 && (
         <div style={{ border: '1px solid #EEF1F5', borderRadius: 12, overflow: 'hidden', maxHeight: 420, overflowY: 'auto' }}>
           {list.map((g, i) => {
             const isSending = sending === g.phone
