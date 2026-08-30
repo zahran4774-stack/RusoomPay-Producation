@@ -23,31 +23,37 @@ export default function AddEmployee() {
     setErr(null); setOk(false)
     if (!f.full_name.trim()) { setErr('اسم الموظف مطلوب'); return }
     setSaving(true)
-    const { error } = await supabase.rpc('add_employee', {
-      p_full_name: f.full_name,
-      p_job_title: f.job_title || null,
-      p_nationality: f.nationality || 'OM',
-      p_basic: f.basic ? Number(f.basic) : 0,
-      p_allowance: f.allowance ? Number(f.allowance) : 0,
-      p_iban: f.iban || null,
-      p_code: f.code || null,
-      p_email: f.email || null,
-      p_id_type: f.id_type,
-      p_id_number: f.id_number || null,
-      p_bank_name: f.bank_name || null,
-      p_bank_account_no: f.bank_account_no || f.iban || null,
-      p_subject_to_pasi: f.subject_to_pasi,
-    })
-    setSaving(false)
-    if (error) { setErr(error.message); return }
-    setOk(true)
-    setF({
-      full_name: '', job_title: '', nationality: 'OM', basic: '', allowance: '',
-      iban: '', code: '', email: '', id_type: 'CIVIL', id_number: '',
-      bank_name: '', bank_account_no: '', subject_to_pasi: true,
-    })
-    router.refresh()
-    setTimeout(() => { setOk(false); setOpen(false) }, 1200)
+    try {
+      const { error } = await supabase.rpc('add_employee', {
+        p_full_name: f.full_name,
+        p_job_title: f.job_title || null,
+        p_nationality: f.nationality || 'OM',
+        p_basic: f.basic ? Number(f.basic) : 0,
+        p_allowance: f.allowance ? Number(f.allowance) : 0,
+        p_iban: f.iban || null,
+        p_code: f.code || null,
+        p_email: f.email || null,
+        p_id_type: f.id_type,
+        p_id_number: f.id_number || null,
+        p_bank_name: f.bank_name || null,
+        p_bank_account_no: f.bank_account_no || f.iban || null,
+        p_subject_to_pasi: f.subject_to_pasi,
+      })
+      setSaving(false)
+      if (error) { setErr(error.message); return }
+      setOk(true)
+      setF({
+        full_name: '', job_title: '', nationality: 'OM', basic: '', allowance: '',
+        iban: '', code: '', email: '', id_type: 'CIVIL', id_number: '',
+        bank_name: '', bank_account_no: '', subject_to_pasi: true,
+      })
+      router.refresh()
+      setTimeout(() => { setOk(false); setOpen(false) }, 1200)
+    } catch {
+      // انقطاع اتصال قبل وصول أي رد — بلا هذا يبقى الزر معطّلاً على "جارٍ الحفظ" للأبد
+      setSaving(false)
+      setErr('تعذّر الاتصال — تحقّق من الإنترنت وحاول مجدداً')
+    }
   }
 
   const label: React.CSSProperties = { fontSize: 13, fontWeight: 700, color: '#0F2744', marginBottom: 5, display: 'block' }
