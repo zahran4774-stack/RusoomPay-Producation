@@ -22,15 +22,21 @@ export default function InsuranceSettings({ rates, configured }: { rates: InsRat
     const e = parseFloat(emp), r = parseFloat(er)
     if (isNaN(e) || isNaN(r) || e < 0 || e > 100 || r < 0 || r > 100) { setMsg('النسب يجب أن تكون بين 0 و 100'); return }
     setBusy(true)
-    const { error } = await supabase.rpc('update_insurance_rates', {
-      p_emp_rate: e / 100, p_er_rate: r / 100,
-      p_cap: cap.trim() ? parseFloat(cap) : null, p_expat_exempt: exempt,
-    })
-    setBusy(false)
-    if (error) { setMsg('تعذّر الحفظ: ' + error.message); return }
-    setMsg('✓ تم حفظ نسب التأمينات')
-    setOpen(false)
-    router.refresh()
+    try {
+      const { error } = await supabase.rpc('update_insurance_rates', {
+        p_emp_rate: e / 100, p_er_rate: r / 100,
+        p_cap: cap.trim() ? parseFloat(cap) : null, p_expat_exempt: exempt,
+      })
+      setBusy(false)
+      if (error) { setMsg('تعذّر الحفظ: ' + error.message); return }
+      setMsg('✓ تم حفظ نسب التأمينات')
+      setOpen(false)
+      router.refresh()
+    } catch {
+      // انقطاع اتصال قبل وصول أي رد — بلا هذا يبقى الزر عالقاً على "جارٍ الحفظ" للأبد
+      setBusy(false)
+      setMsg('تعذّر الاتصال — تحقّق من الإنترنت وحاول مجدداً')
+    }
   }
 
   const inp = { width: '100%', padding: 11, margin: '5px 0 14px', borderRadius: 10, border: '1.5px solid #DDE3EC', fontFamily: 'inherit', fontSize: 14 }
