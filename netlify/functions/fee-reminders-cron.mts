@@ -42,7 +42,7 @@ export default async (): Promise<Response> => {
   }
 }
 
-// يوم 28 من كل شهر، 02:00 UTC = 10:00 بتوقيت عُمان (UTC+4)
+// يوم 28 من كل شهر، 06:00 UTC = 10:00 بتوقيت عُمان (UTC+4)
 // (يوم 28 مقصود: موجود بكل الشهور بلا استثناء، بما فيها فبراير)
 export const config: Config = {
   schedule: '0 2 28 * *',
