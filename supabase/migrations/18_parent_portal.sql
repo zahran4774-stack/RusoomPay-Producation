@@ -31,11 +31,17 @@ create policy ps_parent_read on public.parent_students
 -- 2) السماح لولي الأمر بقراءة بيانات أبنائه (طلاب + رسوم)
 --    سياسات إضافية على الجداول الموجودة دون المساس بسياسات الطاقم
 -- ----------------------------------------------------------------------------
+-- P0-8 fix: migration 02 already created policies with these exact names
+-- (an older guardian_phone-based model). Drop them first so this migration
+-- replays safely on a fresh database instead of failing with
+-- "policy already exists".
+drop policy if exists students_parent_read on public.students;
 create policy students_parent_read on public.students
   for select using (
     id in (select student_id from public.parent_students where parent_id = auth.uid())
   );
 
+drop policy if exists fees_parent_read on public.student_fees;
 create policy fees_parent_read on public.student_fees
   for select using (
     student_id in (select student_id from public.parent_students where parent_id = auth.uid())
