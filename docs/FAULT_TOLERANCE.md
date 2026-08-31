@@ -1,4 +1,4 @@
-# EduPay — بنية تحمّل الأخطاء (Enterprise Fault Tolerance)
+# RusoomPay — بنية تحمّل الأخطاء (Enterprise Fault Tolerance)
 
 هذا المستند يشرح ما بُني فعلياً، وما يُفعّل خارجياً، وكيف يعمل النظام كاملاً.
 
@@ -46,9 +46,13 @@
 ## 2. بنية الـAPI
 
 ```
+netlify/functions/
+  process-queue-cron.mts    ← Netlify Scheduled Function (كل دقيقة) — يستدعي app/api/cron/process-queue
+  fee-reminders-cron.mts    ← Netlify Scheduled Function (يومياً 02:00 UTC = 06:00 عُمان) — يستدعي app/api/cron/fee-reminders
+
 app/api/cron/
-  process-queue/route.ts   ← عامل الطابور (كل دقيقة)
-  fee-reminders/route.ts   ← تذكيرات الرسوم (يومياً 6 صباحاً)
+  process-queue/route.ts   ← منطق عامل الطابور الفعلي (يُستدعى داخلياً فقط من netlify/functions أعلاه، عبر CRON_SECRET)
+  fee-reminders/route.ts   ← منطق تذكيرات الرسوم الفعلي (نفس الشيء)
 
 lib/
   supabase-service.ts      ← عميل service role (يتجاوز RLS، للخادم فقط)
@@ -69,7 +73,7 @@ lib/
 ```
 حدث (دفعة/تذكير) → enqueue_notification() → notification_queue [queued]
                                                       ↓
-        Vercel Cron كل دقيقة → process-queue → claim_queue_batch()
+        Netlify Scheduled Function كل دقيقة → process-queue → claim_queue_batch()
                                                       ↓ [processing]
                                           deliver() حسب القناة
                                           ↓ نجاح            ↓ فشل
@@ -134,7 +138,7 @@ rusoompay-production/
 ├── app/api/cron/
 │   ├── process-queue/route.ts                    ← عامل الطابور
 │   └── fee-reminders/route.ts                     ← التذكيرات
-├── vercel.json                                    ← جدولة الـcron
+├── netlify/functions/                             ← جدولة الـcron (Netlify Scheduled Functions)
 └── .env.example                                   ← المتغيّرات المطلوبة
 ```
 
@@ -145,7 +149,7 @@ rusoompay-production/
 1. **نفّذ الترحيل**: شغّل `21_fault_tolerance.sql` في Supabase.
 2. **املأ المتغيّرات**: انسخ `.env.example` إلى `.env.local` واملأ `SUPABASE_SERVICE_ROLE_KEY` و`CRON_SECRET`.
 3. **فعّل النسخ الاحتياطي**: من لوحة Supabase فعّل PITR.
-4. **انشر على Vercel**: مهام الـcron تعمل تلقائياً من `vercel.json`.
+4. **انشر على Netlify**: مهام الـcron تعمل تلقائياً من `netlify/functions/*-cron.mts` بمجرّد النشر للإنتاج (Netlify Scheduled Functions لا تعمل إلا على نشر إنتاجي فعلي، مثلها مثل أي منصّة أخرى). تأكّد أن `CRON_SECRET` مضبوط في متغيّرات بيئة Netlify نفسها (Site settings → Environment variables) — لأن دالتَي الجدولة تستدعيان مسارات `/api/cron/*` داخلياً بنفس السرّ.
 5. **(اختياري) فعّل مزوّداً**: أضف مفاتيح Twilio/Resend/WhatsApp لتفعيل القناة المطلوبة.
 6. **(موصى به) اربط Sentry** لمراقبة لحظية.
 
