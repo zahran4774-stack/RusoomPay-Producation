@@ -36,6 +36,14 @@ export default function ControlCenter({ overview, revenue, subscriptions, pendin
   const [tab, setTab] = useState<'overview' | 'revenue' | 'subs' | 'schools' | 'audit' | 'feedback' | 'monitor' | 'settings'>('overview')
   const [manageSchool, setManageSchool] = useState<{ id: string; name: string } | null>(null)
   const [filter, setFilter] = useState('all')
+  const supabase = createClient()
+
+  // لا يوجد أي زر خروج في صفحة مدير المنصة سابقاً — هذه الصفحة مستقلّة عن AppShell
+  // ولا ترث زر الخروج الذي أُصلح هناك؛ نضيفه هنا بنفس منطق تسجيل الخروج الحقيقي.
+  async function handleLogout() {
+    await supabase.auth.signOut()
+    window.location.href = '/login'
+  }
   const fmt = (n: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
   const int = (n: number) => (n ?? 0).toLocaleString('en-US')
 
@@ -49,9 +57,15 @@ export default function ControlCenter({ overview, revenue, subscriptions, pendin
           <h1 style={{ color: '#0A1D33', fontSize: 24, margin: 0 }}>مركز تحكّم RusoomPay</h1>
           <p style={{ color: '#8A94A6', fontSize: 13.5, margin: '4px 0 0' }}>مراقبة المنصة بالكامل — المدارس، الإيرادات، الاشتراكات</p>
         </div>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: '#E6F4EC', color: '#1A7A45', fontSize: 12.5, fontWeight: 700, padding: '7px 14px', borderRadius: 99 }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#1A7A45' }} /> المنصة تعمل
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: '#E6F4EC', color: '#1A7A45', fontSize: 12.5, fontWeight: 700, padding: '7px 14px', borderRadius: 99 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#1A7A45' }} /> المنصة تعمل
+          </span>
+          <button onClick={handleLogout}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#fff', border: '1.5px solid #E3E8EE', color: '#0A1D33', fontSize: 12.5, fontWeight: 700, padding: '7px 14px', borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit' }}>
+            <span>⎋</span> تسجيل الخروج
+          </button>
+        </div>
       </div>
 
       {/* تبويبات */}
