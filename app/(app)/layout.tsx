@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import type { Role } from '@/lib/roles'
 import AppShell from './AppShell'
+import IdleGuard from './platform/IdleGuard'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -20,8 +21,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const role = (profile?.role ?? 'admin') as Role
 
   // مدير المنصة: لوحته الخاصة بلا شريط جانبي للمدرسة
+  // + قفل خمول 10 دقائق (IdleGuard) لأنها أخطر صفحة بالنظام كامل
   if (role === 'platform_admin') {
-    return <main className="app-main" style={{ padding: 0 }}>{children}</main>
+    return (
+      <main className="app-main" style={{ padding: 0 }}>
+        <IdleGuard />
+        {children}
+      </main>
+    )
   }
 
   // ولي الأمر: بوابة مبسّطة خاصة به (بلا شريط طاقم المدرسة)
