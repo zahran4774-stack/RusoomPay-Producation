@@ -96,14 +96,14 @@ export default function SchoolManageModal({ schoolId, schoolName, onClose }: {
                   <div style={cardS}>
                     <b style={{ color: '#0F2744' }}>ملخّص المدرسة</b>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 12, marginTop: 12 }}>
-                      <Stat label="الطلاب" v={detail.counts?.students ?? 0} />
-                      <Stat label="الموظفون" v={detail.counts?.employees ?? 0} />
-                      <Stat label="المستخدمون" v={detail.counts?.users ?? 0} />
-                      <Stat label="الفواتير" v={detail.counts?.fees ?? 0} />
+                      <Stat label="الطلاب" v={detail.stats?.students ?? 0} />
+                      <Stat label="الموظفون" v={detail.stats?.employees ?? 0} />
+                      <Stat label="المستخدمون" v={detail.users?.length ?? 0} />
+                      <Stat label="الفواتير" v={detail.stats?.fees ?? 0} />
                     </div>
                     <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #F2F5F8', display: 'flex', justifyContent: 'space-between', fontSize: 13.5 }}>
-                      <span style={{ color: '#667' }}>إجمالي الرسوم: <b style={{ color: '#0F2744' }}>{fmt(detail.counts?.fees_total ?? 0)}</b></span>
-                      <span style={{ color: '#667' }}>المحصّل: <b style={{ color: '#1A7A45' }}>{fmt(detail.counts?.fees_paid ?? 0)}</b></span>
+                      <span style={{ color: '#667' }}>إجمالي الرسوم: <b style={{ color: '#0F2744' }}>{fmt(detail.stats?.fees_total ?? 0)}</b></span>
+                      <span style={{ color: '#667' }}>المحصّل: <b style={{ color: '#1A7A45' }}>{fmt(detail.stats?.collected ?? 0)}</b></span>
                     </div>
                   </div>
                   <div style={cardS}>
