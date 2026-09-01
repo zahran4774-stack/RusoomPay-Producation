@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase-client'
 import type { Role } from '@/lib/roles'
 import { isStaff, canAccessFinance, isOwner } from '@/lib/roles'
 import { LogoMark } from '../Logo'
@@ -64,6 +65,16 @@ export default function AppShell({ role, brandColor, schoolLogo, schoolName, chi
 }) {
   const pathname = usePathname()
   const router = useRouter()
+  const supabase = createClient()
+
+  // تسجيل خروج حقيقي — الزرّ السابق كان مجرّد رابط لصفحة /login بلا استدعاء signOut()،
+  // فتبقى الجلسة صالحة والمتصفح يعيد فتح آخر حساب تلقائياً فور الوصول لصفحة الدخول.
+  async function handleLogout() {
+    await supabase.auth.signOut()
+    // نستخدم إعادة تحميل كاملة (لا router.push) عمداً — تضمن مسح أي حالة/ذاكرة تخزين
+    // مؤقتة في الصفحة الحالية قبل وصول المستخدم لشاشة الدخول.
+    window.location.href = '/login'
+  }
 
   // زر الرجوع: يظهر في كل صفحة ما عدا لوحة التحكّم (نقطة البداية بعد الدخول).
   // يستخدم سجلّ المتصفح (router.back) — يرجع لآخر صفحة زارها المستخدم فعلياً،
@@ -141,9 +152,9 @@ export default function AppShell({ role, brandColor, schoolLogo, schoolName, chi
           </nav>
 
           <div className="side-foot">
-            <Link href="/login" className="side-link">
+            <button onClick={handleLogout} className="side-link" style={{ background: 'none', border: 0, width: '100%', cursor: 'pointer', font: 'inherit', textAlign: 'inherit' }}>
               <span className="ic">⎋</span> تسجيل الخروج
-            </Link>
+            </button>
           </div>
         </div>
       </aside>
