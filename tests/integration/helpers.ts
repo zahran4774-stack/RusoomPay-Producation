@@ -45,10 +45,11 @@ export async function createTestFixture(sb: SupabaseClient, opts?: { feeTotal?: 
   const password = randomUUID()
   const email = `${tag.toLowerCase()}@test.rusoompay.invalid`
 
-  // 1) مدرسة اختبار
+  // 1) مدرسة اختبار — is_test=true من البداية عشان تُستثنى فوراً من أي إحصائية حقيقية
+  // (لوحة التحكم، عدد المدارس، إلخ) حتى قبل أي تنظيف لاحق.
   const { data: school, error: schoolErr } = await sb
     .from('schools')
-    .insert({ name: tag, country: 'OM', currency: 'OMR' })
+    .insert({ name: tag, country: 'OM', currency: 'OMR', is_test: true, active: false })
     .select('id').single()
   if (schoolErr || !school) throw new Error('فشل إنشاء مدرسة الاختبار: ' + schoolErr?.message)
 
@@ -107,17 +108,28 @@ export async function createTestFixture(sb: SupabaseClient, opts?: { feeTotal?: 
     cleanup: async () => {
       // ملاحظة مهمة: القيود المحاسبية (journal_entries/journal_lines) محميّة عمداً
       // بحارس block_journal_mutation — لا تُحذف ولا تُعدَّل أبداً، حتى لبيانات الاختبار.
-      // هذا سلوك صحيح ومقصود لحماية بياناتك الحقيقية، فلا نحاول حذفها هنا إطلاقاً
-      // (المحاولة السابقة كانت تفشل بصمت وتترك باقي التنظيف معلّقاً خلفها).
+      // هذا سلوك صحيح ومقصود لحماية بياناتك الحقيقية. كل خطوة هنا "أفضل محاولة" —
+      // فشل خطوة (لوجود قيد محاسبي مرتبط) ما يوقف باقي التنظيف.
+      await sb.from('notifications').delete().eq('guardian_id', authUser.user.id)
       await sb.from('payments').delete().eq('school_id', school.id)
       await sb.from('pending_payments').delete().eq('school_id', school.id)
       await sb.from('student_fees').delete().eq('school_id', school.id)
       await sb.from('students').delete().eq('school_id', school.id)
       await sb.from('accounts').delete().eq('school_id', school.id)
-      await sb.from('profiles').delete().eq('school_id', school.id)
-      await sb.auth.admin.deleteUser(authUser.user.id)
-      // لا نحذف المدرسة نفسها (قد ترتبط بها قيود محاسبية) — نعزلها بإعادة التسمية بدلاً من ذلك
-      await sb.from('schools').update({ name: 'ARCHIVED_' + tag }).eq('id', school.id)
+      const { error: profileDelErr } = await sb.from('profiles').delete().eq('id', authUser.user.id)
+
+      // نحاول حذف المدرسة فعلياً (أغلب الاختبارات ما تصل لمرحلة تنشئ فيها قيداً محاسبياً).
+      // فقط إذا فشل الحذف بسبب قيد محاسبي مرتبط، نعزلها بإعادة التسمية بدلاً من تركها معلّقة.
+      const { error: schoolDelErr } = await sb.from('schools').delete().eq('id', school.id)
+      if (schoolDelErr) {
+        await sb.from('schools').update({ name: 'ARCHIVED_' + tag }).eq('id', school.id)
+      }
+
+      // محاولة أخيرة لحذف مستخدم الاختبار — تُتجاهل بصمت لو فشلت (يعني بروفايله
+      // ما زال مرتبطاً بقيد محاسبي created_by، وهذا يعني قيداً حقيقياً محمياً بحق).
+      if (!profileDelErr && !schoolDelErr) {
+        await sb.auth.admin.deleteUser(authUser.user.id)
+      }
     },
   }
 }
