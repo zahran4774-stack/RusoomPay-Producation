@@ -10,6 +10,7 @@ type Health = {
   email: { sample_size: number; sent: number; failed: number; last_sent_at: string | null }
   payments: { last_paid_at: string | null; last_failed_at: string | null; paid_24h: number; failed_24h: number }
   errors: { critical_24h: number; unresolved_total: number }
+  quotas: { db_size_bytes: number; db_limit_bytes: number; storage_size_bytes: number; storage_limit_bytes: number }
   generated_at: string
   db_latency_ms: number
 }
@@ -119,6 +120,12 @@ export default function SystemHealthPanel() {
 
   const errStatus: Status = data.errors.critical_24h === 0 ? 'ok' : data.errors.critical_24h < 5 ? 'warn' : 'bad'
 
+  const dbQuotaPct = Math.round((data.quotas.db_size_bytes / data.quotas.db_limit_bytes) * 100)
+  const dbQuotaStatus: Status = dbQuotaPct < 70 ? 'ok' : dbQuotaPct < 90 ? 'warn' : 'bad'
+  const storageQuotaPct = Math.round((data.quotas.storage_size_bytes / data.quotas.storage_limit_bytes) * 100)
+  const storageQuotaStatus: Status = storageQuotaPct < 70 ? 'ok' : storageQuotaPct < 90 ? 'warn' : 'bad'
+  const fmtMB = (bytes: number) => (bytes / (1024 * 1024)).toFixed(1)
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
@@ -147,6 +154,15 @@ export default function SystemHealthPanel() {
         <Gauge title="البريد (Resend)" sub={emTotal ? `${data.email.sent}/${emTotal} آخر عيّنة` : 'لا إرسال حديث'} status={emStatus} big={emRate === null ? '—' : `${emRate}%`} />
         <Gauge title="بوابة الدفع (Thawani)" sub={fmtAgo(paidAgoMin)} status={payStatus} big={`${data.payments.paid_24h}`} />
         <Gauge title="الأخطاء الحرجة" sub={`${data.errors.unresolved_total} غير محلولة إجمالاً`} status={errStatus} big={`${data.errors.critical_24h}`} />
+        <Gauge title="حجم قاعدة البيانات" sub={`${fmtMB(data.quotas.db_size_bytes)} / 500 MB`} status={dbQuotaStatus} big={`${dbQuotaPct}%`} />
+        <Gauge title="مساحة التخزين" sub={`${fmtMB(data.quotas.storage_size_bytes)} / 1024 MB`} status={storageQuotaStatus} big={`${storageQuotaPct}%`} />
+      </div>
+
+      <div style={{ marginTop: 10, fontSize: 11.5, color: '#8A94A6' }}>
+        Egress، المستخدمين الفعّالين شهرياً (MAU)، وRealtime ما تعرضها أي API متاحة حالياً — تابعها من{' '}
+        <a href="https://supabase.com/dashboard/org/vercel_icfg_hq3lVvkMcf5Ob5KxZ1lk7bxh/usage" target="_blank" rel="noopener noreferrer" style={{ color: '#2E5EA8' }}>
+          لوحة استهلاك Supabase
+        </a>.
       </div>
 
       <style>{`@keyframes rp-pulse { 0%,100% { opacity: 1 } 50% { opacity: .35 } }`}</style>
