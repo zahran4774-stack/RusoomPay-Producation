@@ -4,6 +4,9 @@
 // تحديث كل ثوانٍ مثل صحّة الأدوات).
 import { useEffect, useRef, useState } from 'react'
 
+type OrgPlan = { plan: string; name: string; billing_url: string }
+const PLAN_AR: Record<string, string> = { free: 'مجانية', pro: 'Pro', team: 'Team', enterprise: 'Enterprise' }
+
 type SubItem = {
   vendor: string
   status: string
@@ -29,7 +32,18 @@ function daysUntil(iso: string | null): number | null {
 export default function OpsSubscriptionsPanel() {
   const [data, setData] = useState<Summary | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [orgPlan, setOrgPlan] = useState<OrgPlan | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  async function loadOrgPlan() {
+    try {
+      const res = await fetch('/api/platform/supabase-org', { cache: 'no-store' })
+      const json = await res.json()
+      if (res.ok) setOrgPlan(json)
+    } catch {
+      // غير حرِج — البادج يختفي بصمت لو فشل، الزر أدناه يبقى الخيار الاحتياطي
+    }
+  }
 
   async function load() {
     try {
@@ -45,6 +59,7 @@ export default function OpsSubscriptionsPanel() {
 
   useEffect(() => {
     load()
+    loadOrgPlan()
     timerRef.current = setInterval(load, 60000) // بيانات مالية — تحديث كل دقيقة كافٍ
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, [])
@@ -64,7 +79,21 @@ export default function OpsSubscriptionsPanel() {
         <div style={{ fontSize: 13, color: '#8A94A6' }}>
           إجمالي تقديري شهرياً: <b style={{ fontFamily: 'Cairo', color: '#0A1D33', fontSize: 15 }}>{data.estimated_monthly_total_omr.toFixed(3)} ر.ع</b>
         </div>
-        <span style={{ fontSize: 11, color: '#8A94A6' }}>المصدر: byzantium-pillow</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {orgPlan && (
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#2E5EA8', background: '#EEF3FA', padding: '5px 12px', borderRadius: 99 }}>
+              خطة Supabase الحيّة: {PLAN_AR[orgPlan.plan] ?? orgPlan.plan}
+            </span>
+          )}
+          <a
+            href="https://supabase.com/dashboard/org/vercel_icfg_hq3lVvkMcf5Ob5KxZ1lk7bxh/billing"
+            target="_blank" rel="noopener noreferrer"
+            style={{ fontSize: 12, fontWeight: 700, color: '#1A7A45', background: '#E6F4EC', padding: '5px 12px', borderRadius: 99, textDecoration: 'none' }}
+          >
+            💳 لوحة فوترة Supabase (دورة الفوترة الحيّة)
+          </a>
+          <span style={{ fontSize: 11, color: '#8A94A6' }}>المصدر: byzantium-pillow</span>
+        </div>
       </div>
 
       {data.items.length === 0 ? (
