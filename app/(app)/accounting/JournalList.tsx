@@ -2,7 +2,7 @@
 // app/(app)/accounting/JournalList.tsx
 // عرض القيود مع زرّ التصحيح بالعكس (بدل التعديل/الحذف — حفاظاً على النزاهة).
 // المخوّل: المدير والمحاسب. القيد المعكوس يُوسم بوضوح.
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import { useRouter } from 'next/navigation'
 import { RotateCcw, ShieldCheck } from 'lucide-react'
@@ -21,8 +21,15 @@ export default function JournalList({
   const supabase = createClient()
   const router = useRouter()
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [page, setPage] = useState(0)
+  const PAGE_SIZE = 6
   const sym = currency === 'OMR' ? 'ر.ع' : currency
   const fmt = (n: number) => new Intl.NumberFormat('en', { minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(n || 0)
+  const totalPages = Math.max(1, Math.ceil(entries.length / PAGE_SIZE))
+  const pageEntries = entries.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE)
+
+  // إعادة الصفحة الأولى عند تغيّر عدد القيود (قيد جديد أو تصحيح) — يمنع البقاء في صفحة أصبحت فارغة
+  useEffect(() => { setPage(0) }, [entries.length])
 
   async function reverse(e: Entry) {
     const reason = window.prompt(`تصحيح القيد بإنشاء قيد عكسي.\nاكتب سبب التصحيح (يُسجّل للتدقيق):`)
@@ -39,7 +46,7 @@ export default function JournalList({
 
   return (
     <div>
-      {entries.slice(0, 12).map((e) => {
+      {pageEntries.map((e) => {
         const d = e.journal_lines.reduce((s, l) => s + l.debit, 0)
         const isReversed = !!e.reversed_by_entry     // قيد أصلي عُكِس
         const isReversal = !!e.reverses_entry        // قيد عكسي (تصحيح)
@@ -70,6 +77,23 @@ export default function JournalList({
           </div>
         )
       })}
+
+      {/* ترقيم الصفحات — 6 قيود لكل صفحة */}
+      {entries.length > PAGE_SIZE && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 14, marginTop: 12, paddingTop: 8 }}>
+          <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}
+            style={{ padding: '6px 14px', borderRadius: 8, border: '1.5px solid #DDE3EC', background: page === 0 ? '#F4F6FA' : '#fff', color: page === 0 ? '#B0B8C4' : '#0F2744', cursor: page === 0 ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }}>
+            السابق
+          </button>
+          <span style={{ fontSize: 12.5, color: '#667', fontWeight: 600 }}>
+            صفحة {page + 1} من {totalPages}
+          </span>
+          <button onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}
+            style={{ padding: '6px 14px', borderRadius: 8, border: '1.5px solid #DDE3EC', background: page >= totalPages - 1 ? '#F4F6FA' : '#fff', color: page >= totalPages - 1 ? '#B0B8C4' : '#0F2744', cursor: page >= totalPages - 1 ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }}>
+            التالي
+          </button>
+        </div>
+      )}
       {/* شرح النزاهة */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 14, padding: '10px 12px', background: '#F7FAF9', borderRadius: 10, fontSize: 12, color: '#667' }}>
         <ShieldCheck size={16} color="#1E5C4E" style={{ flexShrink: 0, marginTop: 1 }} />
