@@ -1,6 +1,9 @@
 // app/api/cron/fee-reminders/route.ts
 // تذكيرات الرسوم المتأخّرة — يُشغّل يومياً، يجد الفواتير المتبقّية ويضيف تذكيراً للطابور.
 // لا يرسل مباشرة: يضع في الطابور (مع dedupe) فيعالجه عامل الطابور مع إعادة المحاولة.
+//
+// ملاحظة أداء: مبني على استعلامات مجمّعة (batched) بدل استعلام لكل فاتورة/ولي أمر —
+// عشان يتحمّل نمو عدد المدارس/الطلاب بدون أن يتجاوز مهلة التنفيذ (60 ثانية).
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase-service'
 
@@ -20,7 +23,7 @@ export async function GET(req: NextRequest) {
   let queued = 0
 
   try {
-    // الفواتير المستحقّة وغير المسدّدة بالكامل (غير المحذوفة)
+    // 1) الفواتير المستحقّة وغير المسدّدة بالكامل (غير المحذوفة) — استعلام واحد
     const { data: dueFees, error } = await supabase
       .from('student_fees')
       .select('id, school_id, student_id, description, total, paid, due_date')
@@ -29,27 +32,74 @@ export async function GET(req: NextRequest) {
 
     if (error) throw error
 
-    for (const fee of dueFees ?? []) {
+    const remainingFees = (dueFees ?? []).filter(
+      (fee) => Number(fee.total) - Number(fee.paid) > 0.0005
+    )
+
+    if (remainingFees.length === 0) {
+      return NextResponse.json({ ok: true, queued: 0 })
+    }
+
+    // 2) أولياء الأمور المرتبطين بكل الطلاب المعنيين — استعلام واحد بدل استعلام لكل فاتورة
+    const studentIds = [...new Set(remainingFees.map((f) => f.student_id))]
+    const { data: links, error: linksErr } = await supabase
+      .from('parent_students')
+      .select('student_id, parent_id')
+      .in('student_id', studentIds)
+    if (linksErr) throw linksErr
+
+    const parentIdsByStudent = new Map<string, string[]>()
+    for (const l of links ?? []) {
+      const arr = parentIdsByStudent.get(l.student_id) ?? []
+      arr.push(l.parent_id)
+      parentIdsByStudent.set(l.student_id, arr)
+    }
+
+    // 3) أرقام هواتف كل أولياء الأمور — استعلام واحد بدل استعلام لكل رابط
+    const allParentIds = [...new Set((links ?? []).map((l) => l.parent_id))]
+    const { data: profs, error: profsErr } = await supabase
+      .from('profiles')
+      .select('id, phone')
+      .in('id', allParentIds)
+    if (profsErr) throw profsErr
+
+    const phoneByParent = new Map(
+      (profs ?? []).filter((p) => !!p.phone).map((p) => [p.id, p.phone as string])
+    )
+
+    // 4) بناء كل صفوف الطابور في الذاكرة، ثم إدراج دفعة واحدة (مع تجاهل التكرارات اليومية)
+    const rows: {
+      school_id: string
+      channel: string
+      recipient: string
+      payload: { body: string }
+      dedupe_key: string
+    }[] = []
+
+    for (const fee of remainingFees) {
       const remaining = Number(fee.total) - Number(fee.paid)
-      if (remaining <= 0.0005) continue
-
-      // إيجاد ولي الأمر المرتبط للحصول على وسيلة التواصل
-      const { data: links } = await supabase
-        .from('parent_students').select('parent_id').eq('student_id', fee.student_id)
-      for (const link of links ?? []) {
-        const { data: prof } = await supabase
-          .from('profiles').select('phone').eq('id', link.parent_id).single()
-        if (!prof?.phone) continue
-
-        // إضافة للطابور مع dedupe يومي (يمنع تكرار نفس التذكير في اليوم)
-        const dedupe = `reminder:${fee.id}:${today}`
-        const body = `تذكير: عليكم رسوم متبقّية بقيمة ${remaining.toFixed(3)} (${fee.description}). يرجى السداد عبر بوابة RusoomPay.`
-        const { error: qErr } = await supabase.from('notification_queue').insert({
-          school_id: fee.school_id, channel: 'whatsapp', recipient: prof.phone,
-          payload: { body }, dedupe_key: dedupe,
+      const parentIds = parentIdsByStudent.get(fee.student_id) ?? []
+      for (const parentId of parentIds) {
+        const phone = phoneByParent.get(parentId)
+        if (!phone) continue
+        rows.push({
+          school_id: fee.school_id,
+          channel: 'whatsapp',
+          recipient: phone,
+          payload: { body: `تذكير: عليكم رسوم متبقّية بقيمة ${remaining.toFixed(3)} (${fee.description}). يرجى السداد عبر بوابة RusoomPay.` },
+          dedupe_key: `reminder:${fee.id}:${today}`,
         })
-        if (!qErr) queued++
       }
+    }
+
+    if (rows.length > 0) {
+      // dedupe_key عليه قيد UNIQUE في القاعدة — نتجاهل التكرارات بدل ما نفشل الدفعة كلها
+      const { data: inserted, error: insErr } = await supabase
+        .from('notification_queue')
+        .upsert(rows, { onConflict: 'dedupe_key', ignoreDuplicates: true })
+        .select('id')
+      if (insErr) throw insErr
+      queued = inserted?.length ?? 0
     }
 
     return NextResponse.json({ ok: true, queued })
