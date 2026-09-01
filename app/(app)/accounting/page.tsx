@@ -34,7 +34,7 @@ export default async function AccountingPage() {
       .from('journal_entries')
       .select('id, entry_date, description, reference, reversed_by_entry, reverses_entry, journal_lines(debit)')
       .order('entry_date', { ascending: false })
-      .limit(10),
+      .limit(60), // كافٍ لعشر صفحات تصفّح (6 لكل صفحة) — يوازن بين تاريخ كافٍ وحجم استجابة معقول
     supabase.rpc('inventory_purchases_summary'),
   ])
 
