@@ -34,6 +34,8 @@ export default function PayrollYearlyReport({ currency = 'OMR' }: { currency?: s
   const [year, setYear] = useState(currentYear)
   const [data, setData] = useState<Summary | null>(null)
   const [loading, setLoading] = useState(false)
+  const [page, setPage] = useState(0)
+  const PAGE_SIZE = 6
 
   const sym = currency === 'OMR' ? 'ر.ع' : currency
   const dec = ['OMR', 'KWD', 'BHD'].includes(currency) ? 3 : 2
@@ -43,6 +45,7 @@ export default function PayrollYearlyReport({ currency = 'OMR' }: { currency?: s
   useEffect(() => {
     let active = true
     setLoading(true)
+    setPage(0) // العودة للصفحة الأولى عند تغيير السنة — تجنّباً لصفحة فارغة بعد تبديل البيانات
     supabase.rpc('payroll_yearly_summary', { p_year: year }).then(({ data: d }) => {
       if (active) { setData(d as Summary); setLoading(false) }
     })
@@ -51,6 +54,11 @@ export default function PayrollYearlyReport({ currency = 'OMR' }: { currency?: s
 
   const rows = data?.rows ?? []
   const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - i)
+
+  // ترقيم الصفحات: 6 دورات لكل صفحة — صف "الإجمالي" يبقى ثابتاً خارج الترقيم دائماً
+  const PAGE_SIZE_SAFE = PAGE_SIZE
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE_SAFE))
+  const pageRows = rows.slice(page * PAGE_SIZE_SAFE, page * PAGE_SIZE_SAFE + PAGE_SIZE_SAFE)
 
   return (
     <section style={{ background: '#fff', border: '1px solid #E7EBF0', borderRadius: 16, padding: 22, marginTop: 18 }} dir="rtl">
@@ -108,7 +116,7 @@ export default function PayrollYearlyReport({ currency = 'OMR' }: { currency?: s
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => {
+              {pageRows.map((r) => {
                 const st = STATUS_LABEL[r.is_paid ? 'paid' : r.status] ?? STATUS_LABEL.approved
                 return (
                   <tr key={r.period_month}>
@@ -132,6 +140,23 @@ export default function PayrollYearlyReport({ currency = 'OMR' }: { currency?: s
               </tr>
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* ترقيم الصفحات — 6 دورات لكل صفحة، يظهر فقط إن تجاوز عدد الدورات صفحة واحدة */}
+      {!loading && rows.length > PAGE_SIZE_SAFE && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 14, marginTop: 14 }}>
+          <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}
+            style={{ padding: '7px 16px', borderRadius: 9, border: '1.5px solid #DDE3EC', background: page === 0 ? '#F4F6FA' : '#fff', color: page === 0 ? '#B0B8C4' : '#0F2744', cursor: page === 0 ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: 13.5, fontWeight: 600 }}>
+            السابق
+          </button>
+          <span style={{ fontSize: 13, color: '#667', fontWeight: 600 }}>
+            صفحة {page + 1} من {totalPages}
+          </span>
+          <button onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}
+            style={{ padding: '7px 16px', borderRadius: 9, border: '1.5px solid #DDE3EC', background: page >= totalPages - 1 ? '#F4F6FA' : '#fff', color: page >= totalPages - 1 ? '#B0B8C4' : '#0F2744', cursor: page >= totalPages - 1 ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: 13.5, fontWeight: 600 }}>
+            التالي
+          </button>
         </div>
       )}
     </section>
