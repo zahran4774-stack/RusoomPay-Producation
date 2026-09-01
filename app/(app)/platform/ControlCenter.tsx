@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase-client'
 import SchoolManageModal from './SchoolManageModal'
 import PendingSubs from './PendingSubs'
 import CountryToggles from './CountryToggles'
+import SystemHealthPanel from './SystemHealthPanel'
+import OpsSubscriptionsPanel from './OpsSubscriptionsPanel'
 import type { Sub, SchoolStat, AuditRow, FeedbackRow } from './types'
 
 type Nums = Record<string, number>
@@ -251,21 +253,13 @@ export default function ControlCenter({ overview, revenue, subscriptions, pendin
 
       {tab === 'monitor' && (
         <div>
-          <SecLabel>صحّة خدمات المنصة</SecLabel>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 12, marginBottom: 20 }}>
-            {[['الواجهة الأمامية', 'ok'], ['الخادم (API)', 'ok'], ['قاعدة البيانات', 'ok'], ['بوابة الدفع', 'pending'], ['خدمة البريد', 'ok'], ['الإشعارات', 'pending']].map(([name, st]) => (
-              <div key={name} style={{ background: '#fff', borderRadius: 13, padding: 16, boxShadow: '0 1px 4px rgba(0,0,0,.07)', display: 'flex', alignItems: 'center', gap: 11 }}>
-                <span style={{ width: 11, height: 11, borderRadius: '50%', background: st === 'ok' ? '#27AE60' : '#D4A017', flexShrink: 0 }} />
-                <div>
-                  <div style={{ fontSize: 13.5, fontWeight: 600, color: '#0A1D33' }}>{name}</div>
-                  <div style={{ fontSize: 11.5, color: st === 'ok' ? '#1A7A45' : '#8A6D0F' }}>{st === 'ok' ? 'يعمل' : 'لم يُفعّل بعد'}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div style={{ background: '#EEF3FA', border: '1px solid #D3E0F0', borderRadius: 13, padding: 16, fontSize: 13.5, color: '#2E5EA8', lineHeight: 1.9 }}>
-            ℹ️ المراقبة الحيّة المتقدّمة (الجلسات النشطة، الأخطاء اللحظية، استهلاك التخزين) تتطلب ربط خدمات خارجية مثل Sentry وأدوات Supabase. الواجهة جاهزة للوصل عند تفعيل التكامل — لا تُعرض أرقام وهمية.
-          </div>
+          <SecLabel>صحّة خدمات المنصة (حيّة)</SecLabel>
+          <SystemHealthPanel />
+
+          <div style={{ height: 28 }} />
+
+          <SecLabel>اشتراكات التشغيل</SecLabel>
+          <OpsSubscriptionsPanel />
         </div>
       )}
 
