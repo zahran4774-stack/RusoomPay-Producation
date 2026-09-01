@@ -183,9 +183,11 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
             <div style={{ fontWeight: 800, fontSize: 18, fontFamily: 'Cairo' }}>{school.name}</div>
             <div style={{ fontSize: 12.5, opacity: .8 }}>بوابة ولي الأمر · {parentName}</div>
           </div>
-          <form action="/login" method="get">
-            <a href="/login" style={{ background: 'rgba(255,255,255,.12)', color: '#fff', padding: '8px 16px', borderRadius: 9, fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>خروج</a>
-          </form>
+          <button
+            onClick={async () => { await supabase.auth.signOut(); window.location.href = '/login' }}
+            style={{ background: 'rgba(255,255,255,.12)', color: '#fff', padding: '8px 16px', borderRadius: 9, fontSize: 13, fontWeight: 600, border: 0, cursor: 'pointer', fontFamily: 'inherit' }}>
+            خروج
+          </button>
         </div>
       </header>
 
