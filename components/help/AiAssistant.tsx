@@ -6,7 +6,7 @@
 // يفتح كلوحة جانبية، يتصل بـ /api/assistant، ويعرض المحادثة بدعم RTL.
 // يعتمد على متغيّر الخط --font-cairo المعرّف في layout.
 // لا يعتمد أي مكتبة خارجية — أيقونات SVG مضمّنة.
-// يُخفى تلقائياً في صفحات المصادقة (تسجيل الدخول/الإنشاء) — لا يظهر إلا بعد الدخول.
+// يُخفى تلقائياً في صفحات المصادقة والسياسات — لا يظهر إلا بعد الدخول.
 // ============================================================================
 
 import { useState, useRef, useEffect, useCallback } from 'react'
@@ -23,8 +23,11 @@ const SUGGESTIONS = [
   'اشرح لي نسبة التحصيل',
 ]
 
-// المسارات التي لا يظهر فيها المساعد (صفحات عامة/مصادقة قبل الدخول)
-const HIDDEN_PATHS = ['/', '/login', '/signup', '/register', '/forgot-password', '/reset-password', '/auth']
+// المسارات التي لا يظهر فيها المساعد (صفحات عامة/مصادقة/سياسات قبل الدخول)
+const HIDDEN_PATHS = [
+  '/', '/login', '/signup', '/register', '/forgot-password', '/reset-password', '/auth',
+  '/privacy', '/terms', '/parent-register', '/staff-register',
+]
 
 export default function AiAssistant() {
   const pathname = usePathname()
@@ -91,7 +94,7 @@ export default function AiAssistant() {
         } else if (!data.reply) {
           setMessages((m) => [
             ...m,
-            { role: 'assistant', content: 'لم يصل ردّ صالح. حاول مرة أخرى.' },
+            { role: 'assistant', content: 'لم يصل رد صالح. حاول مرة أخرى.' },
           ])
         } else {
           if (data.conversationId) setConversationId(data.conversationId)
@@ -117,8 +120,11 @@ export default function AiAssistant() {
     }
   }
 
-  // إخفاء المساعد في صفحات المصادقة/العامة — بعد كل الـ hooks (قاعدة React)
-  if (HIDDEN_PATHS.includes(pathname || '')) return null
+  // إخفاء المساعد في صفحات المصادقة/السياسات — بعد كل الـ hooks (قاعدة React)
+  const hidden = HIDDEN_PATHS.some((p) =>
+    p === '/' ? pathname === '/' : pathname?.startsWith(p),
+  )
+  if (hidden) return null
 
   return (
     <>
