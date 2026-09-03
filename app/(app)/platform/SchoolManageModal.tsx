@@ -1,5 +1,6 @@
 'use client'
 // نافذة إدارة مدرسة لمالك المنصة — دخول للدعم: قراءة تفصيلية + تعديل محدود + سجل التدقيق
+// + دخول دعم فني (impersonation) بصلاحيات المالك الكاملة، موثّق بالكامل
 // كل دخول وتعديل يُسجّل في Audit Log (شفافية كاملة)
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase-client'
@@ -35,6 +36,22 @@ export default function SchoolManageModal({ schoolId, schoolName, onClose }: {
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schoolId])
+
+  // ─── بدء دخول الدعم الفني (impersonation) ───
+  async function startSupport() {
+    const reason = prompt('سبب الدخول للدعم الفني (يُسجَّل في التدقيق):')
+    if (reason === null) return
+    if (!reason.trim()) { setMsg('يجب ذكر سبب الدخول'); return }
+    setBusy(true); setMsg('')
+    const { error } = await supabase.rpc('start_impersonation', {
+      p_school_id: schoolId,
+      p_reason: reason.trim(),
+    })
+    setBusy(false)
+    if (error) { setMsg('تعذّر الدخول: ' + error.message); return }
+    // إعادة توجيه للوحة المدرسة — الآن تعمل كمالكها، مع الشريط الأحمر
+    window.location.href = '/dashboard'
+  }
 
   async function saveEdit() {
     setBusy(true); setMsg('')
@@ -78,7 +95,15 @@ export default function SchoolManageModal({ schoolId, schoolName, onClose }: {
             <div style={{ fontWeight: 800, fontSize: 17 }}>{schoolName}</div>
             <div style={{ fontSize: 12, opacity: .75 }}>دخول دعم — كل عملية مُسجّلة في سجل التدقيق</div>
           </div>
-          <button onClick={onClose} style={{ background: 'rgba(255,255,255,.15)', color: '#fff', border: 'none', borderRadius: 8, width: 32, height: 32, cursor: 'pointer', fontSize: 16 }}>✕</button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button onClick={startSupport} disabled={busy}
+              style={{ background: '#C0392B', color: '#fff', border: 'none', borderRadius: 8,
+                       padding: '8px 14px', cursor: busy ? 'default' : 'pointer', fontSize: 13,
+                       fontWeight: 700, fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+              🔧 دخول دعم فني
+            </button>
+            <button onClick={onClose} style={{ background: 'rgba(255,255,255,.15)', color: '#fff', border: 'none', borderRadius: 8, width: 32, height: 32, cursor: 'pointer', fontSize: 16 }}>✕</button>
+          </div>
         </div>
 
         <div style={body}>
