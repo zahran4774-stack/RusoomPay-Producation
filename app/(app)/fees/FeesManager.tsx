@@ -1,17 +1,27 @@
 'use client'
 // مدير الرسوم — بحث وتصفية + بطاقات ملخّص + صفوف قابلة للطي (Accordion) + صفحات (Pagination)
-// + إضافة رسم لكل طالب · الفاتورة تحمل هوية المدرسة · المتبقي يُخفى عند الطباعة/التنزيل
+// + إضافة رسم لكل طالب + تذكير واتساب (فردي/جماعي) · الفاتورة تحمل هوية المدرسة
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
 import { generateInvoice } from '@/lib/invoice-pdf'
 import CashPayment from './CashPayment'
 import RefundButton from './RefundButton'
+
+// ═══ مفتاح تفعيل واتساب ═══
+// اجعله true بعد اكتمال امتثال Twilio وضبط TWILIO_WHATSAPP_FROM في Netlify.
+// طالما false: أزرار التذكير تظهر معطّلة بوضوح ولا تُرسل شيئاً.
+const WHATSAPP_ENABLED = false
+
 const CUR_DEC: Record<string, number> = { OMR: 3, KWD: 3, BHD: 3, SAR: 2, AED: 2, QAR: 2 }
 const CUR_SYM: Record<string, string> = { OMR: 'ر.ع', SAR: 'ر.س', AED: 'د.إ', QAR: 'ر.ق', KWD: 'د.ك', BHD: 'د.ب' }
 
 type Fee = { id: string; description: string; total: number; paid: number; due_date: string | null }
-type Student = { id: string; code: string; full_name: string; grade: string; section: string | null; student_fees: Fee[] }
+type Student = {
+  id: string; code: string; full_name: string; grade: string; section: string | null
+  guardian_name?: string | null; guardian_phone?: string | null
+  student_fees: Fee[]
+}
 type School = {
   name: string; branch: string | null; currency: string; cr_number: string | null
   moe_license: string | null; vat_number: string | null; phone: string | null
@@ -31,9 +41,15 @@ export default function FeesManager({ students, school, currency }: { students: 
   const [open, setOpen] = useState<string | null>(null)   // الطالب المفتوح (Accordion)
   const [page, setPage] = useState(1)
 
+  // حالة إرسال التذكير
+  const [remindingId, setRemindingId] = useState<string | null>(null)   // الطالب الجاري تذكيره (فردي)
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [toast, setToast] = useState<{ text: string; ok: boolean } | null>(null)
+
   const dec = CUR_DEC[currency] ?? 3
   const sym = CUR_SYM[currency] ?? 'ر.ع'
   const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec })
+  const schoolName = school?.name ?? 'مدرسة'
 
   const grades = useMemo(
     () => Array.from(new Set(students.map((s) => s.grade).filter(Boolean))).sort(),
@@ -68,21 +84,98 @@ export default function FeesManager({ students, school, currency }: { students: 
     return { tot, paid, remain: tot - paid, overdueStudents }
   }, [filtered])
 
+  // قائمة المتأخرين (لهم رقم ولي أمر) — للزر الجماعي
+  const overdueList = useMemo(() => {
+    return students
+      .map((s) => {
+        const remain = (s.student_fees ?? []).reduce((a, f) => a + ((f.total ?? 0) - (f.paid ?? 0)), 0)
+        return { student: s, remain }
+      })
+      .filter((x) => x.remain > 0.0005 && x.student.guardian_phone)
+  }, [students])
+
   const active = q.trim() !== '' || grade !== '' || overdueOnly
 
-  // إعادة الصفحة للأولى عند تغيّر التصفية
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
   const pageItems = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
-
   const resetPage = () => setPage(1)
+
+  // ─── إرسال تذكير واتساب لطالب واحد ───
+  async function remindOne(student: Student, remain: number) {
+    if (!WHATSAPP_ENABLED) return
+    if (!student.guardian_phone) { setToast({ text: 'لا يوجد رقم ولي أمر لهذا الطالب', ok: false }); return }
+    setRemindingId(student.id)
+    setToast(null)
+    try {
+      const res = await fetch('/api/send-whatsapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: student.guardian_phone,
+          template: 'fee_reminder',
+          variables: {
+            '1': schoolName,
+            '2': student.guardian_name || 'ولي الأمر',
+            '3': student.full_name,
+            '4': fmt(remain) + ' ' + sym,
+          },
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setToast({ text: data.error || 'تعذّر إرسال التذكير', ok: false }) }
+      else { setToast({ text: `أُرسل تذكير إلى ${student.guardian_name || 'ولي أمر'} ${student.full_name}`, ok: true }) }
+    } catch {
+      setToast({ text: 'تعذّر الاتصال بخدمة الإرسال', ok: false })
+    } finally {
+      setRemindingId(null)
+    }
+  }
+
+  // ─── إرسال تذكير جماعي لكل المتأخرين ───
+  async function remindAll() {
+    if (!WHATSAPP_ENABLED) return
+    if (overdueList.length === 0) { setToast({ text: 'لا يوجد متأخرون لديهم رقم ولي أمر', ok: false }); return }
+    if (!confirm(`إرسال تذكير واتساب إلى ${overdueList.length} ولي أمر؟`)) return
+
+    setBulkBusy(true)
+    setToast(null)
+    let sent = 0, failed = 0, stopped = false
+
+    for (const { student, remain } of overdueList) {
+      try {
+        const res = await fetch('/api/send-whatsapp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: student.guardian_phone,
+            template: 'fee_reminder',
+            variables: {
+              '1': schoolName,
+              '2': student.guardian_name || 'ولي الأمر',
+              '3': student.full_name,
+              '4': fmt(remain) + ' ' + sym,
+            },
+          }),
+        })
+        if (res.status === 429) { stopped = true; break }   // بلغنا حد المعدل
+        if (res.ok) sent++; else failed++
+      } catch {
+        failed++
+      }
+    }
+    setBulkBusy(false)
+    const parts = [`أُرسل ${sent} تذكير`]
+    if (failed > 0) parts.push(`فشل ${failed}`)
+    if (stopped) parts.push('توقّف عند حد الإرسال — أكمل الباقي بعد 5 دقائق')
+    setToast({ text: parts.join(' · '), ok: sent > 0 })
+  }
 
   const inp: React.CSSProperties = {
     padding: '10px 12px', borderRadius: 10, border: '1.5px solid #DDE3EC',
     fontSize: 14, fontFamily: 'inherit', background: '#fff',
   }
 
-  // بطاقة ملخّص صغيرة
   const StatCard = ({ label, value, color, bg }: { label: string; value: string; color: string; bg: string }) => (
     <div style={{ flex: '1 1 150px', background: bg, borderRadius: 12, padding: '14px 16px', minWidth: 130 }}>
       <div style={{ fontSize: 12.5, color: '#5A6B7B', marginBottom: 4 }}>{label}</div>
@@ -92,6 +185,19 @@ export default function FeesManager({ students, school, currency }: { students: 
 
   return (
     <div>
+      {/* شريط إشعار النتيجة */}
+      {toast && (
+        <div style={{
+          padding: '11px 14px', borderRadius: 10, marginBottom: 12, fontSize: 14, fontWeight: 600,
+          background: toast.ok ? '#EFF9F2' : '#FDEEED',
+          color: toast.ok ? '#1A7A45' : '#C0392B',
+          border: `1px solid ${toast.ok ? '#BFE5D0' : '#F3C9C2'}`,
+        }}>
+          {toast.ok ? '✓ ' : '⚠ '}{toast.text}
+          <button onClick={() => setToast(null)} style={{ background: 'none', border: 0, float: 'left', cursor: 'pointer', color: 'inherit', fontSize: 16 }}>×</button>
+        </div>
+      )}
+
       {/* بطاقات الملخّص العلوية */}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
         <StatCard label="إجمالي الرسوم" value={`${fmt(summary.tot)} ${sym}`} color="#0F2744" bg="#F4F7FB" />
@@ -99,6 +205,33 @@ export default function FeesManager({ students, school, currency }: { students: 
         <StatCard label="المتبقّي" value={`${fmt(summary.remain)} ${sym}`} color="#C0392B" bg="#FDEEED" />
         <StatCard label="طلاب عليهم متأخرات" value={`${summary.overdueStudents}`} color="#B54708" bg="#FFF6ED" />
       </div>
+
+      {/* زر التذكير الجماعي */}
+      {summary.overdueStudents > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <button
+            onClick={remindAll}
+            disabled={!WHATSAPP_ENABLED || bulkBusy}
+            title={WHATSAPP_ENABLED ? '' : 'خدمة واتساب قيد التفعيل'}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              background: WHATSAPP_ENABLED ? '#25D366' : '#E3E8EE',
+              color: WHATSAPP_ENABLED ? '#fff' : '#8A94A6',
+              border: 0, borderRadius: 11, padding: '11px 20px',
+              fontSize: 14.5, fontWeight: 700, fontFamily: 'inherit',
+              cursor: WHATSAPP_ENABLED && !bulkBusy ? 'pointer' : 'default',
+            }}>
+            {bulkBusy ? 'جارٍ الإرسال…'
+              : WHATSAPP_ENABLED ? `📱 تذكير كل المتأخرين (${overdueList.length})`
+              : '📱 تذكير كل المتأخرين — قيد التفعيل'}
+          </button>
+          {!WHATSAPP_ENABLED && (
+            <div style={{ fontSize: 12, color: '#8A94A6', marginTop: 6 }}>
+              خدمة واتساب قيد التفعيل — سيعمل الزر تلقائياً بمجرد اكتمال الإعداد.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* شريط البحث والتصفية */}
       <div style={{ background: '#fff', borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
@@ -164,7 +297,6 @@ export default function FeesManager({ students, school, currency }: { students: 
             const isOpen = open === s.id
             return (
               <div key={s.id} style={{ borderTop: idx === 0 ? 'none' : '1px solid #EEF2F7' }}>
-                {/* رأس الصف — قابل للنقر */}
                 <div
                   onClick={() => setOpen(isOpen ? null : s.id)}
                   style={{
@@ -193,7 +325,6 @@ export default function FeesManager({ students, school, currency }: { students: 
                   </div>
                 </div>
 
-                {/* تفاصيل الرسوم — تظهر عند الفتح */}
                 {isOpen && (
                   <div style={{ padding: '0 18px 18px' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
@@ -242,13 +373,39 @@ export default function FeesManager({ students, school, currency }: { students: 
                       </tbody>
                     </table>
 
-                    <button
-                      onClick={() => setAddFeeFor(s)}
-                      style={{ marginTop: 12, background: '#EFF9F2', color: '#1A7A45',
-                               border: '1px solid #BFE5D0', borderRadius: 9, padding: '8px 16px',
-                               fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: 'inherit' }}>
-                      ＋ إضافة رسم لهذا الطالب
-                    </button>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+                      <button
+                        onClick={() => setAddFeeFor(s)}
+                        style={{ background: '#EFF9F2', color: '#1A7A45',
+                                 border: '1px solid #BFE5D0', borderRadius: 9, padding: '8px 16px',
+                                 fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: 'inherit' }}>
+                        ＋ إضافة رسم لهذا الطالب
+                      </button>
+
+                      {/* زر تذكير واتساب فردي — يظهر فقط للمتأخرين */}
+                      {remain > 0.0005 && (
+                        <button
+                          onClick={() => remindOne(s, remain)}
+                          disabled={!WHATSAPP_ENABLED || remindingId === s.id || !s.guardian_phone}
+                          title={
+                            !s.guardian_phone ? 'لا يوجد رقم ولي أمر لهذا الطالب'
+                            : WHATSAPP_ENABLED ? 'إرسال تذكير واتساب لولي الأمر'
+                            : 'خدمة واتساب قيد التفعيل'
+                          }
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 7,
+                            background: WHATSAPP_ENABLED && s.guardian_phone ? '#25D366' : '#E3E8EE',
+                            color: WHATSAPP_ENABLED && s.guardian_phone ? '#fff' : '#8A94A6',
+                            border: 0, borderRadius: 9, padding: '8px 16px',
+                            fontWeight: 700, fontSize: 13.5, fontFamily: 'inherit',
+                            cursor: WHATSAPP_ENABLED && s.guardian_phone && remindingId !== s.id ? 'pointer' : 'default',
+                          }}>
+                          {remindingId === s.id ? 'جارٍ الإرسال…'
+                            : WHATSAPP_ENABLED ? '📱 تذكير واتساب'
+                            : '📱 تذكير واتساب (قيد التفعيل)'}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
