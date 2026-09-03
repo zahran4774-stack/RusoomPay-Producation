@@ -1,6 +1,6 @@
-// صفحة الرسوم والفواتير — مكوّن خادم
-// يجلب الطلاب مع بنود رسومهم + هوية المدرسة (للفواتير)
-// تحسين الأداء: الاستعلامات المستقلّة تُنفَّذ متوازية (Promise.all).
+// صفحة الرسوم والفواتير — مكون خادم
+// يجلب الطلاب مع بنود رسومهم وبيانات ولي الأمر (للتذكير) + هوية المدرسة (للفواتير)
+// تحسين الأداء: الاستعلامات المستقلّة تُنفَذ متوازية (Promise.all).
 import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import FeesManager from './FeesManager'
@@ -24,11 +24,11 @@ export default async function FeesPage() {
       .select('name, branch, currency, cr_number, moe_license, vat_number, phone, email, address, logo_url, color, bank_name, bank_account, bank_iban, bank_holder, bank_enabled')
       .single(),
     supabase.from('students')
-      .select('id, code, full_name, grade, section, student_fees(id, description, total, paid, due_date)')
+      .select('id, code, full_name, grade, section, guardian_name, guardian_phone, student_fees(id, description, total, paid, due_date)')
       // ⚠️ إصلاح: نفس سبب صفحة الطلاب — استُثني الطلاب المحذوفون بصمت
       .is('deleted_at', null)
       .order('code'),
-      // عمداً بلا .limit() — نفس سبب صفحة الطلاب: أي سقف هنا يعني اختفاء
+      // عمدا بلا .limit() — نفس سبب صفحة الطلاب: أي سقف هنا يعني اختفاء
       // فواتير طلاب حقيقيين بصمت. لا حل صحيح لهذا الاستعلام غير ترقيم حقيقي
       // (يحتاج تصميماً منفصلاً بسبب اعتماد الطباعة/التقارير على القائمة كاملة).
     supabase.rpc('pending_payments_list'),
