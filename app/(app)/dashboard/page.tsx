@@ -27,7 +27,10 @@ export default async function DashboardPage() {
   ])
 
   const role = (myRole ?? profile?.role ?? 'admin') as Role
+  // مدير المنصة له لوحته الخاصة
   if (role === 'platform_admin') redirect('/platform')
+  // ولي الأمر له لوحته الخاصة — لا يرى لوحة المدرسة ولا إحصائياتها
+  if (role === 'parent') redirect('/parent')
 
   const currency = school?.currency ?? 'OMR'
   const s = (summary ?? {}) as Record<string, number>
