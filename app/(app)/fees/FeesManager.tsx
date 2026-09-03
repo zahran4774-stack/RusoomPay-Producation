@@ -1,7 +1,9 @@
 'use client'
 // مدير الرسوم — بحث وتصفية + بطاقات ملخّص + صفوف قابلة للطي (Accordion) + صفحات (Pagination)
-// الفاتورة تحمل هوية المدرسة (لا المنصة) · المتبقي يُخفى عند الطباعة/التنزيل
+// + إضافة رسم لكل طالب · الفاتورة تحمل هوية المدرسة · المتبقي يُخفى عند الطباعة/التنزيل
 import { useState, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase-client'
 import { generateInvoice } from '@/lib/invoice-pdf'
 import CashPayment from './CashPayment'
 import RefundButton from './RefundButton'
@@ -22,6 +24,7 @@ const PAGE_SIZE = 6
 
 export default function FeesManager({ students, school, currency }: { students: Student[]; school: School; currency: string }) {
   const [invoice, setInvoice] = useState<{ student: Student; fee: Fee } | null>(null)
+  const [addFeeFor, setAddFeeFor] = useState<Student | null>(null)
   const [q, setQ] = useState('')
   const [grade, setGrade] = useState('')
   const [overdueOnly, setOverdueOnly] = useState(false)
@@ -238,6 +241,14 @@ export default function FeesManager({ students, school, currency }: { students: 
                         )}
                       </tbody>
                     </table>
+
+                    <button
+                      onClick={() => setAddFeeFor(s)}
+                      style={{ marginTop: 12, background: '#EFF9F2', color: '#1A7A45',
+                               border: '1px solid #BFE5D0', borderRadius: 9, padding: '8px 16px',
+                               fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: 'inherit' }}>
+                      ＋ إضافة رسم لهذا الطالب
+                    </button>
                   </div>
                 )}
               </div>
@@ -271,6 +282,95 @@ export default function FeesManager({ students, school, currency }: { students: 
         <InvoiceModal student={invoice.student} fee={invoice.fee} school={school} sym={sym} fmt={fmt}
           onClose={() => setInvoice(null)} />
       )}
+
+      {addFeeFor && (
+        <AddFeeModal student={addFeeFor} onClose={() => setAddFeeFor(null)} />
+      )}
+    </div>
+  )
+}
+
+function AddFeeModal({ student, onClose }: { student: Student; onClose: () => void }) {
+  const router = useRouter()
+  const supabase = createClient()
+  const [kind, setKind] = useState('الرسوم الدراسية السنوية')
+  const [custom, setCustom] = useState('')
+  const [amount, setAmount] = useState('')
+  const [dueDate, setDueDate] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+
+  const KINDS = [
+    'الرسوم الدراسية السنوية',
+    'رسوم النقل المدرسي',
+    'رسوم التغذية',
+    'رسوم الأنشطة والرحلات',
+    'رسوم الكتب والزي',
+    'أخرى',
+  ]
+
+  async function submit() {
+    setErr('')
+    const desc = kind === 'أخرى' ? custom.trim() : kind
+    if (!desc) { setErr('أدخل وصف الرسم'); return }
+    const amt = parseFloat(amount)
+    if (!amt || amt <= 0) { setErr('أدخل مبلغاً صحيحاً أكبر من صفر'); return }
+
+    setSaving(true)
+    const { error } = await supabase.rpc('add_student_fee', {
+      p_student_id: student.id,
+      p_description: desc,
+      p_total: amt,
+      p_due_date: dueDate || null,
+    })
+    setSaving(false)
+    if (error) { setErr(error.message); return }
+    onClose()
+    router.refresh()
+  }
+
+  const inp: React.CSSProperties = {
+    width: '100%', padding: 10, margin: '5px 0 14px', borderRadius: 9,
+    border: '1.5px solid #DDE3EC', fontFamily: 'inherit', fontSize: 14,
+  }
+  const lbl: React.CSSProperties = { fontSize: 13, fontWeight: 700, color: '#0F2744' }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,39,68,.5)', display: 'grid',
+                  placeItems: 'center', padding: 16, zIndex: 200 }} dir="rtl">
+      <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: 'min(92vw, 440px)' }}>
+        <h3 style={{ color: '#0F2744', marginBottom: 4 }}>إضافة رسم</h3>
+        <p style={{ color: '#667', fontSize: 13, marginBottom: 16 }}>{student.full_name} · {student.code}</p>
+
+        <label style={lbl}>نوع الرسم</label>
+        <select value={kind} onChange={(e) => setKind(e.target.value)} style={{ ...inp, cursor: 'pointer' }}>
+          {KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
+        </select>
+
+        {kind === 'أخرى' && (
+          <>
+            <label style={lbl}>وصف الرسم</label>
+            <input value={custom} onChange={(e) => setCustom(e.target.value)} style={inp} placeholder="مثال: رسوم امتحان" />
+          </>
+        )}
+
+        <label style={lbl}>المبلغ (ر.ع)</label>
+        <input type="number" step="0.001" value={amount} onChange={(e) => setAmount(e.target.value)} style={inp} placeholder="0.000" dir="ltr" />
+
+        <label style={lbl}>تاريخ الاستحقاق (اختياري)</label>
+        <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} style={inp} dir="ltr" />
+
+        {err && <div style={{ color: '#C0392B', fontSize: 13, fontWeight: 600, marginBottom: 12 }}>⚠ {err}</div>}
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} disabled={saving}
+            style={{ padding: '10px 18px', background: '#F0F3F8', border: 'none', borderRadius: 9, cursor: 'pointer', fontFamily: 'inherit' }}>إلغاء</button>
+          <button onClick={submit} disabled={saving}
+            style={{ padding: '10px 20px', background: saving ? '#8AA' : '#1A7A45', color: '#fff', border: 'none', borderRadius: 9, cursor: saving ? 'default' : 'pointer', fontWeight: 700, fontFamily: 'inherit' }}>
+            {saving ? 'جارٍ الحفظ…' : 'إضافة الرسم'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
