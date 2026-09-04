@@ -156,6 +156,29 @@ html[dir="rtl"] .app-sidebar { inset-inline-start: auto; inset-inline-end: 0; tr
   border-top: 1px solid rgba(255,255,255,.08);
 }
 
+/* ---------- مجموعات قابلة للطي في الشريط الجانبي (ERP) ---------- */
+.side-group-head { display: flex; align-items: stretch; gap: 2px; }
+.side-group-head.active { color: var(--brand-soft); }
+.side-group-btn {
+  flex: 1; width: 100%; background: none; border: 0; font: inherit; color: inherit;
+  text-align: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.side-group-toggle {
+  display: flex; align-items: center; justify-content: center;
+  width: 38px; flex-shrink: 0; border-radius: 12px; background: transparent; border: 0;
+  color: #B9C4D4; cursor: pointer; transition: background .15s, color .15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.side-group-toggle:hover { background: rgba(255,255,255,.06); color: #fff; }
+.side-group-chevron { transition: transform .2s ease; }
+.side-group-chevron.open { transform: rotate(180deg); }
+.side-subnav {
+  display: flex; flex-direction: column; gap: 2px;
+  padding-inline-start: 16px; margin: 2px 0 4px;
+}
+.side-sublink { min-height: 42px; padding: 10px 14px; font-size: .92rem; opacity: .92; }
+.side-sublink .ic { font-size: 1.05rem; }
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
