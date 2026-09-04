@@ -9,6 +9,7 @@ import StaffInvites from './StaffInvites'
 import SchoolBackup from './SchoolBackup'
 import SectionStyleSetting from './SectionStyleSetting'
 import BankSettings from './BankSettings'
+import GradePricing from './GradePricing'
 import SettingsTabs, { type SettingsTab } from './SettingsTabs'
 
 export default async function SettingsPage() {
@@ -24,6 +25,9 @@ export default async function SettingsPage() {
     .maybeSingle()
 
   const isOwner = profile?.role === 'owner'
+  const isAdmin = profile?.role === 'admin'
+  // تسعير المراحل يُستخدم فقط من قِبل من يملك صلاحية تسجيل/تعديل الطلاب أصلاً (المدير/الإداري)
+  const canManageGrades = isOwner || isAdmin
 
   // إعداد الضريبة حسب قانون الدولة (لكل المستخدمين للعرض، التعديل للمدير)
   const vatRes = await supabase.rpc('my_vat_setting').maybeSingle()
@@ -61,6 +65,13 @@ export default async function SettingsPage() {
 
   // طبقة الذكاء — حالة المحرّكات (School Intelligence Core)
   const { data: engines } = await supabase.rpc('intelligence_status')
+
+  // تسعير المراحل — لمن يملك صلاحية إدارة الطلاب فقط
+  let gradeFees: { grade: string; annual_fee: number }[] = []
+  if (canManageGrades) {
+    const { data } = await supabase.rpc('grade_fees_list')
+    gradeFees = data ?? []
+  }
 
   // ═══ تجميع الأقسام الموجودة فعلياً في تبويبات — نفس المكوّنات والشروط
   // السابقة تماماً، فقط أُعيد تنظيمها بصرياً. أي تبويب بلا محتوى فعلي لهذا
@@ -101,6 +112,10 @@ export default async function SettingsPage() {
     ...(intelligenceContent ? [{
       id: 'intelligence', label: 'الذكاء والنظام',
       content: <IntelligencePanel initial={engines} canEdit={isOwner} />,
+    }] : []),
+    ...(canManageGrades ? [{
+      id: 'grade-pricing', label: 'تسعير المراحل',
+      content: <GradePricing initial={gradeFees} canEdit={canManageGrades} />,
     }] : []),
     ...(isOwner ? [{
       id: 'staff-backup', label: 'الطاقم والنسخ الاحتياطي',
