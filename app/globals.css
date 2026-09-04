@@ -172,6 +172,21 @@ html[dir="rtl"] .app-sidebar { inset-inline-start: auto; inset-inline-end: 0; tr
 .side-sublink { min-height: 42px; padding: 10px 14px; font-size: .92rem; opacity: .92; }
 .side-sublink .ic { font-size: 1.05rem; }
 
+/* ---------- تبويب علوي لصفحة (شبقة تنقّل ثانوية بعد الشريط الجانبي) ---------- */
+.module-tabs {
+  display: flex; gap: 4px; margin-bottom: 20px;
+  border-bottom: 1px solid #E6E9EF; overflow-x: auto; -webkit-overflow-scrolling: touch;
+}
+.module-tab {
+  display: inline-flex; align-items: center; white-space: nowrap;
+  padding: 13px 18px; font-size: .95rem; font-weight: 600; color: #667;
+  text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  transition: color .15s, border-color .15s;
+}
+.module-tab:hover { color: #0F2744; }
+.module-tab.active { color: #0F2744; border-bottom-color: var(--brand, #0F9D74); }
+.module-tab:focus-visible { outline: 2px solid var(--brand, #0F9D74); outline-offset: 2px; border-radius: 4px; }
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
