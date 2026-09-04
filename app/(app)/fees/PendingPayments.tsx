@@ -10,7 +10,7 @@ import { toE164 } from '@/lib/phone'
 
 type Pending = {
   id: string; guardian: string; student: string
-  amount: number; method: string; bank_ref: string | null; created_at: string
+  amount: number; method: string; bank_ref: string | null; receipt_url?: string | null; created_at: string
   guardian_phone?: string | null; school_name?: string | null
   // مطلوب لتحديد القالب الصحيح (سداد كامل/جزئي): المتبقي على الفاتورة بعد هذه الدفعة.
   // إذا لم تُزوَّد هذه القيمة من الاستعلام الأصلي (initial)، سيُفترض أن السداد جزئي احتياطاً
@@ -28,6 +28,16 @@ export default function PendingPayments({ initial }: { initial: Pending[] }) {
   const [items, setItems] = useState<Pending[]>(initial)
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<string>('')
+  const [receiptBusyId, setReceiptBusyId] = useState<string | null>(null)
+
+  // فتح إيصال التحويل المرفوع (bucket خاص — رابط موقَّت صالح لدقيقتين)
+  async function viewReceipt(path: string, id: string) {
+    setReceiptBusyId(id)
+    const { data, error } = await supabase.storage.from('fee-receipts').createSignedUrl(path, 120)
+    setReceiptBusyId(null)
+    if (error || !data?.signedUrl) { setMsg('✗ تعذّر فتح الإيصال: ' + (error?.message || '')); return }
+    window.open(data.signedUrl, '_blank')
+  }
 
   // إرسال رسالة الشكر عبر قالب معتمد — فشل الإرسال لا يُظهر خطأ للمستخدم (الاعتماد نفسه نجح ومستقل عنه)
   async function sendThankYou(p: Pending) {
@@ -129,6 +139,12 @@ export default function PendingPayments({ initial }: { initial: Pending[] }) {
             </span>
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
+            {p.receipt_url && (
+              <button onClick={() => viewReceipt(p.receipt_url!, p.id)} disabled={receiptBusyId === p.id}
+                style={{ background: '#EEF2F9', color: '#163B68', border: 'none', borderRadius: 9, padding: '8px 14px', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>
+                {receiptBusyId === p.id ? '...' : '🧾 الإيصال'}
+              </button>
+            )}
             <button onClick={() => act(p.id, true)} disabled={busy === p.id}
               style={{ background: '#D4A017', color: '#08172B', border: 'none', borderRadius: 9, padding: '8px 16px', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
               {busy === p.id ? '...' : '✓ اعتماد'}
