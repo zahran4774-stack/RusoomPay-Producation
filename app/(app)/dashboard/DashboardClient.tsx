@@ -3,44 +3,67 @@
 // المرحلة 1: تسلسل بصري أوضح + فراغات أقل ~15% + Timeline ملوّن + KPIs أبرز
 // + نبضة قوية على التنبيه العاجل (الأحمر) فقط — تحترم prefers-reduced-motion
 import Link from 'next/link'
+import { useState } from 'react'
 import {
   GraduationCap, Users, TrendingUp, Wallet, UserPlus, Banknote, ReceiptText,
-  Bell, FileUp, BarChart3, ClipboardList, Gem, TriangleAlert, Landmark,
+  Bell, FileUp, TriangleAlert, Landmark, Gem,
   CheckCircle2, XCircle, CircleDot, type LucideIcon,
 } from 'lucide-react'
+import CopilotWithActions from './CopilotWithActions'
 
 type Data = Record<string, number>
 
 export default function DashboardClient({
-  roleLabel, role, sym, canFinance, isStaff, data, analytics, recent,
+  userName, roleLabel, role, schoolName, sym, canFinance, isStaff, data, analytics, recent,
+  copilot, smartRecs, impact,
 }: {
   userName: string; roleLabel: string; role: string; schoolName: string
   currency?: string; sym: string; canFinance: boolean; isStaff: boolean; data: Data
   analytics?: { months?: { month: string; amount: number }[]; this_year?: number; last_year?: number }
   recent?: { action: string; details: string | null; created_at: string }[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  copilot: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  smartRecs: any[]
+  impact: { actions_this_month?: number; collected_this_month?: number } | null
 }) {
   const fmt = (n: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
   const int = (n: number) => (n ?? 0).toLocaleString('en-US')
   const collection = data.collection_rate ?? 100
 
-  // التنبيهات التشغيلية (تحتاج إجراءً الآن) — دائماً أول ما يُرى
+  // التنبيهات التشغيلية (تحتاج إجراءً الآن) — دائماً أول ما يُرى، فوق التبويبات
   const alerts: { icon: LucideIcon; text: string; href: string; tone: 'amber' | 'red' }[] = []
   if (role === 'owner' && (data.pending_salary ?? 0) > 0)
     alerts.push({ icon: Bell, text: `${data.pending_salary} طلب تعديل راتب بانتظار اعتمادك`, href: '/employees', tone: 'amber' })
   if (isStaff && (data.overdue_count ?? 0) > 0)
     alerts.push({ icon: TriangleAlert, text: `${data.overdue_count} فاتورة متأخّرة عن موعد السداد`, href: '/fees', tone: 'red' })
 
+  const hasCopilot = isStaff && copilot && copilot.ok !== false
+  const hasAnalytics = canFinance && !!analytics?.months && analytics.months.length > 0
+  const hasRecent = role === 'owner' && !!recent && recent.length > 0
+  const hasQuickActions = isStaff
+
+  type TabKey = 'copilot' | 'manager' | 'analytics' | 'recent'
+  const tabs: { key: TabKey; label: string }[] = [
+    ...(hasCopilot ? [{ key: 'copilot' as TabKey, label: 'School Copilot' }] : []),
+    { key: 'manager', label: 'مدير المدرسة' },
+    ...(hasAnalytics ? [{ key: 'analytics' as TabKey, label: 'تحليلات التحصيل الشهري' }] : []),
+    ...(hasRecent ? [{ key: 'recent' as TabKey, label: 'آخر العمليات' }] : []),
+  ]
+  const [tab, setTab] = useState<TabKey>(tabs[0]?.key ?? 'manager')
+  const activeTab = tabs.some((t) => t.key === tab) ? tab : (tabs[0]?.key ?? 'manager')
+
   return (
-    <div style={{ maxWidth: 1080, margin: '0 auto' }} dir="rtl">
+    <div style={{ maxWidth: 1080, margin: '0 auto', paddingBottom: hasQuickActions ? 84 : 0 }} dir="rtl">
       <style>{`
-        .ep-quicklink{transition:border-color .15s,transform .15s,box-shadow .15s}
-        .ep-quicklink:hover{border-color:#163B68;transform:translateY(-2px);box-shadow:0 8px 20px -8px rgba(15,39,68,.25)}
         .ep-alert{transition:transform .15s,box-shadow .15s}
         .ep-alert:hover{transform:translateX(-3px);box-shadow:0 6px 18px -8px rgba(15,39,68,.18)}
         .ep-kpi{transition:transform .15s,box-shadow .15s}
         .ep-kpi:hover{transform:translateY(-3px);box-shadow:0 10px 26px -12px rgba(15,39,68,.2)}
         .ep-tl-item{transition:background .15s}
         .ep-tl-item:hover{background:#F8FAFC}
+        .ep-quicklink{transition:border-color .15s,transform .15s,box-shadow .15s}
+        .ep-quicklink:hover{border-color:#163B68;transform:translateY(-2px);box-shadow:0 8px 20px -8px rgba(15,39,68,.25)}
 
         /* نبضة قوية للتنبيه العاجل — هالة + وميض خلفية + أيقونة */
         .ep-alert-urgent{animation:epPulse 1.4s ease-in-out infinite}
@@ -60,12 +83,12 @@ export default function DashboardClient({
         }
       `}</style>
 
-      {/* شارة الدور فقط — التحية واسم المدرسة يعرضهما Copilot أعلاه (تفادي التكرار) */}
+      {/* شارة الدور فقط — التحية واسم المدرسة يعرضهما Copilot داخل تبويبه (تفادي التكرار) */}
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-start' }}>
         <span style={{ fontSize: 12.5, color: '#fff', background: '#163B68', padding: '3px 12px', borderRadius: 99, fontWeight: 600 }}>{roleLabel}</span>
       </div>
 
-      {/* ═══ 1) تنبيهات تحتاج إجراءً — أعلى التسلسل دائماً ═══ */}
+      {/* ═══ تنبيهات تحتاج إجراءً — فوق التبويبات دائماً، بصرف النظر عن التبويب النشط ═══ */}
       {alerts.length > 0 && (
         <div style={{ display: 'grid', gap: 8, marginBottom: 20 }}>
           {alerts.map((a, i) => {
@@ -91,54 +114,68 @@ export default function DashboardClient({
         </div>
       )}
 
-      {/* ═══ 2) مؤشرات الأداء — أرقام أكبر، هي مركز اللوحة ═══ */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 12, marginBottom: 12 }}>
-        <Kpi label="الطلاب النشطون" value={int(data.students)} icon={GraduationCap} />
-        <Kpi label="الموظفون" value={int(data.employees)} icon={Users} />
-        {canFinance && <Kpi label="صافي الربح" value={fmt(data.profit)} unit={sym} tone={(data.profit ?? 0) < 0 ? 'act' : 'quiet'} icon={TrendingUp} />}
-        {canFinance && <Kpi label="المتبقّي للتحصيل" value={fmt(data.outstanding)} unit={sym} tone={(data.overdue_count ?? 0) > 0 ? 'act' : 'quiet'} icon={Wallet} />}
+      {/* ═══ تبويب علوي — يبدّل بين أقسام اللوحة ═══ */}
+      <div className="module-tabs" role="tablist" aria-label="أقسام لوحة التحكم">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            role="tab"
+            aria-selected={activeTab === t.key}
+            className={`module-tab ${activeTab === t.key ? 'active' : ''}`}
+            onClick={() => setTab(t.key)}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      {/* ═══ 3) نسبة التحصيل — يلي المؤشرات مباشرة ═══ */}
-      {isStaff && (
-        <div style={{ background: '#fff', borderRadius: 15, padding: 18, marginBottom: 20, boxShadow: '0 1px 4px rgba(0,0,0,.07)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
-            <b style={{ color: '#0F2744', fontSize: 15 }}>نسبة تحصيل الرسوم</b>
-            <span style={{ fontFamily: 'Cairo, sans-serif', fontWeight: 700, fontSize: 24, color: collection >= 80 ? '#1A7A45' : collection >= 60 ? '#B8860B' : '#C0392B' }}>{collection}%</span>
+      {activeTab === 'copilot' && hasCopilot && (
+        <CopilotWithActions
+          data={copilot}
+          sym={sym}
+          firstName={(userName ?? '').split(' ')[0]}
+          schoolName={schoolName}
+          smartRecs={smartRecs}
+          impact={impact}
+        />
+      )}
+
+      {activeTab === 'manager' && (
+        <>
+          {/* مؤشرات الأداء */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 12, marginBottom: 12 }}>
+            <Kpi label="الطلاب النشطون" value={int(data.students)} icon={GraduationCap} />
+            <Kpi label="الموظفون" value={int(data.employees)} icon={Users} />
+            {canFinance && <Kpi label="صافي الربح" value={fmt(data.profit)} unit={sym} tone={(data.profit ?? 0) < 0 ? 'act' : 'quiet'} icon={TrendingUp} />}
+            {canFinance && <Kpi label="المتبقّي للتحصيل" value={fmt(data.outstanding)} unit={sym} tone={(data.overdue_count ?? 0) > 0 ? 'act' : 'quiet'} icon={Wallet} />}
           </div>
-          <div style={{ height: 12, background: '#EEF1F5', borderRadius: 99, overflow: 'hidden' }}>
-            <div style={{ width: `${collection}%`, height: '100%', borderRadius: 99, transition: 'width .6s', background: collection >= 80 ? 'linear-gradient(90deg,#1E8E5A,#27AE60)' : collection >= 60 ? 'linear-gradient(90deg,#D4A017,#E8BC45)' : 'linear-gradient(90deg,#C0392B,#E05545)' }} />
-          </div>
-          {canFinance && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, fontSize: 13, color: '#667' }}>
-              <span>المحصّل: <b style={{ color: '#0F2744' }}>{fmt(data.fees_paid)} {sym}</b></span>
-              <span>الإجمالي: <b style={{ color: '#0F2744' }}>{fmt(data.fees_total)} {sym}</b></span>
+
+          {/* نسبة التحصيل */}
+          {isStaff && (
+            <div style={{ background: '#fff', borderRadius: 15, padding: 18, marginBottom: 20, boxShadow: '0 1px 4px rgba(0,0,0,.07)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+                <b style={{ color: '#0F2744', fontSize: 15 }}>نسبة تحصيل الرسوم</b>
+                <span style={{ fontFamily: 'Cairo, sans-serif', fontWeight: 700, fontSize: 24, color: collection >= 80 ? '#1A7A45' : collection >= 60 ? '#B8860B' : '#C0392B' }}>{collection}%</span>
+              </div>
+              <div style={{ height: 12, background: '#EEF1F5', borderRadius: 99, overflow: 'hidden' }}>
+                <div style={{ width: `${collection}%`, height: '100%', borderRadius: 99, transition: 'width .6s', background: collection >= 80 ? 'linear-gradient(90deg,#1E8E5A,#27AE60)' : collection >= 60 ? 'linear-gradient(90deg,#D4A017,#E8BC45)' : 'linear-gradient(90deg,#C0392B,#E05545)' }} />
+              </div>
+              {canFinance && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, fontSize: 13, color: '#667' }}>
+                  <span>المحصّل: <b style={{ color: '#0F2744' }}>{fmt(data.fees_paid)} {sym}</b></span>
+                  <span>الإجمالي: <b style={{ color: '#0F2744' }}>{fmt(data.fees_total)} {sym}</b></span>
+                </div>
+              )}
             </div>
           )}
-        </div>
+        </>
       )}
 
-      {/* ═══ 4) إجراءات سريعة ═══ */}
-      {isStaff && (
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#8A94A6', marginBottom: 10 }}>إجراءات سريعة</div>
-          <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
-            <QuickAction href="/students" icon={UserPlus} label="إضافة طالب" />
-            <QuickAction href="/fees" icon={Banknote} label="تسجيل دفعة" />
-            <QuickAction href="/fees" icon={ReceiptText} label="إنشاء فاتورة" />
-            <QuickAction href="/fees" icon={Bell} label="إرسال تذكير" />
-            {canFinance && <QuickAction href="/accounting" icon={FileUp} label="تصدير تقرير" />}
-          </div>
-        </div>
-      )}
-
-      {/* ═══ 5) تحليلات التحصيل ═══ */}
-      {canFinance && analytics?.months && analytics.months.length > 0 && (
+      {activeTab === 'analytics' && hasAnalytics && analytics?.months && (
         <CollectionChart months={analytics.months} thisYear={analytics.this_year ?? 0} lastYear={analytics.last_year ?? 0} sym={sym} />
       )}
 
-      {/* ═══ 6) آخر العمليات — Timeline ملوّن بأيقونات حسب النوع ═══ */}
-      {role === 'owner' && recent && recent.length > 0 && (
+      {activeTab === 'recent' && hasRecent && recent && (
         <div style={{ background: '#fff', borderRadius: 15, padding: 18, marginBottom: 20, boxShadow: '0 1px 4px rgba(0,0,0,.07)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <b style={{ color: '#0F2744', fontSize: 15 }}>آخر العمليات</b>
@@ -170,18 +207,23 @@ export default function DashboardClient({
         </div>
       )}
 
-      {/* ═══ 7) الوصول السريع ═══ */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: '#8A94A6', marginBottom: 10 }}>الوصول السريع</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 10 }}>
-          {isStaff && <QuickLink href="/students" icon={GraduationCap} label="الطلاب والرسوم" />}
-          {isStaff && <QuickLink href="/fees" icon={ReceiptText} label="الفواتير" />}
-          {isStaff && <QuickLink href="/employees" icon={Users} label="الموظفون والرواتب" />}
-          {canFinance && <QuickLink href="/accounting" icon={BarChart3} label="المحاسبة" />}
-          {role === 'owner' && <QuickLink href="/activity" icon={ClipboardList} label="سجل النشاط" />}
-          {role === 'owner' && <QuickLink href="/subscription" icon={Gem} label="اشتراك المنصة" />}
+      {/* ═══ إجراءات سريعة — شريط ثابت أسفل الصفحة، بصرف النظر عن التبويب النشط ═══ */}
+      {hasQuickActions && (
+        <div style={{
+          position: 'fixed', insetInlineStart: 0, insetInlineEnd: 0, bottom: 0, zIndex: 20,
+          background: '#fff', borderTop: '1px solid #E6EBF1', boxShadow: '0 -4px 16px rgba(15,39,68,.08)',
+          padding: '10px 14px',
+        }}>
+          <div style={{ maxWidth: 1080, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 9, overflowX: 'auto' }}>
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: '#8A94A6', flexShrink: 0 }}>إجراءات سريعة</span>
+            <QuickAction href="/students" icon={UserPlus} label="إضافة طالب" />
+            <QuickAction href="/fees" icon={Banknote} label="تسجيل دفعة" />
+            <QuickAction href="/fees" icon={ReceiptText} label="إنشاء فاتورة" />
+            <QuickAction href="/fees" icon={Bell} label="إرسال تذكير" />
+            {canFinance && <QuickAction href="/accounting" icon={FileUp} label="تصدير تقرير" />}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
@@ -203,14 +245,6 @@ function Kpi({ label, value, unit, tone = 'quiet', icon: Icon }: { label: string
         {value} {unit && <span style={{ fontSize: 13, color: '#8A94A6', fontWeight: 400 }}>{unit}</span>}
       </div>
     </div>
-  )
-}
-
-function QuickLink({ href, icon: Icon, label }: { href: string; icon: LucideIcon; label: string }) {
-  return (
-    <Link href={href} className="ep-quicklink" style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fff', border: '1px solid #EAEEF3', borderRadius: 12, padding: '13px 15px', textDecoration: 'none', color: '#0F2744', fontWeight: 600, fontSize: 14.5 }}>
-      <Icon size={20} strokeWidth={2} color="#0F2744" /> {label}
-    </Link>
   )
 }
 
