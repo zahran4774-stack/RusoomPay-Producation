@@ -10,25 +10,45 @@ import { isStaff, canAccessFinance, isOwner } from '@/lib/roles'
 import { LogoMark } from '../Logo'
 import {
   LayoutDashboard, GraduationCap, ReceiptText, Users, Apple, Bus,
-  Package, BarChart3, ClipboardList, Gem, MessageCircle, Settings, Wallet, type LucideIcon,
+  Package, BarChart3, ClipboardList, Gem, MessageCircle, Settings, Wallet,
+  Building2, ChevronDown, type LucideIcon,
 } from 'lucide-react'
 
-type NavItem = { href: string; icon: LucideIcon; label: string; show: (r: Role) => boolean }
+type NavLeaf = { type: 'link'; href: string; icon: LucideIcon; label: string; show: (r: Role) => boolean }
+// مجموعة قابلة للطي: تُبنى فقط من صفحات موجودة فعلياً (لا صفحات وهمية).
+// href اختياري: إن وُجد فالعنوان نفسه رابط حقيقي (نقرة عليه تنتقل)، وإلا فهو
+// مجرّد تجميع بصري (نقرة عليه تفتح/تطوي القائمة فقط) — انظر معالجة العرض أدناه.
+type NavGroup = {
+  type: 'group'; key: string; icon: LucideIcon; label: string
+  href?: string; show: (r: Role) => boolean; children: NavLeaf[]
+}
+type NavEntry = NavLeaf | NavGroup
 
-const NAV: NavItem[] = [
-  { href: '/dashboard', icon: LayoutDashboard, label: 'لوحة التحكم', show: () => true },
-  { href: '/students', icon: GraduationCap, label: 'الطلاب', show: (r) => isStaff(r) },
-  { href: '/fees', icon: ReceiptText, label: 'الرسوم والفواتير', show: (r) => isStaff(r) },
-  { href: '/employees', icon: Users, label: 'الموظفون والرواتب', show: (r) => isStaff(r) },
-  { href: '/payroll', icon: Wallet, label: 'دورات الرواتب', show: (r) => canAccessFinance(r) },
-  { href: '/cafeteria', icon: Apple, label: 'التغذية المدرسية', show: (r) => isStaff(r) },
-  { href: '/transport', icon: Bus, label: 'النقل المدرسي', show: (r) => isStaff(r) },
-  { href: '/inventory', icon: Package, label: 'المخزون', show: (r) => isStaff(r) },
-  { href: '/accounting', icon: BarChart3, label: 'المحاسبة والتقارير', show: (r) => canAccessFinance(r) },
-  { href: '/activity', icon: ClipboardList, label: 'سجل النشاط', show: (r) => isOwner(r) },
-  { href: '/subscription', icon: Gem, label: 'اشتراك المنصة', show: (r) => isOwner(r) },
-  { href: '/feedback', icon: MessageCircle, label: 'الدعم والملاحظات', show: (r) => isStaff(r) },
-  { href: '/settings', icon: Settings, label: 'الإعدادات والأمان', show: () => true },
+const NAV: NavEntry[] = [
+  { type: 'link', href: '/dashboard', icon: LayoutDashboard, label: 'لوحة التحكم', show: () => true },
+  { type: 'link', href: '/students', icon: GraduationCap, label: 'الطلاب', show: (r) => isStaff(r) },
+  { type: 'link', href: '/fees', icon: ReceiptText, label: 'الرسوم والفواتير', show: (r) => isStaff(r) },
+  {
+    type: 'group', key: 'staff', icon: Users, label: 'الموظفون والرواتب',
+    href: '/employees', show: (r) => isStaff(r),
+    children: [
+      { type: 'link', href: '/payroll', icon: Wallet, label: 'دورات الرواتب', show: (r) => canAccessFinance(r) },
+    ],
+  },
+  {
+    type: 'group', key: 'services', icon: Building2, label: 'الخدمات المدرسية',
+    show: (r) => isStaff(r),
+    children: [
+      { type: 'link', href: '/cafeteria', icon: Apple, label: 'التغذية المدرسية', show: (r) => isStaff(r) },
+      { type: 'link', href: '/transport', icon: Bus, label: 'النقل المدرسي', show: (r) => isStaff(r) },
+      { type: 'link', href: '/inventory', icon: Package, label: 'المخزون', show: (r) => isStaff(r) },
+    ],
+  },
+  { type: 'link', href: '/accounting', icon: BarChart3, label: 'المحاسبة والتقارير', show: (r) => canAccessFinance(r) },
+  { type: 'link', href: '/activity', icon: ClipboardList, label: 'سجل النشاط', show: (r) => isOwner(r) },
+  { type: 'link', href: '/subscription', icon: Gem, label: 'اشتراك المنصة', show: (r) => isOwner(r) },
+  { type: 'link', href: '/feedback', icon: MessageCircle, label: 'الدعم والملاحظات', show: (r) => isStaff(r) },
+  { type: 'link', href: '/settings', icon: Settings, label: 'الإعدادات والأمان', show: () => true },
 ]
 
 // رقم دعم واتساب
@@ -81,8 +101,19 @@ export default function AppShell({ role, brandColor, schoolLogo, schoolName, chi
   // بلا افتراض "أب" منطقي، فيعمل بثبات في كل الصفحات (المحاسبة، الطلاب، إلخ).
   const showBack = pathname !== '/dashboard'
   const [open, setOpen] = useState(false)
-  const items = NAV.filter((n) => n.show(role))
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/')
+
+  // أي مجموعة تحتوي المسار الحالي — تُحسب أولاً لأن حالة الفتح الابتدائية تعتمد عليها
+  const activeGroupKey = NAV.find(
+    (n): n is NavGroup => n.type === 'group' && n.children.some((c) => isActive(c.href))
+  )?.key ?? null
+
+  // مجموعة واحدة مفتوحة عادة في نفس الوقت — تبدأ مفتوحة على القسم النشط حالياً
+  const [openGroup, setOpenGroup] = useState<string | null>(activeGroupKey)
+  const toggleGroup = (key: string) => setOpenGroup((cur) => (cur === key ? null : key))
+
+  // عند تغيّر المسار (تنقّل بين الصفحات) وسّع تلقائياً المجموعة التي تحوي الصفحة النشطة
+  useEffect(() => { if (activeGroupKey) setOpenGroup(activeGroupKey) }, [activeGroupKey])
 
   // إغلاق الدرج عند تغيير الصفحة
   useEffect(() => { setOpen(false) }, [pathname])
@@ -135,11 +166,86 @@ export default function AppShell({ role, brandColor, schoolLogo, schoolName, chi
           )}
 
           <nav className="side-nav">
-            {items.map((n) => (
-              <Link key={n.href} href={n.href} className={`side-link ${isActive(n.href) ? 'active' : ''}`}>
-                <span className="ic">{(() => { const Icon = n.icon; return <Icon size={19} strokeWidth={2} /> })()}</span> {n.label}
-              </Link>
-            ))}
+            {NAV.map((entry) => {
+              if (entry.type === 'link') {
+                if (!entry.show(role)) return null
+                const Icon = entry.icon
+                return (
+                  <Link key={entry.href} href={entry.href} className={`side-link ${isActive(entry.href) ? 'active' : ''}`}>
+                    <span className="ic"><Icon size={19} strokeWidth={2} /></span> {entry.label}
+                  </Link>
+                )
+              }
+
+              // مجموعة قابلة للطي — تُبنى فقط من عناصر موجودة فعلياً
+              const visibleChildren = entry.children.filter((c) => c.show(role))
+              const hasOwnRoute = !!entry.href && entry.show(role)
+              if (!hasOwnRoute && visibleChildren.length === 0) return null // لا شيء لعرضه لهذا الدور
+
+              const GroupIcon = entry.icon
+              const ownActive = hasOwnRoute && isActive(entry.href!)
+
+              // لا تُنشئ قائمة منسدلة لعنصر وحيد بلا رابط أصلي — يُعرض مباشرة بدل ذلك
+              if (visibleChildren.length === 0) {
+                return (
+                  <Link key={entry.key} href={entry.href!} className={`side-link ${ownActive ? 'active' : ''}`}>
+                    <span className="ic"><GroupIcon size={19} strokeWidth={2} /></span> {entry.label}
+                  </Link>
+                )
+              }
+              if (visibleChildren.length === 1 && !hasOwnRoute) {
+                const c = visibleChildren[0]
+                const CIcon = c.icon
+                return (
+                  <Link key={c.href} href={c.href} className={`side-link ${isActive(c.href) ? 'active' : ''}`}>
+                    <span className="ic"><CIcon size={19} strokeWidth={2} /></span> {c.label}
+                  </Link>
+                )
+              }
+
+              const expanded = openGroup === entry.key
+              return (
+                <div key={entry.key} className="side-group">
+                  <div className={`side-group-head ${ownActive ? 'active' : ''}`}>
+                    {hasOwnRoute ? (
+                      <Link href={entry.href!} className="side-link" style={{ flex: 1 }}>
+                        <span className="ic"><GroupIcon size={19} strokeWidth={2} /></span> {entry.label}
+                      </Link>
+                    ) : (
+                      <button
+                        type="button"
+                        className="side-link side-group-btn"
+                        onClick={() => toggleGroup(entry.key)}
+                        aria-expanded={expanded}
+                      >
+                        <span className="ic"><GroupIcon size={19} strokeWidth={2} /></span> {entry.label}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="side-group-toggle"
+                      onClick={() => toggleGroup(entry.key)}
+                      aria-expanded={expanded}
+                      aria-label={expanded ? 'طي القائمة' : 'فتح القائمة'}
+                    >
+                      <ChevronDown size={17} strokeWidth={2} className={`side-group-chevron ${expanded ? 'open' : ''}`} />
+                    </button>
+                  </div>
+                  {expanded && (
+                    <div className="side-subnav">
+                      {visibleChildren.map((c) => {
+                        const CIcon = c.icon
+                        return (
+                          <Link key={c.href} href={c.href} className={`side-link side-sublink ${isActive(c.href) ? 'active' : ''}`}>
+                            <span className="ic"><CIcon size={17} strokeWidth={2} /></span> {c.label}
+                          </Link>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
 
             {/* رابط دعم واتساب — Help (يفتح محادثة واتساب في تبويب جديد) */}
             <a href={WA_LINK} target="_blank" rel="noopener noreferrer" className="side-link">
