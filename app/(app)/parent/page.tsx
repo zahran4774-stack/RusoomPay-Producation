@@ -19,7 +19,7 @@ export default async function ParentPage() {
   // هوية المدرسة (للترويسة والإيصالات + الحساب البنكي للتحويل)
   const { data: school } = await supabase
     .from('schools')
-    .select('name, vat_number, currency, bank_iban, bank_holder, bank_name')
+    .select('id, name, vat_number, currency, bank_iban, bank_holder, bank_name, bank_account, phone')
     .single()
 
   const [{ data: children }, { data: fees }, { data: receipts }, { data: notifications }, { data: certificates }, { data: certificateRequests }] = await Promise.all([
@@ -35,9 +35,10 @@ export default async function ParentPage() {
     <ParentPortal
       parentName={profile?.full_name ?? 'ولي الأمر'}
       school={{
-        name: school?.name ?? 'المدرسة', vat: school?.vat_number,
+        id: school?.id ?? '', name: school?.name ?? 'المدرسة', vat: school?.vat_number,
         currency: school?.currency ?? 'OMR',
         bankIban: school?.bank_iban ?? null, bankHolder: school?.bank_holder ?? null, bankName: school?.bank_name ?? null,
+        bankAccount: school?.bank_account ?? null, phone: school?.phone ?? null,
       }}
       children_={children || []}
       fees={fees || []}
