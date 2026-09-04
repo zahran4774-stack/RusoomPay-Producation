@@ -76,15 +76,17 @@ export default function ControlCenter(props: {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 6, borderBottom: '1px solid #E5E9F0', margin: '20px 0 24px', flexWrap: 'wrap' }}>
+      <div className="module-tabs" role="tablist" aria-label="أقسام مركز التحكّم" style={{ margin: '20px 0 24px' }}>
         {TABS.map(([k, label]) => (
-          <button key={k} onClick={() => setTab(k)} style={{
-            background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-            padding: '11px 18px', fontSize: 14.5, fontWeight: 600,
-            color: tab === k ? '#0A1D33' : '#8A94A6',
-            borderBottom: tab === k ? '2.5px solid #D4A017' : '2.5px solid transparent',
-            marginBottom: -1,
-          }}>{label}</button>
+          <button
+            key={k}
+            role="tab"
+            aria-selected={tab === k}
+            className={`module-tab ${tab === k ? 'active' : ''}`}
+            onClick={() => setTab(k)}
+          >
+            {label}
+          </button>
         ))}
       </div>
 
