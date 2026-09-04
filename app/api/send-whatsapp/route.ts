@@ -135,10 +135,34 @@ export async function POST(req: NextRequest) {
     )
     const data = await res.json()
     if (!res.ok) {
+      // تسجيل فشل الإرسال في سجل الأخطاء التشغيلية
+      await supabase.rpc('log_error', {
+        p_source: 'whatsapp',
+        p_severity: 'error',
+        p_message: 'فشل إرسال واتساب: ' + (data.message || 'خطأ غير معروف'),
+        p_context: {
+          to: target,
+          template: template ?? null,
+          twilio_code: data.code ?? null,
+          twilio_status: res.status,
+        },
+      })
       return NextResponse.json({ error: data.message || 'twilio error', code: data.code }, { status: res.status })
     }
     return NextResponse.json({ success: true, sid: data.sid, status: data.status })
   } catch (err) {
+    // تسجيل الأخطاء غير المتوقعة
+    try {
+      const supabase = await createClient()
+      await supabase.rpc('log_error', {
+        p_source: 'whatsapp',
+        p_severity: 'error',
+        p_message: 'خطأ غير متوقع في إرسال واتساب: ' + (err instanceof Error ? err.message : 'خطأ'),
+        p_context: null,
+      })
+    } catch { /* تجاهل — لا نريد أن يفشل رد الخطأ نفسه */ }
     return NextResponse.json({ error: err instanceof Error ? err.message : 'خطأ' }, { status: 500 })
   }
 }
+    
+
