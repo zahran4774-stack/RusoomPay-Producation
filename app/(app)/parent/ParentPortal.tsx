@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import { printReport } from '@/lib/print-report'
+import { Copy, Check as CheckIcon, Upload } from 'lucide-react'
 
 type Child = { student_id: string; student_name: string; grade: string; section: string | null; total: number; paid: number; remaining: number; pending?: number }
 type Fee = { fee_id: string; student_name: string; description: string; total: number; paid: number; remaining: number; due_date: string | null }
@@ -11,7 +12,11 @@ type Receipt = { payment_id: string; student_name: string; description: string; 
 type Notif = { id: string; body: string; is_read: boolean; created_at: string }
 type Cert = { id: string; student_name: string; kind: string; title: string; serial: string; body: string | null; file_path: string | null; file_name: string | null; created_at: string }
 type CertRequest = { id: string; student_name: string; kind: string; status: string; reason: string | null; created_at: string; reviewed_at: string | null }
-type School = { name: string; vat: string | null; currency: string; bankIban: string | null; bankHolder: string | null; bankName: string | null }
+type School = {
+  id: string; name: string; vat: string | null; currency: string
+  bankIban: string | null; bankHolder: string | null; bankName: string | null
+  bankAccount: string | null; phone: string | null
+}
 
 const METHOD_LABEL: Record<string, string> = {
   thawani: 'دفع إلكتروني', bank: 'تحويل بنكي', applepay: 'Apple Pay', googlepay: 'Google Pay', onsite: 'نقداً عند المدرسة',
@@ -39,7 +44,9 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
   const [payFee, setPayFee] = useState<Fee | null>(null)
   const [method, setMethod] = useState('thawani')
   const [amount, setAmount] = useState('')
-  const [bankRef, setBankRef] = useState('')
+  const [receiptFile, setReceiptFile] = useState<File | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [copied, setCopied] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [reqBusyId, setReqBusyId] = useState<string | null>(null)
   const [msg, setMsg] = useState('')
@@ -79,29 +86,49 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
 
   function openPay(fee: Fee) {
     setPayFee(fee); setMethod('thawani'); setAmount(fee.remaining.toFixed(3))
-    setBankRef(''); setMsg('')
+    setReceiptFile(null); setMsg('')
   }
 
   async function submitPayment() {
     if (!payFee) return
     const amt = parseFloat(amount) || 0
     if (amt <= 0 || amt > payFee.remaining + 0.0005) { setMsg('مبلغ غير صحيح'); return }
-    if (method === 'bank' && !bankRef.trim()) { setMsg('أدخل رقم مرجع التحويل'); return }
+    if (method === 'bank' && !receiptFile) { setMsg('أرفق صورة إيصال التحويل'); return }
     setBusy(true); setMsg('')
     try {
+      // تحويل بنكي: نرفع الإيصال أولاً إلى مجلد مدرسة ولي الأمر، ثم نرسل مساره مع طلب الدفع
+      let receiptPath: string | null = null
+      if (method === 'bank' && receiptFile) {
+        setUploading(true)
+        const ext = receiptFile.name.split('.').pop() || 'jpg'
+        receiptPath = `${school.id}/${payFee.fee_id}/${Date.now()}.${ext}`
+        const { error: uploadError } = await supabase.storage
+          .from('fee-receipts')
+          .upload(receiptPath, receiptFile, { upsert: false })
+        setUploading(false)
+        if (uploadError) { setMsg('تعذّر رفع الإيصال: ' + uploadError.message); setBusy(false); return }
+      }
+
       const { error } = await supabase.rpc('submit_payment', {
         p_fee_id: payFee.fee_id, p_amount: amt, p_method: method,
-        p_bank_ref: method === 'bank' ? bankRef.trim() : null,
+        p_bank_ref: null, p_receipt_url: receiptPath,
       })
       if (error) { setMsg('تعذّر الإرسال: ' + error.message); setBusy(false); return }
-      setBusy(false); setPayFee(null)
+      setBusy(false); setPayFee(null); setReceiptFile(null)
       setMsg(method === 'onsite' ? '✓ سُجّلت نيّة الدفع — ادفع عند المحاسب' : '✓ تم استلام دفعتك — بانتظار اعتماد المحاسب')
       setTimeout(() => window.location.reload(), 1500)
     } catch {
       // انقطاع اتصال قبل وصول الرد — بلا هذا يبقى الزر عالقاً على "جارٍ الإرسال" للأبد
       setMsg('تعذّر الاتصال — تحقّق من الإنترنت وحاول مجدداً')
+      setUploading(false)
       setBusy(false)
     }
+  }
+
+  function copyText(label: string, text: string) {
+    navigator.clipboard?.writeText(text)
+    setCopied(label)
+    setTimeout(() => setCopied(null), 1500)
   }
 
   async function requestCert(studentId: string, kind: string) {
@@ -405,7 +432,7 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
 
             <label style={{ fontSize: 13, fontWeight: 600, color: '#445' }}>طريقة الدفع</label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7, marginBottom: 12 }}>
-              {(['thawani', 'bank', 'applepay', 'googlepay', 'onsite'] as const).map((m) => (
+              {(['thawani', 'bank', 'onsite'] as const).map((m) => (
                 <button key={m} onClick={() => setMethod(m)} style={{
                   padding: 10, borderRadius: 9, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
                   border: method === m ? '1.5px solid #1E5C4E' : '1.5px solid #DDE3EC',
@@ -421,14 +448,35 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
               </div>
             )}
             {method === 'bank' && (
-              <div style={{ background: '#F4F8F7', borderRadius: 10, padding: 12, marginBottom: 10, fontSize: 13, lineHeight: 1.9 }}>
-                <b>حساب المدرسة:</b><br />{school.bankName || 'البنك'} · <span dir="ltr">{school.bankIban || '—'}</span><br />باسم: {school.bankHolder || school.name}
-                <input style={{ ...input, marginTop: 10, marginBottom: 0 }} placeholder="رقم مرجع التحويل" value={bankRef} onChange={(e) => setBankRef(e.target.value)} />
-              </div>
-            )}
-            {(method === 'applepay' || method === 'googlepay') && (
-              <div style={{ background: '#F4F8F7', borderRadius: 10, padding: 16, marginBottom: 10, textAlign: 'center', fontSize: 13, color: '#667' }}>
-                اضغط "تأكيد الدفع" لإتمام الدفع عبر {METHOD_LABEL[method]}
+              <div>
+                <div style={{ background: '#F7FAFC', border: '1px solid #EEF1F5', borderRadius: 12, padding: 14, marginBottom: 10 }}>
+                  <BankRow label="اسم البنك" value={school.bankName} copied={copied} onCopy={copyText} />
+                  <BankRow label="اسم صاحب الحساب" value={school.bankHolder || school.name} copied={copied} onCopy={copyText} />
+                  <BankRow label="رقم الحساب" value={school.bankAccount} copied={copied} onCopy={copyText} />
+                  <BankRow label="رقم الآيبان" value={school.bankIban} copied={copied} onCopy={copyText} />
+                  <BankRow label="رقم الواتساب / الهاتف" value={school.phone} copied={copied} onCopy={copyText} last />
+                </div>
+
+                <div style={{ background: '#EAF2FB', color: '#2E5EA8', borderRadius: 9, padding: '9px 12px', fontSize: 12.5, textAlign: 'center', marginBottom: 10, fontWeight: 600 }}>
+                  يرجى إرسال الإيصال على رقم الواتساب
+                </div>
+
+                <label
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                    border: `1.5px dashed ${receiptFile ? '#1A7A45' : '#DDE3EC'}`, borderRadius: 12,
+                    padding: '16px 14px', cursor: 'pointer', background: receiptFile ? '#EAF7F0' : '#fff',
+                    marginBottom: 10, fontSize: 13, color: receiptFile ? '#15803D' : '#667', fontWeight: 600,
+                  }}>
+                  <Upload size={16} strokeWidth={2} />
+                  {receiptFile ? receiptFile.name : 'رفع إيصال التحويل'}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                    onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)}
+                    style={{ display: 'none' }}
+                  />
+                </label>
               </div>
             )}
             {method === 'onsite' && (
@@ -439,13 +487,45 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
 
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 6 }}>
               <button onClick={() => setPayFee(null)} style={{ padding: '10px 16px', borderRadius: 9, border: '1px solid #DDE3EC', background: '#fff', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>إلغاء</button>
-              <button onClick={method === 'thawani' ? payViaThawani : submitPayment} disabled={busy || redirecting} style={{ padding: '10px 20px', borderRadius: 9, border: 'none', background: '#D4A017', color: '#08172B', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700 }}>
-                {redirecting ? 'جارٍ التحويل لثواني...' : busy ? 'جارٍ المعالجة...' : method === 'onsite' ? 'تسجيل نيّة الدفع' : method === 'thawani' ? 'ادفع الآن' : 'تأكيد الدفع'}
+              <button
+                onClick={method === 'thawani' ? payViaThawani : submitPayment}
+                disabled={busy || redirecting || uploading || (method === 'bank' && !receiptFile)}
+                style={{ padding: '10px 20px', borderRadius: 9, border: 'none', background: '#D4A017', color: '#08172B', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, opacity: (method === 'bank' && !receiptFile) ? 0.55 : 1 }}>
+                {redirecting ? 'جارٍ التحويل لثواني...' : uploading ? 'جارٍ رفع الإيصال...' : busy ? 'جارٍ المعالجة...' : method === 'onsite' ? 'تسجيل نيّة الدفع' : method === 'thawani' ? 'ادفع الآن' : 'تأكيد وإرسال الإيصال'}
               </button>
             </div>
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function BankRow({ label, value, copied, onCopy, last }: {
+  label: string; value: string | null; copied: string | null; onCopy: (label: string, text: string) => void; last?: boolean
+}) {
+  if (!value) return null
+  const isCopied = copied === label
+  return (
+    <div style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      paddingBottom: last ? 0 : 8, marginBottom: last ? 0 : 8,
+      borderBottom: last ? 'none' : '1px dashed #E3E8EE',
+    }}>
+      <div>
+        <div style={{ fontSize: 11, color: '#8A94A6' }}>{label}</div>
+        <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0F2744', direction: 'ltr', textAlign: 'right' }}>{value}</div>
+      </div>
+      <button
+        onClick={() => onCopy(label, value)}
+        title="نسخ"
+        style={{
+          background: isCopied ? '#EAF7F0' : '#fff', border: `1px solid ${isCopied ? '#BFE5D0' : '#E3E8EE'}`,
+          borderRadius: 8, padding: '6px 8px', cursor: 'pointer', color: isCopied ? '#15803D' : '#667',
+          display: 'grid', placeItems: 'center', flexShrink: 0,
+        }}>
+        {isCopied ? <CheckIcon size={14} strokeWidth={2.4} /> : <Copy size={14} strokeWidth={2} />}
+      </button>
     </div>
   )
 }
