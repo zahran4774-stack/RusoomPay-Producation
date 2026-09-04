@@ -6,7 +6,6 @@ import { redirect } from 'next/navigation'
 import { type Role, ROLE_LABEL, canAccessFinance, isStaff } from '@/lib/roles'
 import { curSymbol } from '@/lib/accounting'
 import DashboardClient from './DashboardClient'
-import CopilotWithActions from './CopilotWithActions'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -65,32 +64,21 @@ export default async function DashboardPage() {
     : null
 
   return (
-    <>
-      {copilot && (copilot as { ok?: boolean }).ok !== false && (
-        <div style={{ padding: '24px 24px 0', maxWidth: 1280, margin: '0 auto' }}>
-          <CopilotWithActions
-            data={copilot}
-            sym={curSymbol(currency)}
-            firstName={(profile?.full_name ?? '').split(' ')[0]}
-            schoolName={(school?.name ?? '') + (school?.branch ? ` — ${school.branch}` : '')}
-            smartRecs={smartRecs}
-            impact={impact}
-          />
-        </div>
-      )}
-      <DashboardClient
-        userName={profile?.full_name ?? 'مستخدم'}
-        roleLabel={ROLE_LABEL[role] ?? role}
-        role={role}
-        schoolName={(school?.name ?? '') + (school?.branch ? ` — ${school.branch}` : '')}
-        currency={currency}
-        sym={curSymbol(currency)}
-        canFinance={canAccessFinance(role)}
-        isStaff={isStaff(role)}
-        data={s}
-        analytics={analytics}
-        recent={recent}
-      />
-    </>
+    <DashboardClient
+      userName={profile?.full_name ?? 'مستخدم'}
+      roleLabel={ROLE_LABEL[role] ?? role}
+      role={role}
+      schoolName={(school?.name ?? '') + (school?.branch ? ` — ${school.branch}` : '')}
+      currency={currency}
+      sym={curSymbol(currency)}
+      canFinance={canAccessFinance(role)}
+      isStaff={isStaff(role)}
+      data={s}
+      analytics={analytics}
+      recent={recent}
+      copilot={copilot}
+      smartRecs={smartRecs}
+      impact={impact}
+    />
   )
 }
