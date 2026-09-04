@@ -10,6 +10,8 @@ import FocusScroller from '../FocusScroller'
 import SalaryRequests from './SalaryRequests'
 import InsuranceSettings from './InsuranceSettings'
 import PrintButton from '../PrintButton'
+import ModuleTabs from '../ModuleTabs'
+import { employeesPayrollTabs } from '../module-tabs-config'
 import { isOwner, isStaff, type Role } from '@/lib/roles'
 import { payslip, type InsRates } from '@/lib/payroll'
 
@@ -57,6 +59,7 @@ export default async function EmployeesPage() {
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }} dir="rtl">
+      <ModuleTabs items={employeesPayrollTabs(role as Role)} />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
         <div>
           <h1 style={{ color: '#0F2744', marginBottom: 4 }}>الموظفون والرواتب</h1>
