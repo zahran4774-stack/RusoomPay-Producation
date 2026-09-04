@@ -145,12 +145,6 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
   const wrap: React.CSSProperties = { maxWidth: 760, margin: '0 auto', padding: '24px 16px' }
   const card_: React.CSSProperties = { background: '#fff', border: '1px solid #E6EBF1', borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,.05)', marginBottom: 14 }
   const input: React.CSSProperties = { width: '100%', padding: 11, borderRadius: 10, border: '1.5px solid #DDE3EC', fontFamily: 'inherit', fontSize: 14, marginBottom: 10 }
-  const tabBtn = (k: string): React.CSSProperties => ({
-    flex: 1, padding: '11px 8px', border: 'none', background: 'none', cursor: 'pointer',
-    fontWeight: 700, fontSize: 13.5, fontFamily: 'inherit',
-    color: tab === k ? '#0A1D33' : '#8A94A6',
-    borderBottom: tab === k ? '2.5px solid #D4A017' : '2.5px solid transparent',
-  })
   const childPill = (active: boolean): React.CSSProperties => ({
     flexShrink: 0, padding: '8px 16px', borderRadius: 99, cursor: 'pointer',
     fontFamily: 'inherit', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap',
@@ -226,12 +220,12 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
         </div>
 
         {/* تبويبات */}
-        <div style={{ display: 'flex', background: '#fff', borderRadius: 12, overflow: 'hidden', marginBottom: 14, boxShadow: '0 1px 4px rgba(0,0,0,.05)' }}>
-          <button style={tabBtn('overview')} onClick={() => setTab('overview')}>أبنائي</button>
-          <button style={tabBtn('fees')} onClick={() => setTab('fees')}>الرسوم</button>
-          <button style={tabBtn('receipts')} onClick={() => setTab('receipts')}>الإيصالات</button>
-          <button style={tabBtn('certificates')} onClick={() => setTab('certificates')}>الشهادات</button>
-          <button style={tabBtn('notifications')} onClick={() => setTab('notifications')}>الإشعارات</button>
+        <div className="module-tabs" role="tablist" aria-label="أقسام بوابة ولي الأمر" style={{ marginBottom: 14 }}>
+          <button role="tab" aria-selected={tab === 'overview'} className={`module-tab ${tab === 'overview' ? 'active' : ''}`} onClick={() => setTab('overview')}>أبنائي</button>
+          <button role="tab" aria-selected={tab === 'fees'} className={`module-tab ${tab === 'fees' ? 'active' : ''}`} onClick={() => setTab('fees')}>الرسوم</button>
+          <button role="tab" aria-selected={tab === 'receipts'} className={`module-tab ${tab === 'receipts' ? 'active' : ''}`} onClick={() => setTab('receipts')}>الإيصالات</button>
+          <button role="tab" aria-selected={tab === 'certificates'} className={`module-tab ${tab === 'certificates' ? 'active' : ''}`} onClick={() => setTab('certificates')}>الشهادات</button>
+          <button role="tab" aria-selected={tab === 'notifications'} className={`module-tab ${tab === 'notifications' ? 'active' : ''}`} onClick={() => setTab('notifications')}>الإشعارات</button>
         </div>
 
         {/* محدد الطفل — يظهر فقط عند وجود أكثر من ابن */}
