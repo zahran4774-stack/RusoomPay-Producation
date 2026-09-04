@@ -33,7 +33,7 @@ export default async function StudentsPage() {
     supabase.rpc('my_role'),
     supabase.from('schools').select('name, vat_number, section_styles, logo_url, color, card_accent_color').single(),
     supabase.from('students')
-      .select('id, code, full_name, grade, section, guardian_name, guardian_phone, guardian_email, birth_date, gender, status, father_phone, mother_phone, address')
+      .select('id, code, full_name, grade, section, guardian_name, guardian_phone, guardian_email, birth_date, gender, status, father_phone, mother_phone, address, annual_fee, discount_pct')
       // ⚠️ إصلاح: بدون هذا الفلتر، الطلاب المحذوفين بصمت (soft_delete لا يغيّر
       // status، فتبقى 'active') كانوا يظهرون بقائمة الطلاب كأنهم حقيقيون —
       // اكتُشف عبر تناقض بين هذي الصفحة (32) وشاشة الاشتراك (2 فعلياً)
