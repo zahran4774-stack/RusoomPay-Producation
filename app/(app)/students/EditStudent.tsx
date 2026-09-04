@@ -1,5 +1,7 @@
 'use client'
-// تعديل بيانات الطالب الشخصية — لا الرسوم، لا الرقم المدرسي (يُدار من قسم الرسوم)
+// تعديل بيانات الطالب — كل الحقول المتاحة في نموذج إضافة طالب، بما فيها
+// الرسوم السنوية والتخفيض٪ والرقم المدرسي. تعديل الرسوم هنا مرجعي فقط —
+// لا يُعدّل فاتورة الرسوم القائمة تلقائياً (تُدار من قسم الرسوم والفواتير).
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
@@ -36,6 +38,9 @@ export type StudentEditable = {
   father_phone?: string | null
   mother_phone?: string | null
   address?: string | null
+  code?: string | null
+  annual_fee?: number | null
+  discount_pct?: number | null
 }
 
 type Bus = { id: string; routes_label: string; fee: number }
@@ -62,10 +67,13 @@ export default function EditStudent({ student, buses = [], currentBusId = null }
     father_phone: student.father_phone ?? '',
     mother_phone: student.mother_phone ?? '',
     address: student.address ?? '',
+    code: student.code ?? '',
+    annual_fee: student.annual_fee != null ? String(student.annual_fee) : '',
+    discount_pct: student.discount_pct != null ? String(student.discount_pct) : '0',
   })
   const [countryCode, setCountryCode] = useState(splitPhone(student.guardian_phone).code)
   const country = GULF_COUNTRIES.find((c) => c.code === countryCode)
-  const phoneValid = f.guardian_phone === '' || isValidLocalNumber(f.guardian_phone, countryCode)
+  const phoneValid = f.guardian_phone !== '' && isValidLocalNumber(f.guardian_phone, countryCode)
   const set = (k: string, v: string) => setF((p) => ({ ...p, [k]: v }))
   const onPhoneChange = (raw: string) => {
     set('guardian_phone', cleanLocalNumber(raw).slice(0, country?.localLen ?? 9))
@@ -84,9 +92,12 @@ export default function EditStudent({ student, buses = [], currentBusId = null }
     setErr(null)
     if (!f.full_name.trim()) { setErr('اسم الطالب مطلوب'); return }
     if (!f.grade.trim()) { setErr('الصف/المرحلة مطلوب'); return }
-    if (f.guardian_phone && !phoneValid) { setErr('رقم ولي الأمر غير مكتمل أو غير صالح لهذه الدولة'); return }
+    if (!f.section.trim()) { setErr('الشعبة مطلوبة'); return }
+    if (!f.guardian_phone.trim()) { setErr('رقم ولي الأمر مطلوب'); return }
+    if (!phoneValid) { setErr('رقم ولي الأمر غير مكتمل أو غير صالح لهذه الدولة'); return }
+    if (!f.annual_fee || Number(f.annual_fee) <= 0) { setErr('الرسوم السنوية مطلوبة ويجب أن تكون أكبر من صفر'); return }
     setSaving(true)
-    const fullPhone = f.guardian_phone ? `+${countryCode}${f.guardian_phone}` : null
+    const fullPhone = `+${countryCode}${f.guardian_phone}`
     const { error } = await supabase.rpc('update_student', {
       p_student_id: student.id,
       p_full_name: f.full_name,
@@ -97,6 +108,9 @@ export default function EditStudent({ student, buses = [], currentBusId = null }
       p_guardian_email: f.guardian_email || null,
       p_birth_date: f.birth_date || null,
       p_gender: f.gender || null,
+      p_code: f.code || null,
+      p_annual_fee: Number(f.annual_fee),
+      p_discount_pct: Number(f.discount_pct) || 0,
     })
     if (error) { setSaving(false); setErr(error.message); return }
 
@@ -149,8 +163,8 @@ export default function EditStudent({ student, buses = [], currentBusId = null }
           <h3 style={{ margin: 0, fontSize: 18, color: '#0F2744' }}>تعديل بيانات الطالب</h3>
           <button onClick={() => setOpen(false)} style={{ background: 'none', border: 0, fontSize: 22, cursor: 'pointer', color: '#667' }}>×</button>
         </div>
-        <div style={{ color: '#8A94A6', fontSize: 12, marginBottom: 18 }}>
-          الرسوم والرقم المدرسي لا يُعدّلان من هنا.
+        <div style={{ color: '#8A94A6', fontSize: 12, marginBottom: 18, lineHeight: 1.7 }}>
+          تعديل الرسوم هنا يُحدّث السجل المرجعي للطالب فقط، ولا يُعدّل فاتورة الرسوم الحالية تلقائياً — لتعديل الفاتورة نفسها استخدم قسم الرسوم والفواتير.
         </div>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 13 }}>
@@ -170,7 +184,7 @@ export default function EditStudent({ student, buses = [], currentBusId = null }
 
           {/* قائمة ثابتة — عشر شعب بالترتيب الأبجدي */}
           <div style={cell}>
-            <label style={label}>الشعبة</label>
+            <label style={label}>الشعبة *</label>
             <select style={select} value={f.section} onChange={(e) => set('section', e.target.value)}>
               <option value="">— اختر الشعبة —</option>
               {sectionOptions.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -178,11 +192,16 @@ export default function EditStudent({ student, buses = [], currentBusId = null }
           </div>
 
           <div style={cell}>
+            <label style={label}>الرقم المدرسي</label>
+            <input style={input} value={f.code} onChange={(e) => set('code', e.target.value)} />
+          </div>
+
+          <div style={cell}>
             <label style={label}>اسم ولي الأمر</label>
             <input style={input} value={f.guardian_name} onChange={(e) => set('guardian_name', e.target.value)} />
           </div>
           <div style={cell}>
-            <label style={label}>رقم ولي الأمر</label>
+            <label style={label}>رقم ولي الأمر *</label>
             <div style={{ display: 'flex', gap: 8 }}>
               <select
                 value={countryCode}
@@ -218,6 +237,14 @@ export default function EditStudent({ student, buses = [], currentBusId = null }
               <option value="male">ذكر</option>
               <option value="female">أنثى</option>
             </select>
+          </div>
+          <div style={cell}>
+            <label style={label}>الرسوم السنوية (ر.ع) *</label>
+            <input type="number" style={input} value={f.annual_fee} onChange={(e) => set('annual_fee', e.target.value)} dir="ltr" />
+          </div>
+          <div style={cell}>
+            <label style={label}>التخفيض ٪</label>
+            <input type="number" min={0} max={100} style={input} value={f.discount_pct} onChange={(e) => set('discount_pct', e.target.value)} dir="ltr" />
           </div>
 
           {/* حقول إضافية — تُستخدم أساساً في بطاقة الطالب المطبوعة */}
