@@ -451,16 +451,22 @@ function ErrorLogSection() {
     setBusy(null)
   }
 
-  function copyMarkdown(r: any) {
-    const md = [
-      \`**المصدر:** \${r.source}\`,
-      \`**الخطورة:** \${r.severity}\`,
-      \`**المدرسة:** \${r.school_name}\`,
-      \`**الوقت:** \${r.created_at}\`,
-      \`**الرسالة:** \${r.message}\`,
-      r.context ? \`**السياق:**\n\\\`\\\`\\\`json\n\${JSON.stringify(r.context, null, 2)}\n\\\`\\\`\\\`\` : '',
-    ].filter(Boolean).join('\n')
-    navigator.clipboard?.writeText(md)
+    function copyMarkdown(r: any) {
+    const lines = [
+      '**المصدر:** ' + r.source,
+      '**الخطورة:** ' + r.severity,
+      '**المدرسة:** ' + r.school_name,
+      '**الوقت:** ' + r.created_at,
+      '**الرسالة:** ' + r.message,
+    ]
+    if (r.context) {
+      const fence = String.fromCharCode(96, 96, 96)
+      lines.push('**السياق:**')
+      lines.push(fence + 'json')
+      lines.push(JSON.stringify(r.context, null, 2))
+      lines.push(fence)
+    }
+    navigator.clipboard?.writeText(lines.join('\n'))
   }
 
   const SEV: Record<string, { label: string; bg: string; c: string }> = {
