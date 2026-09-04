@@ -15,13 +15,10 @@ import {
 } from 'lucide-react'
 
 type NavLeaf = { type: 'link'; href: string; icon: LucideIcon; label: string; show: (r: Role) => boolean }
-// مجموعة قابلة للطي: تُبنى فقط من صفحات موجودة فعلياً (لا صفحات وهمية).
-// href اختياري: إن وُجد فالعنوان نفسه رابط حقيقي (نقرة عليه تنتقل)، وإلا فهو
-// مجرّد تجميع بصري (نقرة عليه تفتح/تطوي القائمة فقط) — انظر معالجة العرض أدناه.
-type NavGroup = {
-  type: 'group'; key: string; icon: LucideIcon; label: string
-  href?: string; show: (r: Role) => boolean; children: NavLeaf[]
-}
+// مجموعة قابلة للطي — تجميع بصري فقط، لا رابط خاص بها. عنوانها إمّا يطوي/يفتح
+// أبناءها (رابطان أو أكثر ظاهران للدور الحالي) أو، إن بقي ابن واحد ظاهر فقط،
+// يُعرض ذلك الابن كرابط مباشر بلا قائمة منسدلة (انظر معالجة العرض أدناه).
+type NavGroup = { type: 'group'; key: string; icon: LucideIcon; label: string; children: NavLeaf[] }
 type NavEntry = NavLeaf | NavGroup
 
 const NAV: NavEntry[] = [
@@ -30,14 +27,13 @@ const NAV: NavEntry[] = [
   { type: 'link', href: '/fees', icon: ReceiptText, label: 'الرسوم والفواتير', show: (r) => isStaff(r) },
   {
     type: 'group', key: 'staff', icon: Users, label: 'الموظفون والرواتب',
-    href: '/employees', show: (r) => isStaff(r),
     children: [
+      { type: 'link', href: '/employees', icon: Users, label: 'الموظفون', show: (r) => isStaff(r) },
       { type: 'link', href: '/payroll', icon: Wallet, label: 'دورات الرواتب', show: (r) => canAccessFinance(r) },
     ],
   },
   {
     type: 'group', key: 'services', icon: Building2, label: 'الخدمات المدرسية',
-    show: (r) => isStaff(r),
     children: [
       { type: 'link', href: '/cafeteria', icon: Apple, label: 'التغذية المدرسية', show: (r) => isStaff(r) },
       { type: 'link', href: '/transport', icon: Bus, label: 'النقل المدرسي', show: (r) => isStaff(r) },
@@ -177,23 +173,12 @@ export default function AppShell({ role, brandColor, schoolLogo, schoolName, chi
                 )
               }
 
-              // مجموعة قابلة للطي — تُبنى فقط من عناصر موجودة فعلياً
+              // مجموعة قابلة للطي — كل طفل يُفلتَر بشرط الصلاحية الخاص به فقط
               const visibleChildren = entry.children.filter((c) => c.show(role))
-              const hasOwnRoute = !!entry.href && entry.show(role)
-              if (!hasOwnRoute && visibleChildren.length === 0) return null // لا شيء لعرضه لهذا الدور
+              if (visibleChildren.length === 0) return null // لا شيء لعرضه لهذا الدور — لا مجموعة فارغة
 
-              const GroupIcon = entry.icon
-              const ownActive = hasOwnRoute && isActive(entry.href!)
-
-              // لا تُنشئ قائمة منسدلة لعنصر وحيد بلا رابط أصلي — يُعرض مباشرة بدل ذلك
-              if (visibleChildren.length === 0) {
-                return (
-                  <Link key={entry.key} href={entry.href!} className={`side-link ${ownActive ? 'active' : ''}`}>
-                    <span className="ic"><GroupIcon size={19} strokeWidth={2} /></span> {entry.label}
-                  </Link>
-                )
-              }
-              if (visibleChildren.length === 1 && !hasOwnRoute) {
+              // طفل ظاهر واحد فقط → رابط مباشر بلا قائمة منسدلة ولا سهم عديم الفائدة
+              if (visibleChildren.length === 1) {
                 const c = visibleChildren[0]
                 const CIcon = c.icon
                 return (
@@ -203,36 +188,26 @@ export default function AppShell({ role, brandColor, schoolLogo, schoolName, chi
                 )
               }
 
+              // طفلان أو أكثر → مجموعة قابلة للطي. العنوان يطوي/يفتح فقط (لا يتنقّل) —
+              // كل تنقّل فعلي يتم من رابط الطفل نفسه، لتفادي ازدواج سلوك النقر.
+              const GroupIcon = entry.icon
               const expanded = openGroup === entry.key
+              const panelId = `nav-group-${entry.key}`
               return (
                 <div key={entry.key} className="side-group">
-                  <div className={`side-group-head ${ownActive ? 'active' : ''}`}>
-                    {hasOwnRoute ? (
-                      <Link href={entry.href!} className="side-link" style={{ flex: 1 }}>
-                        <span className="ic"><GroupIcon size={19} strokeWidth={2} /></span> {entry.label}
-                      </Link>
-                    ) : (
-                      <button
-                        type="button"
-                        className="side-link side-group-btn"
-                        onClick={() => toggleGroup(entry.key)}
-                        aria-expanded={expanded}
-                      >
-                        <span className="ic"><GroupIcon size={19} strokeWidth={2} /></span> {entry.label}
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className="side-group-toggle"
-                      onClick={() => toggleGroup(entry.key)}
-                      aria-expanded={expanded}
-                      aria-label={expanded ? 'طي القائمة' : 'فتح القائمة'}
-                    >
-                      <ChevronDown size={17} strokeWidth={2} className={`side-group-chevron ${expanded ? 'open' : ''}`} />
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    className="side-link side-group-head"
+                    onClick={() => toggleGroup(entry.key)}
+                    aria-expanded={expanded}
+                    aria-controls={panelId}
+                  >
+                    <span className="ic"><GroupIcon size={19} strokeWidth={2} /></span>
+                    <span style={{ flex: 1 }}>{entry.label}</span>
+                    <ChevronDown size={17} strokeWidth={2} className={`side-group-chevron ${expanded ? 'open' : ''}`} />
+                  </button>
                   {expanded && (
-                    <div className="side-subnav">
+                    <div id={panelId} className="side-subnav">
                       {visibleChildren.map((c) => {
                         const CIcon = c.icon
                         return (
