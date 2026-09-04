@@ -43,6 +43,21 @@ const fmt = (n: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionDig
 
 type BusForm = { id: string; routes: string[]; driver: string; supervisor: string; capacity: string; fee: string; payTo: string }
 const emptyForm: BusForm = { id: '', routes: [''], driver: '', supervisor: '', capacity: '30', fee: '', payTo: 'school' }
+const BUS_PAGE_SIZE = 10
+const SUB_PAGE_SIZE = 10
+
+// أزرار ترقيم صفحات بسيطة — عرض/تنقّل محلي فقط (القوائم كاملة أصلاً محمَّلة من
+// RPC واحد محدود بنطاق المدرسة، فلا حاجة لجلب إضافي من الخادم لكل صفحة)
+function PageNav({ page, totalPages, onChange }: { page: number; totalPages: number; onChange: (p: number) => void }) {
+  if (totalPages <= 1) return null
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, marginTop: 12 }}>
+      <button onClick={() => onChange(page - 1)} disabled={page <= 1} style={{ ...btnGhost, opacity: page <= 1 ? 0.4 : 1, cursor: page <= 1 ? 'default' : 'pointer' }}>‹ السابق</button>
+      <span style={{ fontSize: 13, color: '#667', fontWeight: 600 }}>صفحة {page} من {totalPages}</span>
+      <button onClick={() => onChange(page + 1)} disabled={page >= totalPages} style={{ ...btnGhost, opacity: page >= totalPages ? 0.4 : 1, cursor: page >= totalPages ? 'default' : 'pointer' }}>التالي ›</button>
+    </div>
+  )
+}
 
 export default function TransportClient({ initialBuses, initialSubscribers, students, school }: {
   initialBuses: Bus[]; initialSubscribers: Sub[]; students: Student[]; school: SchoolHeader
@@ -58,6 +73,15 @@ export default function TransportClient({ initialBuses, initialSubscribers, stud
 
   const [selStudent, setSelStudent] = useState('')
   const [selBus, setSelBus] = useState('')
+
+  const [busPage, setBusPage] = useState(1)
+  const [subPage, setSubPage] = useState(1)
+  const busTotalPages = Math.max(1, Math.ceil(buses.length / BUS_PAGE_SIZE))
+  const subTotalPages = Math.max(1, Math.ceil(subs.length / SUB_PAGE_SIZE))
+  const safeBusPage = Math.min(busPage, busTotalPages)
+  const safeSubPage = Math.min(subPage, subTotalPages)
+  const pagedBuses = buses.slice((safeBusPage - 1) * BUS_PAGE_SIZE, safeBusPage * BUS_PAGE_SIZE)
+  const pagedSubs = subs.slice((safeSubPage - 1) * SUB_PAGE_SIZE, safeSubPage * SUB_PAGE_SIZE)
 
   const schoolRevenue = buses
     .filter((b) => b.pay_to === 'school')
@@ -187,7 +211,7 @@ export default function TransportClient({ initialBuses, initialSubscribers, stud
                 </tr>
               </thead>
               <tbody>
-                {buses.map((b) => {
+                {pagedBuses.map((b) => {
                   const p = PAY_LABEL[b.pay_to] || PAY_LABEL.school
                   const rev = Number(b.fee ?? 0) * Number(b.subscribers ?? 0)
                   const full = b.subscribers >= b.capacity
@@ -218,6 +242,8 @@ export default function TransportClient({ initialBuses, initialSubscribers, stud
                 })}
               </tbody>
             </table>
+
+            <PageNav page={safeBusPage} totalPages={busTotalPages} onChange={setBusPage} />
 
             {schoolRevenue > 0 && (
               <div style={{ marginTop: 10, padding: '10px 12px', background: '#F7F9FC', borderRadius: 10,
@@ -273,7 +299,7 @@ export default function TransportClient({ initialBuses, initialSubscribers, stud
                 </tr>
               </thead>
               <tbody>
-                {subs.map((s) => (
+                {pagedSubs.map((s) => (
                   <tr key={s.id} style={{ borderTop: '1px solid #F2F5F8' }}>
                     <td style={{ padding: '10px 12px', fontWeight: 600, color: '#0F2744' }}>{s.full_name}</td>
                     <td style={{ padding: '10px 12px' }}>{s.guardian_name || '—'}</td>
@@ -284,6 +310,7 @@ export default function TransportClient({ initialBuses, initialSubscribers, stud
                 ))}
               </tbody>
             </table>
+            <PageNav page={safeSubPage} totalPages={subTotalPages} onChange={setSubPage} />
           </div>
         )}
       </div>
