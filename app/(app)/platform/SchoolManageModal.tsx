@@ -80,10 +80,6 @@ export default function SchoolManageModal({ schoolId, schoolName, onClose }: {
   const panel: React.CSSProperties = { background: '#F4F6FA', borderRadius: 16, maxWidth: 720, width: '100%', maxHeight: '92dvh', overflowY: 'auto' }
   const head: React.CSSProperties = { background: '#0A1D33', color: '#fff', padding: '16px 20px', borderRadius: '16px 16px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 2 }
   const body: React.CSSProperties = { padding: 20 }
-  const tabBtn = (k: string): React.CSSProperties => ({
-    padding: '9px 16px', border: 'none', borderRadius: 9, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: 13,
-    background: tab === k ? '#D4A017' : '#fff', color: tab === k ? '#08172B' : '#445',
-  })
   const cardS: React.CSSProperties = { background: '#fff', borderRadius: 12, padding: 16, marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,.05)' }
   const input: React.CSSProperties = { width: '100%', padding: 11, borderRadius: 10, border: '1.5px solid #DDE3EC', fontFamily: 'inherit', fontSize: 14, marginBottom: 10 }
 
@@ -107,10 +103,10 @@ export default function SchoolManageModal({ schoolId, schoolName, onClose }: {
         </div>
 
         <div style={body}>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-            <button style={tabBtn('overview')} onClick={() => setTab('overview')}>📊 نظرة عامة</button>
-            <button style={tabBtn('edit')} onClick={() => setTab('edit')}>✏️ تعديل البيانات</button>
-            <button style={tabBtn('audit')} onClick={() => setTab('audit')}>📜 سجل المدرسة</button>
+          <div className="module-tabs" role="tablist" aria-label="أقسام إدارة المدرسة" style={{ marginBottom: 16 }}>
+            <button role="tab" aria-selected={tab === 'overview'} className={`module-tab ${tab === 'overview' ? 'active' : ''}`} onClick={() => setTab('overview')}>📊 نظرة عامة</button>
+            <button role="tab" aria-selected={tab === 'edit'} className={`module-tab ${tab === 'edit' ? 'active' : ''}`} onClick={() => setTab('edit')}>✏️ تعديل البيانات</button>
+            <button role="tab" aria-selected={tab === 'audit'} className={`module-tab ${tab === 'audit' ? 'active' : ''}`} onClick={() => setTab('audit')}>📜 سجل المدرسة</button>
           </div>
 
           {msg && <div style={{ ...cardS, color: msg.startsWith('✓') ? '#1A7A45' : '#C0392B' }}>{msg}</div>}
