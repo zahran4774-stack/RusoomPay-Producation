@@ -5,6 +5,8 @@ import { redirect } from 'next/navigation'
 import { isStaff, type Role } from '@/lib/roles'
 import InventoryClient from './InventoryClient'
 import FocusScroller from '../FocusScroller'
+import ModuleTabs from '../ModuleTabs'
+import { schoolServicesTabs } from '../module-tabs-config'
 
 export default async function InventoryPage() {
   const supabase = await createClient()
@@ -13,7 +15,8 @@ export default async function InventoryPage() {
 
   const { data: profile } = await supabase
     .from('profiles').select('role').eq('id', user.id).single()
-  if (!isStaff(profile?.role as Role)) redirect('/dashboard')
+  const role = profile?.role as Role
+  if (!isStaff(role)) redirect('/dashboard')
 
   const [{ data: items }, { data: students }, { data: school }] = await Promise.all([
     supabase.rpc('inventory_list'),
@@ -23,6 +26,7 @@ export default async function InventoryPage() {
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto' }} dir="rtl">
+      <ModuleTabs items={schoolServicesTabs(role)} />
       <h1 style={{ color: '#0F2744', marginBottom: 4 }}>المخزون</h1>
       <p style={{ color: '#667', fontSize: 14, marginBottom: 20 }}>
         كتب وزي مدرسي — الشراء والبيع بترحيل محاسبي تلقائي (مخزون · تكلفة مبيعات)
