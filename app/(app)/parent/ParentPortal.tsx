@@ -115,7 +115,7 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
       })
       if (error) { setMsg('تعذّر الإرسال: ' + error.message); setBusy(false); return }
       setBusy(false); setPayFee(null); setReceiptFile(null)
-      setMsg(method === 'onsite' ? '✓ سُجّلت نيّة الدفع — ادفع عند المحاسب' : '✓ تم استلام دفعتك — بانتظار اعتماد المحاسب')
+      setMsg('✓ تم استلام دفعتك — بانتظار اعتماد المحاسب')
       setTimeout(() => window.location.reload(), 1500)
     } catch {
       // انقطاع اتصال قبل وصول الرد — بلا هذا يبقى الزر عالقاً على "جارٍ الإرسال" للأبد
@@ -432,12 +432,11 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
 
             <label style={{ fontSize: 13, fontWeight: 600, color: '#445' }}>طريقة الدفع</label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7, marginBottom: 12 }}>
-              {(['thawani', 'bank', 'onsite'] as const).map((m) => (
+              {(['thawani', 'bank'] as const).map((m) => (
                 <button key={m} onClick={() => setMethod(m)} style={{
                   padding: 10, borderRadius: 9, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
                   border: method === m ? '1.5px solid #1E5C4E' : '1.5px solid #DDE3EC',
                   background: method === m ? '#EAF2F0' : '#fff', color: method === m ? '#1E5C4E' : '#445',
-                  gridColumn: m === 'onsite' ? '1 / -1' : 'auto',
                 }}>{METHOD_LABEL[m]}</button>
               ))}
             </div>
@@ -457,19 +456,16 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
                   <BankRow label="رقم الواتساب / الهاتف" value={school.phone} copied={copied} onCopy={copyText} last />
                 </div>
 
-                <div style={{ background: '#EAF2FB', color: '#2E5EA8', borderRadius: 9, padding: '9px 12px', fontSize: 12.5, textAlign: 'center', marginBottom: 10, fontWeight: 600 }}>
-                  يرجى إرسال الإيصال على رقم الواتساب
-                </div>
-
                 <label
                   style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                     border: `1.5px dashed ${receiptFile ? '#1A7A45' : '#DDE3EC'}`, borderRadius: 12,
                     padding: '16px 14px', cursor: 'pointer', background: receiptFile ? '#EAF7F0' : '#fff',
                     marginBottom: 10, fontSize: 13, color: receiptFile ? '#15803D' : '#667', fontWeight: 600,
+                    textAlign: 'center', lineHeight: 1.6,
                   }}>
-                  <Upload size={16} strokeWidth={2} />
-                  {receiptFile ? receiptFile.name : 'رفع إيصال التحويل'}
+                  <Upload size={16} strokeWidth={2} style={{ flexShrink: 0 }} />
+                  {receiptFile ? receiptFile.name : 'رفع إيصال التحويل للاعتماد وسيتم تحرير فاتورة الدفع بعد مراجعة الإيصال'}
                   <input
                     type="file"
                     accept="image/jpeg,image/png,image/webp,application/pdf"
@@ -479,11 +475,6 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
                 </label>
               </div>
             )}
-            {method === 'onsite' && (
-              <div style={{ background: '#FBF8EC', borderRadius: 10, padding: 14, marginBottom: 10, fontSize: 13.5, lineHeight: 1.8 }}>
-                🏫 ستدفع نقداً عند محاسب المدرسة. سيُسجّل طلبك ويؤكّده المحاسب عند الاستلام.
-              </div>
-            )}
 
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 6 }}>
               <button onClick={() => setPayFee(null)} style={{ padding: '10px 16px', borderRadius: 9, border: '1px solid #DDE3EC', background: '#fff', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>إلغاء</button>
@@ -491,7 +482,7 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
                 onClick={method === 'thawani' ? payViaThawani : submitPayment}
                 disabled={busy || redirecting || uploading || (method === 'bank' && !receiptFile)}
                 style={{ padding: '10px 20px', borderRadius: 9, border: 'none', background: '#D4A017', color: '#08172B', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, opacity: (method === 'bank' && !receiptFile) ? 0.55 : 1 }}>
-                {redirecting ? 'جارٍ التحويل لثواني...' : uploading ? 'جارٍ رفع الإيصال...' : busy ? 'جارٍ المعالجة...' : method === 'onsite' ? 'تسجيل نيّة الدفع' : method === 'thawani' ? 'ادفع الآن' : 'تأكيد وإرسال الإيصال'}
+                {redirecting ? 'جارٍ التحويل لثواني...' : uploading ? 'جارٍ رفع الإيصال...' : busy ? 'جارٍ المعالجة...' : method === 'thawani' ? 'ادفع الآن' : 'تأكيد وإرسال الإيصال'}
               </button>
             </div>
           </div>
