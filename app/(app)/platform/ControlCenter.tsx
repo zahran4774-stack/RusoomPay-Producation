@@ -1,6 +1,5 @@
 'use client'
 // مركز تحكّم RusoomPay — واجهة enterprise احترافية
-// أقسام: نظرة عامة · الإيرادات · الاشتراكات · المدارس · التدقيق · الشكاوى · المراقبة · سجل الأخطاء · الإعدادات
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import SchoolManageModal from './SchoolManageModal'
@@ -21,17 +20,18 @@ const STATUS_COLOR: Record<string, { bg: string; c: string }> = {
   suspended: { bg: '#F2E8E6', c: '#8A4B3F' }, cancelled: { bg: '#EEF1F5', c: '#69757F' },
 }
 
-export default function ControlCenter({ overview, revenue, subscriptions, pending, analytics, audit, feedback }: {
+export default function ControlCenter(props: {
   overview: Nums; revenue: Nums; subscriptions: Sub[]; pending: Pending[]
   analytics: SchoolStat[]; audit: AuditRow[]; feedback: FeedbackRow[]
 }) {
-  overview = overview ?? {}
-  revenue = revenue ?? {}
-  subscriptions = subscriptions ?? []
-  pending = pending ?? []
-  analytics = analytics ?? []
-  audit = audit ?? []
-  feedback = feedback ?? []
+  const overview = props.overview ?? {}
+  const revenue = props.revenue ?? {}
+  const subscriptions = props.subscriptions ?? []
+  const pending = props.pending ?? []
+  const analytics = props.analytics ?? []
+  const audit = props.audit ?? []
+  const feedback = props.feedback ?? []
+
   const [tab, setTab] = useState<'overview' | 'revenue' | 'subs' | 'schools' | 'audit' | 'feedback' | 'monitor' | 'errors' | 'settings'>('overview')
   const [manageSchool, setManageSchool] = useState<{ id: string; name: string } | null>(null)
   const [filter, setFilter] = useState('all')
@@ -45,6 +45,18 @@ export default function ControlCenter({ overview, revenue, subscriptions, pendin
   const int = (n: number) => (n ?? 0).toLocaleString('en-US')
 
   const filtered = filter === 'all' ? subscriptions : subscriptions.filter((s) => s.status === filter)
+
+  const TABS: Array<[typeof tab, string]> = [
+    ['overview', '📊 نظرة عامة'],
+    ['revenue', '💰 الإيرادات'],
+    ['subs', '📋 الاشتراكات'],
+    ['schools', '🏫 المدارس'],
+    ['audit', '📜 التدقيق'],
+    ['feedback', '💬 الشكاوى'],
+    ['monitor', '🩺 المراقبة'],
+    ['errors', '🐞 سجل الأخطاء'],
+    ['settings', '⚙️ الإعدادات'],
+  ]
 
   return (
     <div dir="rtl">
@@ -65,7 +77,7 @@ export default function ControlCenter({ overview, revenue, subscriptions, pendin
       </div>
 
       <div style={{ display: 'flex', gap: 6, borderBottom: '1px solid #E5E9F0', margin: '20px 0 24px', flexWrap: 'wrap' }}>
-        {([['overview', '📊 نظرة عامة'], ['revenue', '💰 الإيرادات'], ['subs', '📋 الاشتراكات'], ['schools', '🏫 المدارس'], ['audit', '📜 التدقيق'], ['feedback', '💬 الشكاوى'], ['monitor', '🩺 المراقبة'], ['errors', '🐞 سجل الأخطاء'], ['settings', '⚙️ الإعدادات']] as const).map(([k, label]) => (
+        {TABS.map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)} style={{
             background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
             padding: '11px 18px', fontSize: 14.5, fontWeight: 600,
@@ -184,32 +196,7 @@ export default function ControlCenter({ overview, revenue, subscriptions, pendin
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: 14 }}>
               {analytics.map((s) => (
-                <div key={s.school_id} style={{ background: '#fff', borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,.07)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                    <b style={{ color: '#0A1D33', fontSize: 15 }}>{s.school_name}</b>
-                    <span style={{ fontSize: 11.5, color: '#8A94A6' }}>{s.country ?? '—'}</span>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 13 }}>
-                    <Mini label="الطلاب" v={s.students} />
-                    <Mini label="الموظفون" v={s.employees} />
-                  </div>
-                  <div style={{ marginTop: 12 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#667', marginBottom: 5 }}>
-                      <span>نسبة التحصيل</span><b style={{ color: s.collection_rate >= 80 ? '#1A7A45' : s.collection_rate >= 60 ? '#B8860B' : '#C0392B' }}>{s.collection_rate}%</b>
-                    </div>
-                    <div style={{ height: 8, background: '#EEF1F5', borderRadius: 99, overflow: 'hidden' }}>
-                      <div style={{ width: \`\${s.collection_rate}%\`, height: '100%', borderRadius: 99, background: s.collection_rate >= 80 ? '#27AE60' : s.collection_rate >= 60 ? '#D4A017' : '#C0392B' }} />
-                    </div>
-                  </div>
-                  <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #F2F5F8', fontSize: 12, color: '#8A94A6' }}>
-                    آخر نشاط: {s.last_activity ? s.last_activity.slice(0, 10) : 'لا يوجد'}
-                  </div>
-                  <button
-                    onClick={() => setManageSchool({ id: s.school_id, name: s.school_name })}
-                    style={{ marginTop: 12, width: '100%', padding: '9px', background: '#0A1D33', color: '#fff', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
-                    🛠️ دخول وإدارة
-                  </button>
-                </div>
+                <SchoolCard key={s.school_id} s={s} onManage={() => setManageSchool({ id: s.school_id, name: s.school_name })} />
               ))}
             </div>
           )}
@@ -248,9 +235,7 @@ export default function ControlCenter({ overview, revenue, subscriptions, pendin
         </div>
       )}
 
-      {tab === 'feedback' && (
-        <FeedbackSection feedback={feedback} />
-      )}
+      {tab === 'feedback' && <FeedbackSection feedback={feedback} />}
 
       {tab === 'monitor' && (
         <div>
@@ -281,6 +266,40 @@ export default function ControlCenter({ overview, revenue, subscriptions, pendin
   )
 }
 
+function SchoolCard({ s, onManage }: { s: SchoolStat; onManage: () => void }) {
+  const barColor = s.collection_rate >= 80 ? '#27AE60' : s.collection_rate >= 60 ? '#D4A017' : '#C0392B'
+  const pctColor = s.collection_rate >= 80 ? '#1A7A45' : s.collection_rate >= 60 ? '#B8860B' : '#C0392B'
+  const widthStyle: React.CSSProperties = { width: s.collection_rate + '%', height: '100%', borderRadius: 99, background: barColor }
+  return (
+    <div style={{ background: '#fff', borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,.07)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <b style={{ color: '#0A1D33', fontSize: 15 }}>{s.school_name}</b>
+        <span style={{ fontSize: 11.5, color: '#8A94A6' }}>{s.country ?? '—'}</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 13 }}>
+        <Mini label="الطلاب" v={s.students} />
+        <Mini label="الموظفون" v={s.employees} />
+      </div>
+      <div style={{ marginTop: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#667', marginBottom: 5 }}>
+          <span>نسبة التحصيل</span><b style={{ color: pctColor }}>{s.collection_rate}%</b>
+        </div>
+        <div style={{ height: 8, background: '#EEF1F5', borderRadius: 99, overflow: 'hidden' }}>
+          <div style={widthStyle} />
+        </div>
+      </div>
+      <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #F2F5F8', fontSize: 12, color: '#8A94A6' }}>
+        آخر نشاط: {s.last_activity ? s.last_activity.slice(0, 10) : 'لا يوجد'}
+      </div>
+      <button
+        onClick={onManage}
+        style={{ marginTop: 12, width: '100%', padding: '9px', background: '#0A1D33', color: '#fff', border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+        🛠️ دخول وإدارة
+      </button>
+    </div>
+  )
+}
+
 function Mini({ label, v }: { label: string; v: number }) {
   return (
     <div style={{ background: '#F7F9FC', borderRadius: 9, padding: '9px 11px' }}>
@@ -299,8 +318,9 @@ function Grid({ children }: { children: React.ReactNode }) {
   return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(165px,1fr))', gap: 14 }}>{children}</div>
 }
 function Kpi({ label, value, unit, icon, accent }: { label: string; value: string; unit?: string; icon: string; accent: string }) {
+  const cardStyle: React.CSSProperties = { background: '#fff', borderRadius: 15, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,.07)', borderTop: '3px solid ' + accent }
   return (
-    <div style={{ background: '#fff', borderRadius: 15, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,.07)', borderTop: \`3px solid \${accent}\` }}>
+    <div style={cardStyle}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ color: '#8A94A6', fontSize: 12.5 }}>{label}</span>
         <span style={{ fontSize: 16 }}>{icon}</span>
@@ -324,15 +344,19 @@ function RevenueByPlan({ subs }: { subs: Sub[] }) {
   const rows = [['شهري', byPlan.monthly, '#2E5EA8'], ['سنوي', byPlan.annual, '#1A7A45'], ['دائم', byPlan.lifetime, '#D4A017']] as const
   return (
     <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
-      {rows.map(([label, val, color]) => (
-        <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ width: 48, fontSize: 13, color: '#667' }}>{label}</span>
-          <div style={{ flex: 1, background: '#EEF1F5', borderRadius: 99, height: 22, overflow: 'hidden' }}>
-            <div style={{ width: \`\${Math.max((val / max) * 100, 2)}%\`, height: '100%', background: color, borderRadius: 99, transition: 'width .5s' }} />
+      {rows.map(([label, val, color]) => {
+        const pct = Math.max((val / max) * 100, 2)
+        const barStyle: React.CSSProperties = { width: pct + '%', height: '100%', background: color, borderRadius: 99, transition: 'width .5s' }
+        return (
+          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ width: 48, fontSize: 13, color: '#667' }}>{label}</span>
+            <div style={{ flex: 1, background: '#EEF1F5', borderRadius: 99, height: 22, overflow: 'hidden' }}>
+              <div style={barStyle} />
+            </div>
+            <span style={{ width: 80, textAlign: 'left', fontFamily: 'Cairo', fontWeight: 700, color: '#0A1D33', fontSize: 13.5 }}>{val.toLocaleString('en-US')} ر.ع</span>
           </div>
-          <span style={{ width: 80, textAlign: 'left', fontFamily: 'Cairo', fontWeight: 700, color: '#0A1D33', fontSize: 13.5 }}>{val.toLocaleString('en-US')} ر.ع</span>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -423,7 +447,6 @@ function FeedbackSection({ feedback }: { feedback: FeedbackRow[] }) {
   )
 }
 
-// ── سجل الأخطاء التشغيلية (مدير المنصة) ──
 function ErrorLogSection() {
   const supabase = createClient()
   const [rows, setRows] = useState<any[]>([])
@@ -442,7 +465,10 @@ function ErrorLogSection() {
     setLoading(false)
   }
 
-  useEffect(() => { load(sev) }, [sev]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    load(sev)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sev])
 
   async function resolve(id: string) {
     setBusy(id)
@@ -451,7 +477,8 @@ function ErrorLogSection() {
     setBusy(null)
   }
 
-    function copyMarkdown(r: any) {
+  function copyMarkdown(r: any) {
+    const fence = String.fromCharCode(96, 96, 96)
     const lines = [
       '**المصدر:** ' + r.source,
       '**الخطورة:** ' + r.severity,
@@ -460,7 +487,6 @@ function ErrorLogSection() {
       '**الرسالة:** ' + r.message,
     ]
     if (r.context) {
-      const fence = String.fromCharCode(96, 96, 96)
       lines.push('**السياق:**')
       lines.push(fence + 'json')
       lines.push(JSON.stringify(r.context, null, 2))
@@ -474,12 +500,20 @@ function ErrorLogSection() {
     warning: { label: 'تحذير', bg: '#FBF3D5', c: '#8A6D0F' },
     info: { label: 'معلومة', bg: '#E8EEF8', c: '#2E5EA8' },
   }
-  const counts = rows.reduce((a: Record<string, number>, r) => { a[r.severity] = (a[r.severity] ?? 0) + 1; return a }, {})
+  const counts: Record<string, number> = {}
+  rows.forEach((r) => { counts[r.severity] = (counts[r.severity] ?? 0) + 1 })
+
+  const filterOptions: Array<[string, string]> = [
+    ['', 'الكل (' + rows.length + ')'],
+    ['error', 'خطأ' + (counts.error ? ' (' + counts.error + ')' : '')],
+    ['warning', 'تحذير' + (counts.warning ? ' (' + counts.warning + ')' : '')],
+    ['info', 'معلومة' + (counts.info ? ' (' + counts.info + ')' : '')],
+  ]
 
   return (
     <div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-        {[['', \`الكل (\${rows.length})\`], ['error', \`خطأ \${counts.error ? \`(\${counts.error})\` : ''}\`], ['warning', \`تحذير \${counts.warning ? \`(\${counts.warning})\` : ''}\`], ['info', \`معلومة \${counts.info ? \`(\${counts.info})\` : ''}\`]].map(([k, label]) => (
+        {filterOptions.map(([k, label]) => (
           <button key={k} onClick={() => setSev(k)} style={{
             background: sev === k ? '#0A1D33' : '#fff', color: sev === k ? '#fff' : '#69757F',
             border: '1px solid ' + (sev === k ? '#0A1D33' : '#E5E9F0'), borderRadius: 9,
@@ -496,7 +530,7 @@ function ErrorLogSection() {
         <div style={{ background: '#fff', borderRadius: 14, padding: 30, textAlign: 'center', color: '#8A94A6' }}>جارٍ التحميل…</div>
       ) : rows.length === 0 ? (
         <div style={{ background: '#fff', borderRadius: 14, padding: 40, textAlign: 'center', color: '#8A94A6' }}>
-          لا أخطاء مسجّلة {sev ? 'بهذا التصنيف' : ''} — النظام يعمل بسلاسة ✓
+          لا أخطاء مسجّلة{sev ? ' بهذا التصنيف' : ''} — النظام يعمل بسلاسة ✓
         </div>
       ) : (
         <div style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,.07)' }}>
@@ -510,13 +544,13 @@ function ErrorLogSection() {
                   <span style={{ background: sc.bg, color: sc.c, fontSize: 11.5, fontWeight: 700, padding: '3px 10px', borderRadius: 20, flexShrink: 0 }}>{sc.label}</span>
                   <span style={{ flex: 1, minWidth: 200, fontSize: 13.5, color: '#0A1D33', fontWeight: 600 }}>{r.message}</span>
                   <span style={{ fontSize: 12, color: '#8A94A6' }}>{r.school_name}</span>
-                  <span style={{ fontSize: 11.5, color: '#9AA7B8', whiteSpace: 'nowrap' }}>{r.created_at?.slice(0, 16).replace('T', ' ')}</span>
+                  <span style={{ fontSize: 11.5, color: '#9AA7B8', whiteSpace: 'nowrap' }}>{r.created_at ? String(r.created_at).slice(0, 16).replace('T', ' ') : ''}</span>
                   {r.resolved && <span style={{ fontSize: 11, color: '#1A7A45', fontWeight: 700 }}>✓ حُلّ</span>}
                 </div>
                 {isOpen && (
                   <div style={{ padding: '0 16px 16px', background: '#F9FAFC' }}>
                     <div style={{ fontSize: 12.5, color: '#556', margin: '8px 0' }}>
-                      <b>المصدر:</b> {r.source} · <b>معرّف:</b> <span dir="ltr">{r.id?.slice(0, 8)}</span>
+                      <b>المصدر:</b> {r.source} · <b>معرّف:</b> <span dir="ltr">{r.id ? String(r.id).slice(0, 8) : ''}</span>
                     </div>
                     {r.context && (
                       <pre style={{ background: '#0A1D33', color: '#DCE3EA', padding: 12, borderRadius: 8, fontSize: 11.5, overflowX: 'auto', direction: 'ltr', textAlign: 'left' }}>
