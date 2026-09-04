@@ -37,18 +37,14 @@ export default function MealCost({ sym = 'ر.ع' }: { sym?: string }) {
 
   useEffect(() => { load() }, [load])
 
-  const btn = (active: boolean): React.CSSProperties => ({
-    padding: '9px 18px', borderRadius: 10, border: 0, cursor: 'pointer',
-    fontFamily: 'inherit', fontSize: 14, fontWeight: 700,
-    background: active ? '#163B68' : '#F2F5F8', color: active ? '#fff' : '#0F2744',
-  })
-
   return (
     <div dir="rtl" style={{ marginTop: 8 }}>
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 18 }}>
-        <button style={btn(tab === 'report')} onClick={() => setTab('report')}>📊 التقرير</button>
-        <button style={btn(tab === 'purchases')} onClick={() => setTab('purchases')}>🧾 المشتريات</button>
-        <button style={btn(tab === 'suppliers')} onClick={() => setTab('suppliers')}>🏢 الموردون</button>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+        <div className="module-tabs" role="tablist" aria-label="أقسام تكلفة الوجبات" style={{ border: 'none', paddingBottom: 0, margin: 0 }}>
+          <button role="tab" aria-selected={tab === 'report'} className={`module-tab ${tab === 'report' ? 'active' : ''}`} onClick={() => setTab('report')}>📊 التقرير</button>
+          <button role="tab" aria-selected={tab === 'purchases'} className={`module-tab ${tab === 'purchases' ? 'active' : ''}`} onClick={() => setTab('purchases')}>🧾 المشتريات</button>
+          <button role="tab" aria-selected={tab === 'suppliers'} className={`module-tab ${tab === 'suppliers' ? 'active' : ''}`} onClick={() => setTab('suppliers')}>🏢 الموردون</button>
+        </div>
         <div style={{ marginInlineStart: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
           <label style={{ fontSize: 13, color: '#667' }}>الفترة</label>
           <input type="month" value={period} onChange={(e) => setPeriod(e.target.value)}
