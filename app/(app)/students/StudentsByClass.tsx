@@ -14,6 +14,7 @@ type Student = {
   guardian_phone?: string | null; guardian_email?: string | null
   birth_date?: string | null; gender?: string | null
   father_phone?: string | null; mother_phone?: string | null; address?: string | null
+  annual_fee?: number | null; discount_pct?: number | null
 }
 
 type ClassGroup = { key: string; grade: string; section: string; students: Student[] }
@@ -191,6 +192,9 @@ export default function StudentsByClass({
                               father_phone: s.father_phone ?? null,
                               mother_phone: s.mother_phone ?? null,
                               address: s.address ?? null,
+                              code: s.code ?? null,
+                              annual_fee: s.annual_fee ?? null,
+                              discount_pct: s.discount_pct ?? null,
                             }} buses={buses} currentBusId={studentBusIdMap[s.id] ?? null} />
                           </td>
                         </tr>
