@@ -9,6 +9,7 @@ import StaffInvites from './StaffInvites'
 import SchoolBackup from './SchoolBackup'
 import SectionStyleSetting from './SectionStyleSetting'
 import BankSettings from './BankSettings'
+import SettingsTabs, { type SettingsTab } from './SettingsTabs'
 
 export default async function SettingsPage() {
   const supabase = await createClient()
@@ -61,32 +62,63 @@ export default async function SettingsPage() {
   // طبقة الذكاء — حالة المحرّكات (School Intelligence Core)
   const { data: engines } = await supabase.rpc('intelligence_status')
 
+  // ═══ تجميع الأقسام الموجودة فعلياً في تبويبات — نفس المكوّنات والشروط
+  // السابقة تماماً، فقط أُعيد تنظيمها بصرياً. أي تبويب بلا محتوى فعلي لهذا
+  // الدور يُستبعد كاملاً (لا تبويب فارغ).
+  const financialContent = (isOwner && bank) || vat
+  const intelligenceContent = engines && engines.length > 0
+
+  const tabs: SettingsTab[] = [
+    {
+      id: 'security', label: 'الأمان',
+      content: <MfaSetup />,
+    },
+    {
+      id: 'identity', label: 'الهوية والمظهر',
+      content: (
+        <>
+          <SchoolBranding initialLogo={logo} initialColor={color} initialAccentColor={accentColor} canEdit={isOwner} />
+          {isOwner && <SectionStyleSetting initial={sectionStyles} canEdit={isOwner} />}
+        </>
+      ),
+    },
+    ...(financialContent ? [{
+      id: 'financial', label: 'المالية',
+      content: (
+        <>
+          {isOwner && bank && <BankSettings bank={bank} />}
+          {vat && (
+            <VatSetting
+              mode={(vat.vat_mode ?? 'none') as 'mandatory' | 'optional' | 'none'}
+              rate={vat.vat_rate ?? 0}
+              enabled={vat.applies ?? false}
+              canEdit={isOwner}
+            />
+          )}
+        </>
+      ),
+    }] : []),
+    ...(intelligenceContent ? [{
+      id: 'intelligence', label: 'الذكاء والنظام',
+      content: <IntelligencePanel initial={engines} canEdit={isOwner} />,
+    }] : []),
+    ...(isOwner ? [{
+      id: 'staff-backup', label: 'الطاقم والنسخ الاحتياطي',
+      content: (
+        <>
+          <div style={{ marginTop: 18 }}><SchoolBackup schoolName={schoolName ?? undefined} /></div>
+          <StaffInvites />
+        </>
+      ),
+    }] : []),
+  ]
+
   return (
     <div style={{ padding: 24, maxWidth: 720, margin: '0 auto' }} dir="rtl">
       <h1 style={{ color: '#0F2744', fontSize: 24, marginBottom: 4 }}>الإعدادات</h1>
       <p style={{ color: '#667', fontSize: 14, marginBottom: 24 }}>إدارة أمان حسابك وهوية مدرستك.</p>
 
-      <MfaSetup />
-      <SchoolBranding initialLogo={logo} initialColor={color} initialAccentColor={accentColor} canEdit={isOwner} />
-      {isOwner && <SectionStyleSetting initial={sectionStyles} canEdit={isOwner} />}
-
-      {isOwner && bank && <BankSettings bank={bank} />}
-
-      {vat && (
-        <VatSetting
-          mode={(vat.vat_mode ?? 'none') as 'mandatory' | 'optional' | 'none'}
-          rate={vat.vat_rate ?? 0}
-          enabled={vat.applies ?? false}
-          canEdit={isOwner}
-        />
-      )}
-
-      {engines && engines.length > 0 && (
-        <IntelligencePanel initial={engines} canEdit={isOwner} />
-      )}
-
-      {isOwner && <div style={{ marginTop: 18 }}><SchoolBackup schoolName={schoolName ?? undefined} /></div>}
-      {isOwner && <StaffInvites />}
+      <SettingsTabs tabs={tabs} />
     </div>
   )
 }
