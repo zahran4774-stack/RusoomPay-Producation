@@ -286,9 +286,9 @@ tr.tot td{font-weight:800;background:#F2F5F9;border-top:2px solid #0A1D33;border
       </div>
 
       {/* مبدّل الوضع */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <button onClick={() => setMode('day')} style={mode === 'day' ? tabActive : tabLite}>يوم واحد</button>
-        <button onClick={() => setMode('range')} style={mode === 'range' ? tabActive : tabLite}>فترة (من/إلى)</button>
+      <div className="module-tabs" role="tablist" aria-label="نطاق التقرير" style={{ marginBottom: 12, border: 'none', paddingBottom: 0 }}>
+        <button role="tab" aria-selected={mode === 'day'} onClick={() => setMode('day')} className={`module-tab ${mode === 'day' ? 'active' : ''}`}>يوم واحد</button>
+        <button role="tab" aria-selected={mode === 'range'} onClick={() => setMode('range')} className={`module-tab ${mode === 'range' ? 'active' : ''}`}>فترة (من/إلى)</button>
       </div>
 
       {/* أدوات التحكم — يوم واحد */}
@@ -409,5 +409,3 @@ const td: React.CSSProperties = { padding: '11px 14px', fontSize: 13.5, color: '
 const btnLite: React.CSSProperties = { padding: '9px 14px', borderRadius: 10, border: '1.5px solid #DDE3EC', background: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', color: '#334' }
 const dateInput: React.CSSProperties = { padding: '9px 12px', borderRadius: 10, border: '1.5px solid #DDE3EC', fontSize: 14, fontFamily: 'inherit', background: '#fff' }
 const btnPrint: React.CSSProperties = { padding: '9px 16px', borderRadius: 10, border: 'none', background: '#163B68', color: '#fff', fontSize: 14, fontWeight: 700, fontFamily: 'inherit' }
-const tabLite: React.CSSProperties = { padding: '8px 16px', borderRadius: 20, border: '1.5px solid #DDE3EC', background: '#fff', fontSize: 13.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', color: '#556' }
-const tabActive: React.CSSProperties = { ...tabLite, background: '#0F2744', color: '#fff', border: '1.5px solid #0F2744' }
