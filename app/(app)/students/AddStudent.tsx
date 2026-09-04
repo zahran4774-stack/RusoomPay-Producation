@@ -28,31 +28,61 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
   const [wantsTransport, setWantsTransport] = useState(false)
   const [selectedBus, setSelectedBus] = useState('')
 
+  // تسعير المراحل — من الإعدادات، لتعبئة الرسوم تلقائياً عند اختيار المرحلة
+  const [gradeFees, setGradeFees] = useState<Record<string, number>>({})
+  const [basePrice, setBasePrice] = useState<number | null>(null)
+
   useEffect(() => {
     supabase.rpc('cafeteria_plans').then(({ data }) => { if (data) setMealPlans(data) })
+    supabase.rpc('grade_fees_list').then(({ data }) => {
+      if (data) setGradeFees(Object.fromEntries(data.map((g: { grade: string; annual_fee: number }) => [g.grade, g.annual_fee])))
+    })
   }, [supabase])
 
   const [f, setF] = useState({
     full_name: '', grade: '', section: '', guardian_name: '',
     guardian_phone: '', guardian_email: '', birth_date: '', gender: '',
-    code: '', annual_fee: '',
+    code: '', annual_fee: '', discount_pct: '0',
   })
   const [countryCode, setCountryCode] = useState(DEFAULT_COUNTRY)
   const country = GULF_COUNTRIES.find((c) => c.code === countryCode)
-  const phoneValid = f.guardian_phone === '' || isValidLocalNumber(f.guardian_phone, countryCode)
+  const phoneValid = f.guardian_phone !== '' && isValidLocalNumber(f.guardian_phone, countryCode)
 
   const set = (k: string, v: string) => setF((p) => ({ ...p, [k]: v }))
   const onPhoneChange = (raw: string) => {
     set('guardian_phone', cleanLocalNumber(raw).slice(0, country?.localLen ?? 9))
   }
 
+  // احتساب الرسوم من سعر المرحلة والتخفيض — يبقى الحقل قابلاً للتعديل اليدوي بعدها
+  function applyGrade(grade: string) {
+    set('grade', grade)
+    const price = gradeFees[grade]
+    if (price !== undefined) {
+      setBasePrice(price)
+      const discount = Number(f.discount_pct) || 0
+      set('annual_fee', (price * (1 - discount / 100)).toFixed(3))
+    } else {
+      setBasePrice(null)
+    }
+  }
+  function applyDiscount(v: string) {
+    set('discount_pct', v)
+    if (basePrice !== null) {
+      const discount = Number(v) || 0
+      set('annual_fee', (basePrice * (1 - discount / 100)).toFixed(3))
+    }
+  }
+
   async function submit() {
     setErr(null); setOk(false)
     if (!f.full_name.trim()) { setErr('اسم الطالب مطلوب'); return }
     if (!f.grade.trim()) { setErr('الصف/المرحلة مطلوب'); return }
-    if (f.guardian_phone && !phoneValid) { setErr('رقم ولي الأمر غير مكتمل أو غير صالح لهذه الدولة'); return }
+    if (!f.section.trim()) { setErr('الشعبة مطلوبة'); return }
+    if (!f.guardian_phone.trim()) { setErr('رقم ولي الأمر مطلوب'); return }
+    if (!phoneValid) { setErr('رقم ولي الأمر غير مكتمل أو غير صالح لهذه الدولة'); return }
+    if (!f.annual_fee || Number(f.annual_fee) <= 0) { setErr('الرسوم السنوية مطلوبة ويجب أن تكون أكبر من صفر'); return }
     setSaving(true)
-    const fullPhone = f.guardian_phone ? `+${countryCode}${f.guardian_phone}` : null
+    const fullPhone = `+${countryCode}${f.guardian_phone}`
     const { data: newId, error } = await supabase.rpc('add_student', {
       p_full_name: f.full_name,
       p_grade: f.grade,
@@ -63,7 +93,8 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
       p_birth_date: f.birth_date || null,
       p_gender: f.gender || null,
       p_code: f.code || null,
-      p_annual_fee: f.annual_fee ? Number(f.annual_fee) : 0,
+      p_annual_fee: Number(f.annual_fee),
+      p_discount_pct: Number(f.discount_pct) || 0,
     })
     setSaving(false)
     if (error) { setErr(error.message); return }
@@ -83,7 +114,8 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
     setSelectedMeals({})
     setWantsTransport(false)
     setSelectedBus('')
-    setF({ full_name: '', grade: '', section: '', guardian_name: '', guardian_phone: '', guardian_email: '', birth_date: '', gender: '', code: '', annual_fee: '' })
+    setF({ full_name: '', grade: '', section: '', guardian_name: '', guardian_phone: '', guardian_email: '', birth_date: '', gender: '', code: '', annual_fee: '', discount_pct: '0' })
+    setBasePrice(null)
     setCountryCode(DEFAULT_COUNTRY)
     router.refresh()
     setTimeout(() => { setOk(false); setOpen(false) }, 1200)
@@ -117,13 +149,13 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
         </div>
         <div style={cell}>
           <label style={label}>الصف / المرحلة *</label>
-          <select style={input} value={f.grade} onChange={(e) => set('grade', e.target.value)}>
+          <select style={input} value={f.grade} onChange={(e) => applyGrade(e.target.value)}>
             <option value="">— اختر الصف —</option>
             {GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
           </select>
         </div>
         <div style={cell}>
-          <label style={label}>الشعبة</label>
+          <label style={label}>الشعبة *</label>
           <select style={input} value={f.section} onChange={(e) => set('section', e.target.value)}>
             <option value="">— اختر الشعبة —</option>
             {sectionOptions.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -138,7 +170,7 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
           <input style={input} value={f.guardian_name} onChange={(e) => set('guardian_name', e.target.value)} placeholder="أحمد الكندي" />
         </div>
         <div style={cell}>
-          <label style={label}>رقم ولي الأمر</label>
+          <label style={label}>رقم ولي الأمر *</label>
           <div style={{ display: 'flex', gap: 8 }}>
             <select
               value={countryCode}
@@ -176,8 +208,15 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
           </select>
         </div>
         <div style={cell}>
-          <label style={label}>الرسوم السنوية (ر.ع)</label>
+          <label style={label}>الرسوم السنوية (ر.ع) *</label>
           <input type="number" style={input} value={f.annual_fee} onChange={(e) => set('annual_fee', e.target.value)} placeholder="0" dir="ltr" />
+          {basePrice !== null && (
+            <div style={{ color: '#8A94A6', fontSize: 11.5, marginTop: 4 }}>السعر الأساسي للمرحلة: {basePrice.toLocaleString('en-US', { minimumFractionDigits: 3 })} ر.ع</div>
+          )}
+        </div>
+        <div style={cell}>
+          <label style={label}>التخفيض ٪</label>
+          <input type="number" min={0} max={100} style={input} value={f.discount_pct} onChange={(e) => applyDiscount(e.target.value)} placeholder="0" dir="ltr" />
         </div>
         {mealPlans.length > 0 && (
           <div style={{ flex: '1 1 100%' }}>
