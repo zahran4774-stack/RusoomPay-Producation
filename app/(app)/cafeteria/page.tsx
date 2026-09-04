@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import { isStaff, type Role } from '@/lib/roles'
 import CafeteriaClient from './CafeteriaClient'
+import ModuleTabs from '../ModuleTabs'
+import { schoolServicesTabs } from '../module-tabs-config'
 
 export default async function CafeteriaPage() {
   const supabase = await createClient()
@@ -12,7 +14,8 @@ export default async function CafeteriaPage() {
 
   const { data: profile } = await supabase
     .from('profiles').select('role').eq('id', user.id).single()
-  if (!isStaff(profile?.role as Role)) redirect('/dashboard')
+  const role = profile?.role as Role
+  if (!isStaff(role)) redirect('/dashboard')
 
   const [{ data: plans }, { data: subscribers }, { data: students }, { data: school }] = await Promise.all([
     supabase.rpc('cafeteria_plans'),
@@ -23,6 +26,7 @@ export default async function CafeteriaPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }} dir="rtl">
+      <ModuleTabs items={schoolServicesTabs(role)} />
       <h1 style={{ color: '#0F2744', marginBottom: 4 }}>التغذية المدرسية</h1>
       <p style={{ color: '#667', fontSize: 14, marginBottom: 20 }}>
         باقات التغذية واشتراكات الطلاب والفوترة الشهرية — تدخل كإيراد للمدرسة
