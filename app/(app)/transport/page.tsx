@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import { isStaff, type Role } from '@/lib/roles'
 import TransportClient from './TransportClient'
+import ModuleTabs from '../ModuleTabs'
+import { schoolServicesTabs } from '../module-tabs-config'
 
 export default async function TransportPage() {
   const supabase = await createClient()
@@ -12,7 +14,8 @@ export default async function TransportPage() {
 
   const { data: profile } = await supabase
     .from('profiles').select('role').eq('id', user.id).single()
-  if (!isStaff(profile?.role as Role)) redirect('/dashboard')
+  const role = profile?.role as Role
+  if (!isStaff(role)) redirect('/dashboard')
 
   const [{ data: buses }, { data: subscribers }, { data: students }, { data: school }] = await Promise.all([
     supabase.rpc('transport_buses'),
@@ -23,6 +26,7 @@ export default async function TransportPage() {
 
   return (
     <div style={{ maxWidth: 980, margin: '0 auto' }} dir="rtl">
+      <ModuleTabs items={schoolServicesTabs(role)} />
       <h1 style={{ color: '#0F2744', marginBottom: 4 }}>النقل المدرسي</h1>
       <p style={{ color: '#667', fontSize: 14, marginBottom: 20 }}>
         الباصات والمسارات واشتراكات الطلاب والفوترة الشهرية
