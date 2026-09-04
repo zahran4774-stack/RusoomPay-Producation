@@ -1,7 +1,7 @@
 'use client'
 // مركز تحكّم RusoomPay — واجهة enterprise احترافية
-// 3 أقسام: نظرة عامة · الإيرادات · إدارة الاشتراكات
-import { useState } from 'react'
+// أقسام: نظرة عامة · الإيرادات · الاشتراكات · المدارس · التدقيق · الشكاوى · المراقبة · سجل الأخطاء · الإعدادات
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import SchoolManageModal from './SchoolManageModal'
 import PendingSubs from './PendingSubs'
@@ -25,7 +25,6 @@ export default function ControlCenter({ overview, revenue, subscriptions, pendin
   overview: Nums; revenue: Nums; subscriptions: Sub[]; pending: Pending[]
   analytics: SchoolStat[]; audit: AuditRow[]; feedback: FeedbackRow[]
 }) {
-  // قيم افتراضية آمنة — تمنع الانهيار حين تكون المنصة فارغة (لا مدارس بعد)
   overview = overview ?? {}
   revenue = revenue ?? {}
   subscriptions = subscriptions ?? []
@@ -33,13 +32,11 @@ export default function ControlCenter({ overview, revenue, subscriptions, pendin
   analytics = analytics ?? []
   audit = audit ?? []
   feedback = feedback ?? []
-  const [tab, setTab] = useState<'overview' | 'revenue' | 'subs' | 'schools' | 'audit' | 'feedback' | 'monitor' | 'settings'>('overview')
+  const [tab, setTab] = useState<'overview' | 'revenue' | 'subs' | 'schools' | 'audit' | 'feedback' | 'monitor' | 'errors' | 'settings'>('overview')
   const [manageSchool, setManageSchool] = useState<{ id: string; name: string } | null>(null)
   const [filter, setFilter] = useState('all')
   const supabase = createClient()
 
-  // لا يوجد أي زر خروج في صفحة مدير المنصة سابقاً — هذه الصفحة مستقلّة عن AppShell
-  // ولا ترث زر الخروج الذي أُصلح هناك؛ نضيفه هنا بنفس منطق تسجيل الخروج الحقيقي.
   async function handleLogout() {
     await supabase.auth.signOut()
     window.location.href = '/login'
@@ -51,7 +48,6 @@ export default function ControlCenter({ overview, revenue, subscriptions, pendin
 
   return (
     <div dir="rtl">
-      {/* ترويسة */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 6 }}>
         <div>
           <h1 style={{ color: '#0A1D33', fontSize: 24, margin: 0 }}>مركز تحكّم RusoomPay</h1>
@@ -68,9 +64,8 @@ export default function ControlCenter({ overview, revenue, subscriptions, pendin
         </div>
       </div>
 
-      {/* تبويبات */}
-      <div style={{ display: 'flex', gap: 6, borderBottom: '1px solid #E5E9F0', margin: '20px 0 24px' }}>
-        {([['overview', '📊 نظرة عامة'], ['revenue', '💰 الإيرادات'], ['subs', '📋 الاشتراكات'], ['schools', '🏫 المدارس'], ['audit', '📜 التدقيق'], ['feedback', '💬 الشكاوى'], ['monitor', '🩺 المراقبة'], ['settings', '⚙️ الإعدادات']] as const).map(([k, label]) => (
+      <div style={{ display: 'flex', gap: 6, borderBottom: '1px solid #E5E9F0', margin: '20px 0 24px', flexWrap: 'wrap' }}>
+        {([['overview', '📊 نظرة عامة'], ['revenue', '💰 الإيرادات'], ['subs', '📋 الاشتراكات'], ['schools', '🏫 المدارس'], ['audit', '📜 التدقيق'], ['feedback', '💬 الشكاوى'], ['monitor', '🩺 المراقبة'], ['errors', '🐞 سجل الأخطاء'], ['settings', '⚙️ الإعدادات']] as const).map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)} style={{
             background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
             padding: '11px 18px', fontSize: 14.5, fontWeight: 600,
@@ -81,7 +76,6 @@ export default function ControlCenter({ overview, revenue, subscriptions, pendin
         ))}
       </div>
 
-      {/* القسم 1: نظرة عامة */}
       {tab === 'overview' && (
         <div style={{ display: 'grid', gap: 22 }}>
           <div>
@@ -106,7 +100,6 @@ export default function ControlCenter({ overview, revenue, subscriptions, pendin
         </div>
       )}
 
-      {/* القسم 2: الإيرادات */}
       {tab === 'revenue' && (
         <div style={{ display: 'grid', gap: 22 }}>
           <Grid>
@@ -122,10 +115,8 @@ export default function ControlCenter({ overview, revenue, subscriptions, pendin
         </div>
       )}
 
-      {/* القسم 3: إدارة الاشتراكات */}
       {tab === 'subs' && (
         <div>
-          {/* مرشّحات */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
             {[['all', 'الكل'], ['active', 'نشط'], ['trial', 'تجريبي'], ['pending', 'بانتظار'], ['expired', 'منتهٍ']].map(([k, label]) => (
               <button key={k} onClick={() => setFilter(k)} style={{
@@ -136,7 +127,6 @@ export default function ControlCenter({ overview, revenue, subscriptions, pendin
             ))}
           </div>
 
-          {/* اعتمادات معلّقة */}
           {pending.length > 0 && (
             <div style={{ marginBottom: 18 }}>
               <SecLabel>تحويلات بنكية بانتظار الاعتماد ({pending.length})</SecLabel>
@@ -151,7 +141,6 @@ export default function ControlCenter({ overview, revenue, subscriptions, pendin
             </div>
           )}
 
-          {/* جدول الاشتراكات */}
           <div style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,.07)', overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
               <thead>
@@ -186,7 +175,7 @@ export default function ControlCenter({ overview, revenue, subscriptions, pendin
           </div>
         </div>
       )}
-      {/* القسم 7: تحليلات المدارس */}
+
       {tab === 'schools' && (
         <div>
           <SecLabel>تحليلات المدارس ({analytics.length})</SecLabel>
@@ -209,7 +198,7 @@ export default function ControlCenter({ overview, revenue, subscriptions, pendin
                       <span>نسبة التحصيل</span><b style={{ color: s.collection_rate >= 80 ? '#1A7A45' : s.collection_rate >= 60 ? '#B8860B' : '#C0392B' }}>{s.collection_rate}%</b>
                     </div>
                     <div style={{ height: 8, background: '#EEF1F5', borderRadius: 99, overflow: 'hidden' }}>
-                      <div style={{ width: `${s.collection_rate}%`, height: '100%', borderRadius: 99, background: s.collection_rate >= 80 ? '#27AE60' : s.collection_rate >= 60 ? '#D4A017' : '#C0392B' }} />
+                      <div style={{ width: \`\${s.collection_rate}%\`, height: '100%', borderRadius: 99, background: s.collection_rate >= 80 ? '#27AE60' : s.collection_rate >= 60 ? '#D4A017' : '#C0392B' }} />
                     </div>
                   </div>
                   <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #F2F5F8', fontSize: 12, color: '#8A94A6' }}>
@@ -227,7 +216,6 @@ export default function ControlCenter({ overview, revenue, subscriptions, pendin
         </div>
       )}
 
-      {/* القسم 10: سجل التدقيق */}
       {tab === 'audit' && (
         <div>
           <SecLabel>سجل التدقيق عبر كل المدارس ({audit.length})</SecLabel>
@@ -260,7 +248,6 @@ export default function ControlCenter({ overview, revenue, subscriptions, pendin
         </div>
       )}
 
-      {/* القسم 4: المراقبة (واجهة — تتطلب تكاملاً خارجياً) */}
       {tab === 'feedback' && (
         <FeedbackSection feedback={feedback} />
       )}
@@ -269,15 +256,14 @@ export default function ControlCenter({ overview, revenue, subscriptions, pendin
         <div>
           <SecLabel>صحّة خدمات المنصة (حيّة)</SecLabel>
           <SystemHealthPanel />
-
           <div style={{ height: 28 }} />
-
           <SecLabel>اشتراكات التشغيل</SecLabel>
           <OpsSubscriptionsPanel />
         </div>
       )}
 
-      {/* القسم: الإعدادات — تفعيل/تعطيل دول الخليج */}
+      {tab === 'errors' && <ErrorLogSection />}
+
       {tab === 'settings' && (
         <div>
           <CountryToggles />
@@ -314,7 +300,7 @@ function Grid({ children }: { children: React.ReactNode }) {
 }
 function Kpi({ label, value, unit, icon, accent }: { label: string; value: string; unit?: string; icon: string; accent: string }) {
   return (
-    <div style={{ background: '#fff', borderRadius: 15, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,.07)', borderTop: `3px solid ${accent}` }}>
+    <div style={{ background: '#fff', borderRadius: 15, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,.07)', borderTop: \`3px solid \${accent}\` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ color: '#8A94A6', fontSize: 12.5 }}>{label}</span>
         <span style={{ fontSize: 16 }}>{icon}</span>
@@ -326,7 +312,6 @@ function Kpi({ label, value, unit, icon, accent }: { label: string; value: strin
   )
 }
 
-// رسم الإيراد حسب الباقة (أعمدة بسيطة)
 function RevenueByPlan({ subs }: { subs: Sub[] }) {
   const active = subs.filter((s) => s.status === 'active')
   const byPlan = { monthly: 0, annual: 0, lifetime: 0 }
@@ -343,7 +328,7 @@ function RevenueByPlan({ subs }: { subs: Sub[] }) {
         <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ width: 48, fontSize: 13, color: '#667' }}>{label}</span>
           <div style={{ flex: 1, background: '#EEF1F5', borderRadius: 99, height: 22, overflow: 'hidden' }}>
-            <div style={{ width: `${Math.max((val / max) * 100, 2)}%`, height: '100%', background: color, borderRadius: 99, transition: 'width .5s' }} />
+            <div style={{ width: \`\${Math.max((val / max) * 100, 2)}%\`, height: '100%', background: color, borderRadius: 99, transition: 'width .5s' }} />
           </div>
           <span style={{ width: 80, textAlign: 'left', fontFamily: 'Cairo', fontWeight: 700, color: '#0A1D33', fontSize: 13.5 }}>{val.toLocaleString('en-US')} ر.ع</span>
         </div>
@@ -352,22 +337,6 @@ function RevenueByPlan({ subs }: { subs: Sub[] }) {
   )
 }
 
-// اعتمادات معلّقة مختصرة
-function PendingSubsInline({ pending }: { pending: Pending[] }) {
-  const name = (s: Pending) => Array.isArray(s.schools) ? s.schools[0]?.name : s.schools?.name
-  return (
-    <div style={{ display: 'grid', gap: 8 }}>
-      {pending.map((s) => (
-        <div key={s.id} style={{ background: '#FBF3D5', border: '1px solid #EAD9A0', borderRadius: 11, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-          <span style={{ fontWeight: 600, color: '#7A5C0A', fontSize: 14 }}>🏦 {name(s) ?? 'مدرسة'} — باقة {PLAN_AR[s.plan] ?? s.plan}</span>
-          <span style={{ fontSize: 12, color: '#8A6D0F' }}>{s.created_at?.slice(0, 10)}</span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// ── قسم الشكاوى والملاحظات (مدير المنصة: عرض + متابعة) ──
 function FeedbackSection({ feedback }: { feedback: FeedbackRow[] }) {
   const supabase = createClient()
   const [items, setItems] = useState<FeedbackRow[]>(feedback)
@@ -448,6 +417,123 @@ function FeedbackSection({ feedback }: { feedback: FeedbackRow[] }) {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── سجل الأخطاء التشغيلية (مدير المنصة) ──
+function ErrorLogSection() {
+  const supabase = createClient()
+  const [rows, setRows] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [sev, setSev] = useState<string>('')
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+
+  async function load(severity: string) {
+    setLoading(true)
+    const { data } = await supabase.rpc('platform_error_log', {
+      p_limit: 200,
+      p_severity: severity || null,
+    })
+    setRows(data || [])
+    setLoading(false)
+  }
+
+  useEffect(() => { load(sev) }, [sev]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function resolve(id: string) {
+    setBusy(id)
+    const { error } = await supabase.rpc('resolve_error', { p_id: id })
+    if (!error) setRows((prev) => prev.map((r) => (r.id === id ? { ...r, resolved: true } : r)))
+    setBusy(null)
+  }
+
+  function copyMarkdown(r: any) {
+    const md = [
+      \`**المصدر:** \${r.source}\`,
+      \`**الخطورة:** \${r.severity}\`,
+      \`**المدرسة:** \${r.school_name}\`,
+      \`**الوقت:** \${r.created_at}\`,
+      \`**الرسالة:** \${r.message}\`,
+      r.context ? \`**السياق:**\n\\\`\\\`\\\`json\n\${JSON.stringify(r.context, null, 2)}\n\\\`\\\`\\\`\` : '',
+    ].filter(Boolean).join('\n')
+    navigator.clipboard?.writeText(md)
+  }
+
+  const SEV: Record<string, { label: string; bg: string; c: string }> = {
+    error: { label: 'خطأ', bg: '#FCE9E6', c: '#C0392B' },
+    warning: { label: 'تحذير', bg: '#FBF3D5', c: '#8A6D0F' },
+    info: { label: 'معلومة', bg: '#E8EEF8', c: '#2E5EA8' },
+  }
+  const counts = rows.reduce((a: Record<string, number>, r) => { a[r.severity] = (a[r.severity] ?? 0) + 1; return a }, {})
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        {[['', \`الكل (\${rows.length})\`], ['error', \`خطأ \${counts.error ? \`(\${counts.error})\` : ''}\`], ['warning', \`تحذير \${counts.warning ? \`(\${counts.warning})\` : ''}\`], ['info', \`معلومة \${counts.info ? \`(\${counts.info})\` : ''}\`]].map(([k, label]) => (
+          <button key={k} onClick={() => setSev(k)} style={{
+            background: sev === k ? '#0A1D33' : '#fff', color: sev === k ? '#fff' : '#69757F',
+            border: '1px solid ' + (sev === k ? '#0A1D33' : '#E5E9F0'), borderRadius: 9,
+            padding: '7px 15px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+          }}>{label}</button>
+        ))}
+        <button onClick={() => load(sev)} style={{
+          background: '#fff', color: '#2E5EA8', border: '1px solid #E5E9F0', borderRadius: 9,
+          padding: '7px 15px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', marginInlineStart: 'auto',
+        }}>↻ تحديث</button>
+      </div>
+
+      {loading ? (
+        <div style={{ background: '#fff', borderRadius: 14, padding: 30, textAlign: 'center', color: '#8A94A6' }}>جارٍ التحميل…</div>
+      ) : rows.length === 0 ? (
+        <div style={{ background: '#fff', borderRadius: 14, padding: 40, textAlign: 'center', color: '#8A94A6' }}>
+          لا أخطاء مسجّلة {sev ? 'بهذا التصنيف' : ''} — النظام يعمل بسلاسة ✓
+        </div>
+      ) : (
+        <div style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,.07)' }}>
+          {rows.map((r, i) => {
+            const sc = SEV[r.severity] ?? SEV.error
+            const isOpen = expanded === r.id
+            return (
+              <div key={r.id} style={{ borderTop: i === 0 ? 'none' : '1px solid #F2F5F8', opacity: r.resolved ? 0.55 : 1 }}>
+                <div onClick={() => setExpanded(isOpen ? null : r.id)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', cursor: 'pointer', flexWrap: 'wrap' }}>
+                  <span style={{ background: sc.bg, color: sc.c, fontSize: 11.5, fontWeight: 700, padding: '3px 10px', borderRadius: 20, flexShrink: 0 }}>{sc.label}</span>
+                  <span style={{ flex: 1, minWidth: 200, fontSize: 13.5, color: '#0A1D33', fontWeight: 600 }}>{r.message}</span>
+                  <span style={{ fontSize: 12, color: '#8A94A6' }}>{r.school_name}</span>
+                  <span style={{ fontSize: 11.5, color: '#9AA7B8', whiteSpace: 'nowrap' }}>{r.created_at?.slice(0, 16).replace('T', ' ')}</span>
+                  {r.resolved && <span style={{ fontSize: 11, color: '#1A7A45', fontWeight: 700 }}>✓ حُلّ</span>}
+                </div>
+                {isOpen && (
+                  <div style={{ padding: '0 16px 16px', background: '#F9FAFC' }}>
+                    <div style={{ fontSize: 12.5, color: '#556', margin: '8px 0' }}>
+                      <b>المصدر:</b> {r.source} · <b>معرّف:</b> <span dir="ltr">{r.id?.slice(0, 8)}</span>
+                    </div>
+                    {r.context && (
+                      <pre style={{ background: '#0A1D33', color: '#DCE3EA', padding: 12, borderRadius: 8, fontSize: 11.5, overflowX: 'auto', direction: 'ltr', textAlign: 'left' }}>
+                        {JSON.stringify(r.context, null, 2)}
+                      </pre>
+                    )}
+                    <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                      <button onClick={() => copyMarkdown(r)}
+                        style={{ background: '#EEF3FA', color: '#2E5EA8', border: 0, borderRadius: 8, padding: '7px 14px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                        📋 نسخ Markdown
+                      </button>
+                      {!r.resolved && (
+                        <button onClick={() => resolve(r.id)} disabled={busy === r.id}
+                          style={{ background: '#E6F4EC', color: '#1A7A45', border: 0, borderRadius: 8, padding: '7px 14px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                          {busy === r.id ? '…' : '✓ تعليم كمحلول'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
