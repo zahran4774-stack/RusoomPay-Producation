@@ -36,38 +36,60 @@ export default function ActivityToolbar({ actors }: { actors: ActorOption[] }) {
 
   const hasFilters = searchParams.get('q') || searchParams.get('actor') || searchParams.get('from') || searchParams.get('to')
 
+  const fieldLabel: React.CSSProperties = { fontSize: 12, color: '#8A94A6', fontWeight: 600 }
+  const fieldWrap: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 4 }
+  const fieldInput: React.CSSProperties = { padding: 12, borderRadius: 11, border: '1.5px solid #DDE3EC', fontFamily: 'inherit', fontSize: 14 }
+
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 18, alignItems: 'center' }}>
-      <input
-        type="text" value={q} onChange={(e) => setQ(e.target.value)}
-        placeholder="🔍 ابحث في الإجراء أو التفاصيل"
-        style={{ flex: '1 1 220px', padding: 12, borderRadius: 11, border: '1.5px solid #DDE3EC', fontFamily: 'inherit', fontSize: 14.5 }}
-      />
-      <select
-        value={searchParams.get('actor') ?? ''}
-        onChange={(e) => apply({ actor: e.target.value || null })}
-        style={{ padding: 12, borderRadius: 11, border: '1.5px solid #DDE3EC', fontFamily: 'inherit', fontSize: 14, background: '#fff', minWidth: 150 }}
-      >
-        <option value="">كل المستخدمين</option>
-        {actors.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-      </select>
-      <input
-        type="date" value={searchParams.get('from') ?? ''}
-        onChange={(e) => apply({ from: e.target.value || null })}
-        style={{ padding: 12, borderRadius: 11, border: '1.5px solid #DDE3EC', fontFamily: 'inherit', fontSize: 14 }} dir="ltr"
-        aria-label="من تاريخ"
-      />
-      <input
-        type="date" value={searchParams.get('to') ?? ''}
-        onChange={(e) => apply({ to: e.target.value || null })}
-        style={{ padding: 12, borderRadius: 11, border: '1.5px solid #DDE3EC', fontFamily: 'inherit', fontSize: 14 }} dir="ltr"
-        aria-label="إلى تاريخ"
-      />
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 18, alignItems: 'flex-end' }}>
+      <div style={{ ...fieldWrap, flex: '1 1 220px' }}>
+        <label htmlFor="activity-q" style={fieldLabel}>بحث</label>
+        <input
+          id="activity-q"
+          type="text" value={q} onChange={(e) => setQ(e.target.value)}
+          placeholder="🔍 ابحث في الإجراء أو التفاصيل"
+          style={{ ...fieldInput, width: '100%' }}
+        />
+      </div>
+
+      <div style={fieldWrap}>
+        <label htmlFor="activity-actor" style={fieldLabel}>المستخدم</label>
+        <select
+          id="activity-actor"
+          value={searchParams.get('actor') ?? ''}
+          onChange={(e) => apply({ actor: e.target.value || null })}
+          style={{ ...fieldInput, background: '#fff', minWidth: 150 }}
+        >
+          <option value="">كل المستخدمين</option>
+          {actors.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
+      </div>
+
+      <div style={fieldWrap}>
+        <label htmlFor="activity-from" style={fieldLabel}>من تاريخ</label>
+        <input
+          id="activity-from"
+          type="date" value={searchParams.get('from') ?? ''}
+          onChange={(e) => apply({ from: e.target.value || null })}
+          style={fieldInput} dir="ltr"
+        />
+      </div>
+
+      <div style={fieldWrap}>
+        <label htmlFor="activity-to" style={fieldLabel}>إلى تاريخ</label>
+        <input
+          id="activity-to"
+          type="date" value={searchParams.get('to') ?? ''}
+          onChange={(e) => apply({ to: e.target.value || null })}
+          style={fieldInput} dir="ltr"
+        />
+      </div>
+
       {hasFilters && (
         <button
           type="button"
           onClick={() => { setQ(''); router.push(pathname) }}
-          style={{ padding: '11px 16px', borderRadius: 11, border: '1.5px solid #DDE3EC', background: '#fff', color: '#667', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: 'inherit' }}
+          style={{ padding: '11px 16px', borderRadius: 11, border: '1.5px solid #DDE3EC', background: '#fff', color: '#667', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: 'inherit', alignSelf: 'flex-end' }}
         >
           ✕ مسح الفلاتر
         </button>
