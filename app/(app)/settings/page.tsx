@@ -10,6 +10,7 @@ import SchoolBackup from './SchoolBackup'
 import SectionStyleSetting from './SectionStyleSetting'
 import BankSettings from './BankSettings'
 import GradePricing from './GradePricing'
+import AcademicYearSettings from './AcademicYearSettings'
 import SettingsTabs, { type SettingsTab } from './SettingsTabs'
 
 export default async function SettingsPage() {
@@ -26,7 +27,7 @@ export default async function SettingsPage() {
 
   const isOwner = profile?.role === 'owner'
   const isAdmin = profile?.role === 'admin'
-  // تسعير المراحل يُستخدم فقط من قِبل من يملك صلاحية تسجيل/تعديل الطلاب أصلاً (المدير/الإداري)
+  // تسعير المراحل يُستخدم فقط من قبل من يملك صلاحية تسجيل/تعديل الطلاب أصلاً (المدير/الإداري)
   const canManageGrades = isOwner || isAdmin
 
   // إعداد الضريبة حسب قانون الدولة (لكل المستخدمين للعرض، التعديل للمدير)
@@ -73,9 +74,19 @@ export default async function SettingsPage() {
     gradeFees = data ?? []
   }
 
-  // ═══ تجميع الأقسام الموجودة فعلياً في تبويبات — نفس المكوّنات والشروط
+  // الأعوام الدراسية — للمالك فقط
+  let academicYears: { id: string; label: string; start_date: string; end_date: string; is_current: boolean }[] = []
+  if (isOwner) {
+    const { data } = await supabase
+      .from('academic_years')
+      .select('id, label, start_date, end_date, is_current')
+      .order('start_date', { ascending: false })
+    academicYears = data ?? []
+  }
+
+  // ═══ تجميع الأقسام الموجودة فعليا في تبويبات — نفس المكونات والشروط
   // السابقة تماماً، فقط أُعيد تنظيمها بصرياً. أي تبويب بلا محتوى فعلي لهذا
-  // الدور يُستبعد كاملاً (لا تبويب فارغ).
+  // الدور يستبعد كاملاً (لا تبويب فارغ).
   const financialContent = (isOwner && bank) || vat
   const intelligenceContent = engines && engines.length > 0
 
@@ -116,6 +127,10 @@ export default async function SettingsPage() {
     ...(canManageGrades ? [{
       id: 'grade-pricing', label: 'تسعير المراحل',
       content: <GradePricing initial={gradeFees} canEdit={canManageGrades} />,
+    }] : []),
+    ...(isOwner ? [{
+      id: 'academic-year', label: 'العام الدراسي',
+      content: <AcademicYearSettings initial={academicYears} />,
     }] : []),
     ...(isOwner ? [{
       id: 'staff-backup', label: 'الطاقم والنسخ الاحتياطي',
