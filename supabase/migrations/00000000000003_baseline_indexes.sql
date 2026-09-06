@@ -1,0 +1,233 @@
+CREATE UNIQUE INDEX academic_years_one_current_per_school ON public.academic_years USING btree (school_id) WHERE (is_current = true);
+
+CREATE UNIQUE INDEX academic_years_school_label_key ON public.academic_years USING btree (school_id, label);
+
+CREATE INDEX asst_conv_user_idx ON public.assistant_conversations USING btree (user_id, updated_at DESC);
+
+CREATE INDEX asst_msg_conv_idx ON public.assistant_messages USING btree (conversation_id, created_at);
+
+CREATE INDEX help_articles_category_idx ON public.help_articles USING btree (category, sort_order);
+
+CREATE INDEX help_articles_keywords_idx ON public.help_articles USING gin (keywords);
+
+CREATE INDEX help_articles_published_idx ON public.help_articles USING btree (is_published) WHERE is_published;
+
+CREATE INDEX help_articles_route_idx ON public.help_articles USING btree (page_route);
+
+CREATE INDEX idx_academic_years_school ON public.academic_years USING btree (school_id);
+
+CREATE INDEX idx_academic_years_school_current ON public.academic_years USING btree (school_id, is_current);
+
+CREATE INDEX idx_academic_years_school_start ON public.academic_years USING btree (school_id, start_date);
+
+CREATE INDEX idx_accounts_school ON public.accounts USING btree (school_id);
+
+CREATE INDEX idx_ann_created ON public.announcements USING btree (created_at);
+
+CREATE INDEX idx_announcements_created_by ON public.announcements USING btree (created_by);
+
+CREATE INDEX idx_assistant_conversations_school_id ON public.assistant_conversations USING btree (school_id);
+
+CREATE INDEX idx_assistant_messages_school_id ON public.assistant_messages USING btree (school_id);
+
+CREATE INDEX idx_audit_log_actor_id ON public.audit_log USING btree (actor_id);
+
+CREATE INDEX idx_audit_school ON public.audit_log USING btree (school_id);
+
+CREATE INDEX idx_bus_subs_school ON public.bus_subscriptions USING btree (school_id);
+
+CREATE INDEX idx_bus_subscriptions_bus_id ON public.bus_subscriptions USING btree (bus_id);
+
+CREATE INDEX idx_buses_school ON public.buses USING btree (school_id);
+
+CREATE INDEX idx_certificate_requests_certificate_id ON public.certificate_requests USING btree (certificate_id);
+
+CREATE INDEX idx_certificate_requests_parent ON public.certificate_requests USING btree (parent_id);
+
+CREATE INDEX idx_certificate_requests_reviewed_by ON public.certificate_requests USING btree (reviewed_by);
+
+CREATE INDEX idx_certificate_requests_school_status ON public.certificate_requests USING btree (school_id, status);
+
+CREATE INDEX idx_certificate_requests_student_id ON public.certificate_requests USING btree (student_id);
+
+CREATE INDEX idx_certificates_issued_by ON public.certificates USING btree (issued_by);
+
+CREATE INDEX idx_certificates_school ON public.certificates USING btree (school_id);
+
+CREATE INDEX idx_certificates_student ON public.certificates USING btree (student_id);
+
+CREATE INDEX idx_el_recent ON public.error_log USING btree (created_at DESC);
+
+CREATE INDEX idx_el_unresolved ON public.error_log USING btree (severity, created_at DESC) WHERE (resolved = false);
+
+CREATE INDEX idx_employees_manager ON public.employees USING btree (manager_id);
+
+CREATE INDEX idx_employees_school ON public.employees USING btree (school_id);
+
+CREATE INDEX idx_error_log_school_id ON public.error_log USING btree (school_id);
+
+CREATE INDEX idx_feedback_author_id ON public.feedback USING btree (author_id);
+
+CREATE INDEX idx_feedback_created ON public.feedback USING btree (created_at);
+
+CREATE INDEX idx_feedback_school ON public.feedback USING btree (school_id);
+
+CREATE INDEX idx_feedback_status ON public.feedback USING btree (status);
+
+CREATE INDEX idx_fees_school ON public.student_fees USING btree (school_id);
+
+CREATE INDEX idx_fees_school_academic_year ON public.student_fees USING btree (school_id, academic_year_id);
+
+CREATE INDEX idx_fees_school_created ON public.student_fees USING btree (school_id, created_at) WHERE (deleted_at IS NULL);
+
+CREATE INDEX idx_fees_student ON public.student_fees USING btree (student_id);
+
+CREATE INDEX idx_fees_student_academic_year ON public.student_fees USING btree (student_id, academic_year_id);
+
+CREATE INDEX idx_food_dispenses_dispensed_by ON public.food_dispenses USING btree (dispensed_by);
+
+CREATE INDEX idx_food_dispenses_item_id ON public.food_dispenses USING btree (item_id);
+
+CREATE INDEX idx_food_dispenses_school_id ON public.food_dispenses USING btree (school_id);
+
+CREATE INDEX idx_food_inventory_school_id ON public.food_inventory USING btree (school_id);
+
+CREATE INDEX idx_guardian_invites_invited_by ON public.guardian_invites USING btree (invited_by);
+
+CREATE INDEX idx_inventory_dispenses_dispensed_by ON public.inventory_dispenses USING btree (dispensed_by);
+
+CREATE INDEX idx_inventory_dispenses_item_id ON public.inventory_dispenses USING btree (item_id);
+
+CREATE INDEX idx_inventory_dispenses_school_id ON public.inventory_dispenses USING btree (school_id);
+
+CREATE INDEX idx_inventory_school ON public.inventory_items USING btree (school_id);
+
+CREATE INDEX idx_journal_entries_created_by ON public.journal_entries USING btree (created_by);
+
+CREATE INDEX idx_journal_entries_fee_id ON public.journal_entries USING btree (fee_id);
+
+CREATE INDEX idx_journal_entries_reversed_by_entry ON public.journal_entries USING btree (reversed_by_entry);
+
+CREATE INDEX idx_journal_entries_reverses_entry ON public.journal_entries USING btree (reverses_entry);
+
+CREATE INDEX idx_journal_entries_school_date ON public.journal_entries USING btree (school_id, entry_date);
+
+CREATE INDEX idx_journal_lines_account_id ON public.journal_lines USING btree (account_id);
+
+CREATE INDEX idx_journals_school ON public.journal_entries USING btree (school_id);
+
+CREATE INDEX idx_legal_consents_school_id ON public.legal_consents USING btree (school_id);
+
+CREATE INDEX idx_legal_consents_user ON public.legal_consents USING btree (user_id, document_type);
+
+CREATE INDEX idx_lines_entry ON public.journal_lines USING btree (entry_id);
+
+CREATE INDEX idx_lines_school_account ON public.journal_lines USING btree (school_id, account_id);
+
+CREATE INDEX idx_meal_orders_plan_id ON public.meal_orders USING btree (plan_id);
+
+CREATE INDEX idx_meal_orders_school_date ON public.meal_orders USING btree (school_id, meal_date);
+
+CREATE INDEX idx_meal_plans_school ON public.meal_plans USING btree (school_id);
+
+CREATE INDEX idx_meal_purchases_created_by ON public.meal_purchases USING btree (created_by);
+
+CREATE INDEX idx_meal_purchases_journal_entry_id ON public.meal_purchases USING btree (journal_entry_id);
+
+CREATE INDEX idx_meal_purchases_period ON public.meal_purchases USING btree (school_id, period);
+
+CREATE INDEX idx_meal_purchases_school ON public.meal_purchases USING btree (school_id);
+
+CREATE INDEX idx_meal_purchases_supplier_id ON public.meal_purchases USING btree (supplier_id);
+
+CREATE INDEX idx_meal_subs_school ON public.meal_subscriptions USING btree (school_id);
+
+CREATE INDEX idx_meal_subscriptions_plan_id ON public.meal_subscriptions USING btree (plan_id);
+
+CREATE INDEX idx_notif_guardian ON public.notifications USING btree (guardian_id);
+
+CREATE INDEX idx_notif_school ON public.notifications USING btree (school_id, audience);
+
+CREATE UNIQUE INDEX idx_nq_dedupe ON public.notification_queue USING btree (school_id, dedupe_key) WHERE (dedupe_key IS NOT NULL);
+
+CREATE INDEX idx_nq_due ON public.notification_queue USING btree (status, next_retry_at) WHERE (status = ANY (ARRAY['queued'::text, 'failed'::text]));
+
+CREATE INDEX idx_nq_school ON public.notification_queue USING btree (school_id);
+
+CREATE INDEX idx_parent_students_parent ON public.parent_students USING btree (parent_id);
+
+CREATE INDEX idx_parent_students_school ON public.parent_students USING btree (school_id);
+
+CREATE INDEX idx_parent_students_student_id ON public.parent_students USING btree (student_id);
+
+CREATE INDEX idx_payment_state_log_actor_id ON public.payment_state_log USING btree (actor_id);
+
+CREATE INDEX idx_payment_state_log_school_id ON public.payment_state_log USING btree (school_id);
+
+CREATE INDEX idx_payments_fee_id ON public.payments USING btree (fee_id);
+
+CREATE INDEX idx_payments_recorded_by ON public.payments USING btree (recorded_by);
+
+CREATE INDEX idx_payments_school_date ON public.payments USING btree (school_id, paid_at);
+
+CREATE INDEX idx_payroll_items_employee_id ON public.payroll_items USING btree (employee_id);
+
+CREATE INDEX idx_payroll_items_run ON public.payroll_items USING btree (run_id);
+
+CREATE INDEX idx_payroll_runs_created_by ON public.payroll_runs USING btree (created_by);
+
+CREATE INDEX idx_payroll_runs_journal_entry_id ON public.payroll_runs USING btree (journal_entry_id);
+
+CREATE INDEX idx_payroll_runs_payment_journal_entry_id ON public.payroll_runs USING btree (payment_journal_entry_id);
+
+CREATE INDEX idx_payroll_runs_school_id ON public.payroll_runs USING btree (school_id);
+
+CREATE INDEX idx_pending_payments_fee_id ON public.pending_payments USING btree (fee_id);
+
+CREATE INDEX idx_pending_payments_guardian_id ON public.pending_payments USING btree (guardian_id);
+
+CREATE INDEX idx_pending_payments_resolved_by ON public.pending_payments USING btree (resolved_by);
+
+CREATE INDEX idx_pending_school ON public.pending_payments USING btree (school_id, status);
+
+CREATE UNIQUE INDEX idx_pp_idem ON public.pending_payments USING btree (idempotency_key) WHERE (idempotency_key IS NOT NULL);
+
+CREATE INDEX idx_profiles_phone ON public.profiles USING btree (phone) WHERE (phone IS NOT NULL);
+
+CREATE INDEX idx_profiles_school ON public.profiles USING btree (school_id);
+
+CREATE INDEX idx_psl_payment ON public.payment_state_log USING btree (payment_id);
+
+CREATE INDEX idx_receipt_verifications_school_registration_id ON public.receipt_verifications USING btree (school_registration_id);
+
+CREATE INDEX idx_salary_requests_decided_by ON public.salary_requests USING btree (decided_by);
+
+CREATE INDEX idx_salary_requests_employee_id ON public.salary_requests USING btree (employee_id);
+
+CREATE INDEX idx_salary_requests_requested_by ON public.salary_requests USING btree (requested_by);
+
+CREATE INDEX idx_salreq_school ON public.salary_requests USING btree (school_id);
+
+CREATE INDEX idx_staff_invites_email ON public.staff_invites USING btree (email);
+
+CREATE INDEX idx_staff_invites_invited_by ON public.staff_invites USING btree (invited_by);
+
+CREATE INDEX idx_students_active ON public.students USING btree (school_id) WHERE (deleted_at IS NULL);
+
+CREATE INDEX idx_students_guardian_phone ON public.students USING btree (guardian_phone) WHERE (guardian_phone IS NOT NULL);
+
+CREATE INDEX idx_students_school ON public.students USING btree (school_id);
+
+CREATE INDEX idx_sub_school ON public.subscriptions USING btree (school_id);
+
+CREATE INDEX idx_suppliers_school ON public.suppliers USING btree (school_id);
+
+CREATE UNIQUE INDEX promotion_log_school_year_uniq ON public.promotion_log USING btree (school_id, academic_year);
+
+CREATE UNIQUE INDEX subscriptions_one_active_per_school ON public.subscriptions USING btree (school_id) WHERE (status = ANY (ARRAY['active'::sub_status, 'trial'::sub_status, 'pending'::sub_status]));
+
+CREATE UNIQUE INDEX uq_meal_subs_student_plan ON public.meal_subscriptions USING btree (student_id, plan_id);
+
+CREATE UNIQUE INDEX uq_notification_queue_dedupe_key ON public.notification_queue USING btree (dedupe_key) WHERE (dedupe_key IS NOT NULL);
+
+CREATE UNIQUE INDEX uq_payroll_run_period ON public.payroll_runs USING btree (school_id, period_year, period_month) WHERE (status <> 'cancelled'::text);
