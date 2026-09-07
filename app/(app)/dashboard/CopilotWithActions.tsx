@@ -13,10 +13,13 @@ type SmartRec = {
 }
 
 // أين يذهب كل إجراء
+// ⚠️ smart_recommendations() ترجع عدّاد وإجمالي فقط (بلا IDs) — لذا لا يمكن
+// الانتقال مباشرة لطالب بعينه. الحل: تمرير الفلتر كـ query param، وصفحتا
+// الرسوم/الطلاب تُفعّلانه تلقائياً وتعرضان فقط الأسماء المطابقة.
 const ROUTES: Record<string, string> = {
-  send_overdue_reminders: '/fees#overdue',
-  view_partial: '/fees',
-  view_nofee: '/students',
+  send_overdue_reminders: '/fees?status=overdue#overdue',
+  view_partial: '/fees?status=partial',
+  view_nofee: '/students?filter=nofee',
   invite_parents: '/students#invite-parents',
 }
 
