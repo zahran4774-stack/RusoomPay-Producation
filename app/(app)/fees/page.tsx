@@ -1,5 +1,7 @@
 // صفحة الرسوم والفواتير — مكون خادم
 // يجلب الطلاب مع بنود رسومهم وبيانات ولي الأمر (للتذكير) + هوية المدرسة (للفواتير)
+// + مؤشر خطورة التعثر — يُجلب هنا (خادم) لا داخل المكون (عميل) لمنع وميض إعادة
+// التخطيط عند التحميل غير المتزامن.
 // تحسين الأداء: الاستعلامات المستقلّة تُنفَذ متوازية (Promise.all).
 import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
@@ -13,11 +15,12 @@ export default async function FeesPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // ═══ كل الاستعلامات المستقلّة معاً — بدل ثلاث رحلات متتابعة ═══
+  // ═══ كل الاستعلامات المستقلّة معاً — بدل رحلات متتابعة ═══
   const [
     { data: school },
     { data: students },
     { data: pending },
+    { data: riskData },
   ] = await Promise.all([
     supabase.from('schools')
       .select('name, branch, currency, cr_number, moe_license, vat_number, phone, email, address, logo_url, color, bank_name, bank_account, bank_iban, bank_holder, bank_enabled')
@@ -31,6 +34,7 @@ export default async function FeesPage() {
       // فواتير طلاب حقيقيين بصمت. لا حل صحيح لهذا الاستعلام غير ترقيم حقيقي
       // (يحتاج تصميماً منفصلاً بسبب اعتماد الطباعة/التقارير على القائمة كاملة).
     supabase.rpc('pending_payments_list'),
+    supabase.rpc('risk_scores'),
   ])
 
   return (
@@ -70,12 +74,11 @@ export default async function FeesPage() {
       <div id="pending-payments">
         <PendingPayments initial={pending || []} />
       </div>
-      <RiskIndicator currency={school?.currency ?? 'OMR'} />
+      <RiskIndicator currency={school?.currency ?? 'OMR'} data={riskData} />
       <div id="fees-table" style={{ scrollMarginTop: 80 }}>
         <div id="overdue" style={{ scrollMarginTop: 80 }} />
         <FeesManager students={students ?? []} school={school} currency={school?.currency ?? 'OMR'} />
-    </div>
-      
+      </div>
     </div>
   )
 }
