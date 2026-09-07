@@ -2,7 +2,8 @@
 // app/(app)/students/StudentsByClass.tsx
 // كروت الشعب الصفّية — كل كرت يعرض الصف/الشعبة وعدد الطلاب، وبنقرة يتوسّع لعرض طلابها.
 // التوسّع في المتصفّح (لا طلبات إضافية) — سريع ومناسب حتى مئات الطلاب.
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import CertificatesButton from './CertificatesButton'
 import EditStudent from './EditStudent'
 import { printStudentCard, printClassCards } from '@/lib/print-student-card'
@@ -15,6 +16,8 @@ type Student = {
   birth_date?: string | null; gender?: string | null
   father_phone?: string | null; mother_phone?: string | null; address?: string | null
   annual_fee?: number | null; discount_pct?: number | null
+  // لتمكين فلتر "بلا رسوم فقط" — لا نحتاج غير وجود/عدم وجود صف واحد على الأقل
+  student_fees?: { id: string }[] | null
 }
 
 type ClassGroup = { key: string; grade: string; section: string; students: Student[] }
@@ -36,21 +39,35 @@ export default function StudentsByClass({
 }) {
   const [openKey, setOpenKey] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  // بلا رسوم فقط — قادمة من زر "مراجعة الطلاب" في School Copilot (missing_fees)
+  const [noFeeOnly, setNoFeeOnly] = useState(false)
   const [pageMap, setPageMap] = useState<Record<string, number>>({})   // صفحة كل شعبة (مستقلّة لكل كرت)
+
+  // ─── تفعيل الفلتر تلقائياً عند القدوم من School Copilot (?filter=nofee) ───
+  const searchParams = useSearchParams()
+  useEffect(() => {
+    if (searchParams.get('filter') === 'nofee') setNoFeeOnly(true)
+  }, [searchParams])
+
+  // الطلاب بعد تطبيق فلتر "بلا رسوم" (قبل البحث النصي والتجميع بالشعب)
+  const baseStudents = useMemo(
+    () => (noFeeOnly ? students.filter((s) => (s.student_fees ?? []).length === 0) : students),
+    [students, noFeeOnly]
+  )
 
   // تجميع الطلاب في شعب صفّية (مرّة واحدة، مخزّن)
   const groups = useMemo<ClassGroup[]>(() => {
     const map = new Map<string, ClassGroup>()
-    for (const s of students) {
+    for (const s of baseStudents) {
       const section = s.section ?? '—'
       const key = `${s.grade}||${section}`
       if (!map.has(key)) map.set(key, { key, grade: s.grade, section, students: [] })
       map.get(key)!.students.push(s)
     }
     return [...map.values()].sort((a, b) =>
-      (a.grade + a.section).localeCompare(b.grade + b.section, 'ar', { numeric: true })
+      (a.grade + a.section).localeCompare(b.grade + a.section, 'ar', { numeric: true })
     )
-  }, [students])
+  }, [baseStudents])
 
   // بحث سريع بالاسم أو الرقم — يفتح الشعبة المطابقة
   const filtered = useMemo(() => {
@@ -71,25 +88,48 @@ export default function StudentsByClass({
 
   return (
     <div>
-      {/* شريط البحث */}
-      <input
-        value={query} onChange={(e) => setQuery(e.target.value)}
-        placeholder="🔍 ابحث باسم الطالب أو رقمه…"
-        style={{
-          width: '100%', height: 46, padding: '0 16px', borderRadius: 12,
-          border: '1.5px solid #E2E7EE', fontSize: 15, marginBottom: 18, fontFamily: 'inherit',
-        }}
-      />
+      {/* شريط البحث + فلتر "بلا رسوم" */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 18 }}>
+        <input
+          value={query} onChange={(e) => setQuery(e.target.value)}
+          placeholder="🔍 ابحث باسم الطالب أو رقمه…"
+          style={{
+            flex: '1 1 260px', height: 46, padding: '0 16px', borderRadius: 12,
+            border: '1.5px solid #E2E7EE', fontSize: 15, fontFamily: 'inherit',
+          }}
+        />
+        <button
+          onClick={() => setNoFeeOnly((v) => !v)}
+          style={{
+            height: 46, padding: '0 16px', borderRadius: 12, cursor: 'pointer', fontWeight: 700,
+            fontFamily: 'inherit', fontSize: 14,
+            border: `1.5px solid ${noFeeOnly ? '#B54708' : '#E2E7EE'}`,
+            background: noFeeOnly ? '#FFF6ED' : '#fff',
+            color: noFeeOnly ? '#8A5A1D' : '#445',
+          }}>
+          {noFeeOnly ? '✓ ' : ''}بلا رسوم فقط
+        </button>
+        {noFeeOnly && (
+          <button
+            onClick={() => setNoFeeOnly(false)}
+            style={{
+              height: 46, padding: '0 16px', borderRadius: 12, cursor: 'pointer',
+              border: '1.5px solid #EEF2F7', background: '#fff', color: '#667', fontFamily: 'inherit', fontSize: 14,
+            }}>
+            ✕ مسح الفلتر
+          </button>
+        )}
+      </div>
 
       {/* شبكة كروت الشعب */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 14 }}>
         {filtered.map((g) => {
-          const isOpen = openKey === g.key || !!query
+          const isOpen = openKey === g.key || !!query || noFeeOnly
           return (
             <div key={g.key} style={{ gridColumn: isOpen ? '1 / -1' : 'auto' }}>
               {/* الكرت */}
               <button
-                onClick={() => { setOpenKey(isOpen && !query ? null : g.key); setPageMap((m) => ({ ...m, [g.key]: 1 })) }}
+                onClick={() => { setOpenKey(isOpen && !query && !noFeeOnly ? null : g.key); setPageMap((m) => ({ ...m, [g.key]: 1 })) }}
                 aria-expanded={isOpen}
                 style={{
                   width: '100%', textAlign: 'right', cursor: 'pointer', fontFamily: 'inherit',
@@ -238,7 +278,9 @@ export default function StudentsByClass({
       </div>
 
       {filtered.length === 0 && (
-        <div style={{ textAlign: 'center', color: '#999', padding: 24 }}>لا نتائج مطابقة لبحثك.</div>
+        <div style={{ textAlign: 'center', color: '#999', padding: 24 }}>
+          {noFeeOnly ? 'لا يوجد طلاب بلا رسوم — كل الطلاب لهم فواتير مسجّلة.' : 'لا نتائج مطابقة لبحثك.'}
+        </div>
       )}
     </div>
   )
