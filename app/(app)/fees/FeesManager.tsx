@@ -1,8 +1,8 @@
 'use client'
 // مدير الرسوم — بحث وتصفية + بطاقات ملخّص + صفوف قابلة للطي (Accordion) + صفحات (Pagination)
 // + إضافة رسم لكل طالب + تذكير واتساب (فردي/جماعي) · الفاتورة تحمل هوية المدرسة
-import { useState, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useMemo, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
 import { generateInvoice } from '@/lib/invoice-pdf'
 import CashPayment from './CashPayment'
@@ -38,6 +38,8 @@ export default function FeesManager({ students, school, currency }: { students: 
   const [q, setQ] = useState('')
   const [grade, setGrade] = useState('')
   const [overdueOnly, setOverdueOnly] = useState(false)
+  // دفعات جزئية فقط — قادمة من زر "تابع الدفعات الجزئية" في School Copilot
+  const [partialOnly, setPartialOnly] = useState(false)
   const [open, setOpen] = useState<string | null>(null)   // الطالب المفتوح (Accordion)
   const [page, setPage] = useState(1)
 
@@ -45,6 +47,16 @@ export default function FeesManager({ students, school, currency }: { students: 
   const [remindingId, setRemindingId] = useState<string | null>(null)   // الطالب الجاري تذكيره (فردي)
   const [bulkBusy, setBulkBusy] = useState(false)
   const [toast, setToast] = useState<{ text: string; ok: boolean } | null>(null)
+
+  // ─── تفعيل الفلتر المطلوب تلقائياً عند القدوم من School Copilot ───
+  // ?status=overdue → نفس فلتر "المتأخرات فقط" (send_overdue_reminders)
+  // ?status=partial → دفعات جزئية لم تكتمل بعد ولم يفت موعدها (view_partial)
+  const searchParams = useSearchParams()
+  useEffect(() => {
+    const status = searchParams.get('status')
+    if (status === 'overdue') setOverdueOnly(true)
+    if (status === 'partial') setPartialOnly(true)
+  }, [searchParams])
 
   const dec = CUR_DEC[currency] ?? 3
   const sym = CUR_SYM[currency] ?? 'ر.ع'
@@ -58,20 +70,30 @@ export default function FeesManager({ students, school, currency }: { students: 
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase()
+    const today = new Date().toISOString().slice(0, 10)
     return students.filter((s) => {
       if (grade && s.grade !== grade) return false
       if (term) {
         const hay = `${s.full_name} ${s.code} ${s.section ?? ''}`.toLowerCase()
         if (!hay.includes(term)) return false
       }
+      const fees = s.student_fees ?? []
       if (overdueOnly) {
-        const fees = s.student_fees ?? []
         const remain = fees.reduce((a, f) => a + ((f.total ?? 0) - (f.paid ?? 0)), 0)
         if (remain <= 0.0005) return false
       }
+      if (partialOnly) {
+        // نفس تعريف partial_followup في smart_recommendations(): بدأ السداد
+        // (paid > 0)، لم يكتمل، وموعد الاستحقاق لم يفت بعد.
+        const hasPartial = fees.some((f) => {
+          const fRemain = (f.total ?? 0) - (f.paid ?? 0)
+          return (f.paid ?? 0) > 0 && fRemain > 0.0005 && (!f.due_date || f.due_date >= today)
+        })
+        if (!hasPartial) return false
+      }
       return true
     })
-  }, [students, q, grade, overdueOnly])
+  }, [students, q, grade, overdueOnly, partialOnly])
 
   // ملخّص شامل لكل النتائج المُصفّاة (يظهر دائماً)
   const summary = useMemo(() => {
@@ -94,7 +116,7 @@ export default function FeesManager({ students, school, currency }: { students: 
       .filter((x) => x.remain > 0.0005 && x.student.guardian_phone)
   }, [students])
 
-  const active = q.trim() !== '' || grade !== '' || overdueOnly
+  const active = q.trim() !== '' || grade !== '' || overdueOnly || partialOnly
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
@@ -260,9 +282,20 @@ export default function FeesManager({ students, school, currency }: { students: 
             {overdueOnly ? '✓ ' : ''}المتأخرات فقط
           </button>
 
+          <button
+            onClick={() => { setPartialOnly((v) => !v); resetPage() }}
+            style={{
+              ...inp, cursor: 'pointer', fontWeight: 700,
+              border: `1.5px solid ${partialOnly ? '#B54708' : '#DDE3EC'}`,
+              background: partialOnly ? '#FFF6ED' : '#fff',
+              color: partialOnly ? '#8A5A1D' : '#445',
+            }}>
+            {partialOnly ? '✓ ' : ''}دفعات جزئية فقط
+          </button>
+
           {active && (
             <button
-              onClick={() => { setQ(''); setGrade(''); setOverdueOnly(false); resetPage() }}
+              onClick={() => { setQ(''); setGrade(''); setOverdueOnly(false); setPartialOnly(false); resetPage() }}
               style={{ ...inp, cursor: 'pointer', color: '#667', border: '1.5px solid #EEF2F7' }}>
               ✕ مسح
             </button>
