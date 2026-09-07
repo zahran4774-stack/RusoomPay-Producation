@@ -1,5 +1,5 @@
 'use client'
-// مكون التغذية المدرسية — باقات (سنوية/شهرية) + اشتراكات + فوترة
+// مكون التغذية المدرسية — باقات (سنوية/شهرية) + اشتراكات + فوترة + تعديل أسعار
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import { printReport, type SchoolHeader } from '@/lib/print-report'
@@ -75,6 +75,9 @@ export default function CafeteriaClient({ initialPlans, initialSubscribers, stud
   const [pName, setPName] = useState('')
   const [pFee, setPFee] = useState('')
   const [pType, setPType] = useState<'annual' | 'monthly'>('monthly')
+  // تعديل سعر باقة قائمة
+  const [editingPlan, setEditingPlan] = useState<Plan | null>(null)
+  const [editFee, setEditFee] = useState('')
   // نموذج اشتراك
   const [selStudent, setSelStudent] = useState('')
   const [selPlan, setSelPlan] = useState('')
@@ -98,6 +101,14 @@ export default function CafeteriaClient({ initialPlans, initialSubscribers, stud
     const { error } = await supabase.rpc('save_meal_plan', { p_name: pName.trim(), p_fee: parseFloat(pFee), p_type: pType })
     if (error) { setMsg('خطأ: ' + error.message); setBusy(false); return }
     setPName(''); setPFee(''); setPType('monthly'); await refresh(); setMsg('✓ تمت إضافة الباقة'); setBusy(false)
+  }
+
+  async function saveEditedFee() {
+    if (!editingPlan || !editFee) return
+    setBusy(true); setMsg('')
+    const { error } = await supabase.rpc('update_meal_plan', { p_id: editingPlan.id, p_fee: parseFloat(editFee) })
+    if (error) { setMsg('خطأ: ' + error.message); setBusy(false); return }
+    setEditingPlan(null); setEditFee(''); await refresh(); setMsg('✓ تم تحديث السعر'); setBusy(false)
   }
 
   async function subscribe() {
@@ -139,13 +150,14 @@ export default function CafeteriaClient({ initialPlans, initialSubscribers, stud
         </div>
         {plans.length > 0 && (
           <div style={{ overflowX: 'auto', marginBottom: 16 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 420 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
               <thead>
                 <tr style={{ background: '#F7F9FC', textAlign: 'right' }}>
                   <th style={{ padding: '10px 12px', fontSize: 13, color: '#69757F' }}>الباقة</th>
                   <th style={{ padding: '10px 12px', fontSize: 13, color: '#69757F' }}>النوع</th>
                   <th style={{ padding: '10px 12px', fontSize: 13, color: '#69757F' }}>الرسم</th>
                   <th style={{ padding: '10px 12px', fontSize: 13, color: '#69757F' }}>المشتركون</th>
+                  <th style={{ padding: '10px 12px', fontSize: 13, color: '#69757F' }}></th>
                 </tr>
               </thead>
               <tbody>
@@ -155,15 +167,42 @@ export default function CafeteriaClient({ initialPlans, initialSubscribers, stud
                     <td style={{ padding: '10px 12px' }}><span style={badge(p.plan_type)}>{typeLabel(p.plan_type)}</span></td>
                     <td style={{ padding: '10px 12px' }}>{fmt(p.fee)}</td>
                     <td style={{ padding: '10px 12px' }}>{p.subscribers}</td>
+                    <td style={{ padding: '10px 12px' }}>
+                      <button onClick={() => { setEditingPlan(p); setEditFee(String(p.fee)) }}
+                        style={{ background: '#EEF2F9', border: '1px solid #D8E2EF', borderRadius: 8, padding: '5px 11px', fontSize: 12.5, fontWeight: 600, color: '#163B68', cursor: 'pointer', fontFamily: 'inherit' }}>
+                        ✏️ تعديل
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
+
+        {editingPlan && (
+          <div style={{ background: '#F7F9FC', borderRadius: 10, padding: 14, marginBottom: 16, display: 'flex', gap: 10, alignItems: 'end', flexWrap: 'wrap' }}>
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 600, color: '#445', display: 'block', marginBottom: 6 }}>
+                سعر جديد لـ «{editingPlan.name}» ({typeLabel(editingPlan.plan_type)})
+              </label>
+              <input style={input} type="number" step="0.001" value={editFee} onChange={(e) => setEditFee(e.target.value)} placeholder="0.000" />
+            </div>
+            <button style={btnGold} onClick={saveEditedFee} disabled={busy}>حفظ السعر</button>
+            <button style={btnGhost} onClick={() => { setEditingPlan(null); setEditFee('') }} disabled={busy}>إلغاء</button>
+          </div>
+        )}
+
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 10, alignItems: 'end' }}>
           <div><label style={{ fontSize: 13, fontWeight: 600, color: '#445', display: 'block', marginBottom: 6 }}>اسم الباقة</label>
-            <input style={input} value={pName} onChange={(e) => setPName(e.target.value)} placeholder="مثال: إفطار + غداء" /></div>
+            <input style={input} value={pName} onChange={(e) => setPName(e.target.value)} placeholder="مثال: إفطار + غداء" list="meal-suggestions" />
+            <datalist id="meal-suggestions">
+              <option value="إفطار" />
+              <option value="غداء" />
+              <option value="وجبة صحية" />
+              <option value="عصير" />
+            </datalist>
+          </div>
           <div><label style={{ fontSize: 13, fontWeight: 600, color: '#445', display: 'block', marginBottom: 6 }}>النوع</label>
             <select style={input} value={pType} onChange={(e) => setPType(e.target.value as 'annual' | 'monthly')}>
               <option value="monthly">شهرية</option>
@@ -203,6 +242,7 @@ export default function CafeteriaClient({ initialPlans, initialSubscribers, stud
             </select></div>
           <button style={btnGold} onClick={subscribe} disabled={busy}>حفظ</button>
         </div>
+
         {subs.length > 0 && (
           <div style={{ overflowX: 'auto', marginTop: 16 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 420 }}>
@@ -231,7 +271,7 @@ export default function CafeteriaClient({ initialPlans, initialSubscribers, stud
         )}
       </div>
 
-      {/* الفوترة الشهرية — فقط للمشتركين الشهريين غير المفوترين لهذا الشهر */}
+      {/* الفوترة الشهرية — فقط للمشتركين في باقات شهرية غير المفوترة لهذا الشهر */}
       <div style={card}>
         <h3 style={{ margin: '0 0 14px', color: '#0F2744', fontSize: 16 }}>الفوترة الشهرية</h3>
         <div style={{ display: 'flex', gap: 10, alignItems: 'end', flexWrap: 'wrap' }}>
@@ -241,10 +281,10 @@ export default function CafeteriaClient({ initialPlans, initialSubscribers, stud
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select></div>
-          <button style={btnGold} onClick={bill} disabled={busy}>⚡ فوترة الشهريين غير المفوترين لهذا الشهر</button>
+          <button style={btnGold} onClick={bill} disabled={busy}>⚡ فوترة باقات الاشتراك الشهري غير المفوترة</button>
         </div>
         <p style={{ fontSize: 12, color: '#8A94A6', marginTop: 10 }}>
-          💡 تصدر رسومًا فقط للمشتركين الشهريين اللي ما انفوترو لهذا الشهر بعد (تدخل كإيراد للمدرسة، حساب 4220). الباقات السنوية تُفوتر تلقائيًا مرة واحدة عند التسجيل ولا تظهر هنا.
+          💡 تصدر رسوماً فقط لمشتركي الباقات الشهرية الذين لم تُصدر فواتيرهم لهذا الشهر بعد (تدخل كإيراد للمدرسة، حساب 4220). الباقات السنوية تُفوتر تلقائياً مرة واحدة عند التسجيل ولا تظهر هنا.
         </p>
       </div>
 
