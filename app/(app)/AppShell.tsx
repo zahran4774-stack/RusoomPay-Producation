@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase-client'
 import type { Role } from '@/lib/roles'
 import { isStaff, canAccessFinance, isOwner } from '@/lib/roles'
 import { LogoMark } from '../Logo'
+import BranchSwitcher from './BranchSwitcher'
 import {
   LayoutDashboard, GraduationCap, ReceiptText, Users, Apple, Bus,
   Package, BarChart3, ClipboardList, Gem, MessageCircle, Settings, Wallet,
@@ -160,6 +161,9 @@ export default function AppShell({ role, brandColor, schoolLogo, schoolName, chi
               {schoolName && <span className="school-name" title={schoolName}>{schoolName}</span>}
             </div>
           )}
+
+          {/* مبدّل الفروع — يظهر تلقائياً فقط لمن يملك عضوية فعّالة في أكثر من فرع */}
+          <BranchSwitcher />
 
           <nav className="side-nav">
             {NAV.map((entry) => {
