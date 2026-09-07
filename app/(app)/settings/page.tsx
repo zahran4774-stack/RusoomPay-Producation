@@ -11,6 +11,7 @@ import SectionStyleSetting from './SectionStyleSetting'
 import BankSettings from './BankSettings'
 import GradePricing from './GradePricing'
 import AcademicYearSettings from './AcademicYearSettings'
+import BranchManager from './BranchManager'
 import SettingsTabs, { type SettingsTab } from './SettingsTabs'
 
 export default async function SettingsPage() {
@@ -131,6 +132,10 @@ export default async function SettingsPage() {
     ...(isOwner ? [{
       id: 'academic-year', label: 'العام الدراسي',
       content: <AcademicYearSettings initial={academicYears} />,
+    }] : []),
+    ...(isOwner ? [{
+      id: 'branches', label: 'الفروع',
+      content: <BranchManager />,
     }] : []),
     ...(isOwner ? [{
       id: 'staff-backup', label: 'الطاقم والنسخ الاحتياطي',
