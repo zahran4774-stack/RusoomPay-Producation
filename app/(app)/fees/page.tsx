@@ -75,5 +75,7 @@ export default async function FeesPage() {
         <div id="overdue" style={{ scrollMarginTop: 80 }} />
         <FeesManager students={students ?? []} school={school} currency={school?.currency ?? 'OMR'} />
     </div>
+      
+    </div>
   )
 }
