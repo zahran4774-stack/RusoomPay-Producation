@@ -5,7 +5,6 @@ import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import FeesManager from './FeesManager'
 import PendingPayments from './PendingPayments'
-import FocusScroller from '../FocusScroller'
 import RiskIndicator from './RiskIndicator'
 import PrintButton from '../PrintButton'
 
@@ -75,8 +74,6 @@ export default async function FeesPage() {
       <div id="fees-table" style={{ scrollMarginTop: 80 }}>
         <div id="overdue" style={{ scrollMarginTop: 80 }} />
         <FeesManager students={students ?? []} school={school} currency={school?.currency ?? 'OMR'} />
-      </div>
-      <FocusScroller />
     </div>
   )
 }
