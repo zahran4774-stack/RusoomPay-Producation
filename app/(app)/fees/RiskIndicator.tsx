@@ -1,12 +1,12 @@
 'use client'
 // app/(app)/fees/RiskIndicator.tsx
-// مؤشّر خطورة التعثّر — يعرض فقط نتائج محرّك risk_scores (طبقة الذكاء).
-// لا منطق أعمال هنا. يظهر إن كان المحرّك مفعّلاً فقط.
-// تحديث: زر "إرسال تذكير ودّي" يستخدم الآن قالب fee_reminder المعتمد من Twilio
-// بدل النص الحر — النص الحر يفشل خارج نافذة 24 ساعة من رسالة المستلم.
-import { useState, useEffect } from 'react'
+// مؤشّر خطورة التعثّر — يعرض بيانات risk_scores المُجلَبة من الخادم (page.tsx)
+// بدل جلبها هنا عبر useEffect — يمنع وميض إعادة التخطيط عند التحميل غير المتزامن.
+// لا منطق أعمال هنا سوى عرض البيانات وإرسال التذكير.
+// زر "إرسال تذكير ودّي" يستخدم قالب fee_reminder المعتمد من Twilio بدل النص الحر.
+import { useState } from 'react'
 import { createClient } from '@/lib/supabase-client'
-import { AlertTriangle, Phone } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 
 type RiskItem = {
   student_id: string; student_name: string; student_code: string
@@ -14,6 +14,7 @@ type RiskItem = {
   outstanding: number; overdue_count: number; oldest_days: number
   score: number; level: string; action: string
 }
+type RiskData = { ok?: boolean; disabled?: boolean; items?: RiskItem[] } | null
 
 const levelColor = (lvl: string) => lvl === 'عالية' ? '#B42318' : lvl === 'متوسّطة' ? '#B54708' : '#5A6B7B'
 const levelBg = (lvl: string) => lvl === 'عالية' ? '#FEF0F0' : lvl === 'متوسّطة' ? '#FFF6ED' : '#F2F4F7'
@@ -23,28 +24,16 @@ const td: React.CSSProperties = { padding: '11px 14px', fontSize: 13.5, color: '
 
 const PAGE_SIZE = 6
 
-export default function RiskIndicator({ currency }: { currency: string }) {
+export default function RiskIndicator({ currency, data }: { currency: string; data: RiskData }) {
   const supabase = createClient()
-  const [items, setItems] = useState<RiskItem[] | null>(null)
-  const [disabled, setDisabled] = useState(false)
   const [page, setPage] = useState(1)
   const sym = currency === 'OMR' ? 'ر.ع' : currency
   const fmt = (n: number) => new Intl.NumberFormat('en', { minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(n || 0)
 
-  useEffect(() => {
-    let active = true
-    ;(async () => {
-      const { data } = await supabase.rpc('risk_scores')
-      if (!active) return
-      const d = data as { ok?: boolean; disabled?: boolean; items?: RiskItem[] } | null
-      if (d?.disabled) { setDisabled(true); return }
-      setItems(d?.items ?? [])
-    })()
-    return () => { active = false }
-  }, [supabase])
-
-  if (disabled) return null
-  if (items === null) return null
+  // بلا useEffect وبلا حالة تحميل — البيانات وصلت جاهزة من الخادم مع الصفحة،
+  // فلا فرق ارتفاع بين أول رسم والنهائي، ولا وميض.
+  if (data?.disabled) return null
+  const items = data?.items ?? []
   if (items.length === 0) return null
 
   const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE))
@@ -97,12 +86,11 @@ export default function RiskIndicator({ currency }: { currency: string }) {
                         const { data: sch } = await supabase.from('schools').select('name').limit(1).single()
                         if (sch?.name) school = sch.name
                         // تطبيع الرقم العُماني: نزيل المسافات والرموز، ونضمن رمز الدولة 968
-let raw = (r.phone || '').replace(/[\s\-()]/g, '')
-if (raw.startsWith('+')) raw = raw.slice(1)
-if (raw.startsWith('00')) raw = raw.slice(2)
-if (!raw.startsWith('968') && raw.length === 8) raw = '968' + raw  // رقم عُماني محلي (8 أرقام)
-const to = `+${raw}`
-
+                        let raw = (r.phone || '').replace(/[\s\-()]/g, '')
+                        if (raw.startsWith('+')) raw = raw.slice(1)
+                        if (raw.startsWith('00')) raw = raw.slice(2)
+                        if (!raw.startsWith('968') && raw.length === 8) raw = '968' + raw
+                        const to = `+${raw}`
                         try {
                           const res = await fetch('/api/send-whatsapp', {
                             method: 'POST',
@@ -120,7 +108,7 @@ const to = `+${raw}`
                           })
                           const data = await res.json()
                           alert(data.success ? 'تم إرسال التذكير عبر واتساب ✅' : 'فشل الإرسال: ' + (data.error || 'خطأ'))
-                        } catch (e) {
+                        } catch {
                           alert('خطأ في الإرسال')
                         }
                       }}
