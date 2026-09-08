@@ -26,8 +26,12 @@ export default async function SettingsPage() {
     .eq('id', user.id)
     .maybeSingle()
 
-  const isOwner = profile?.role === 'owner'
+  // ⚠️ الإداري الآن مفوَّض بكامل صلاحيات المالك عملياً (عدا كونه "المالك المسجِّل" رسمياً) —
+  // isOwner هنا تعني "له صلاحيات الإدارة العليا الكاملة"، وتشمل owner و admin معاً.
   const isAdmin = profile?.role === 'admin'
+  const isOwner = profile?.role === 'owner' || isAdmin
+  // إضافة الفروع والنظرة التجميعية عليها: حكرًا على المالك الحقيقي فقط، ليس الإداري
+  const isRealOwner = profile?.role === 'owner'
   // تسعير المراحل يُستخدم فقط من قبل من يملك صلاحية تسجيل/تعديل الطلاب أصلاً (المدير/الإداري)
   const canManageGrades = isOwner || isAdmin
 
@@ -133,7 +137,7 @@ export default async function SettingsPage() {
       id: 'academic-year', label: 'العام الدراسي',
       content: <AcademicYearSettings initial={academicYears} />,
     }] : []),
-    ...(isOwner ? [{
+    ...(isRealOwner ? [{
       id: 'branches', label: 'الفروع',
       content: <BranchManager />,
     }] : []),
