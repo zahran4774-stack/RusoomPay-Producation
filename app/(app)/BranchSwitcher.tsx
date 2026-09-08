@@ -97,19 +97,21 @@ export default function BranchSwitcher() {
         )}
       </div>
 
-      {/* رابط النظرة التجميعية — يظهر بنفس شرط ظهور المبدّل (فرعان فأكثر) */}
-      <Link
-        href="/organization"
-        style={{
-          display: 'flex', alignItems: 'center', gap: 7, marginTop: 6,
-          padding: '6px 12px', borderRadius: 8, fontSize: 12.5, fontWeight: 600,
-          color: pathname === '/organization' ? 'var(--brand)' : '#667',
-          textDecoration: 'none',
-        }}
-      >
-        <LayoutGrid size={14} strokeWidth={2} />
-        نظرة عامة على كل الفروع
-      </Link>
+      {/* رابط النظرة التجميعية — حكرًا على المالك الحقيقي فقط (org_overview مقيّدة بنفس الشرط في الخلفية) */}
+      {active.role === 'owner' && (
+        <Link
+          href="/organization"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 7, marginTop: 6,
+            padding: '6px 12px', borderRadius: 8, fontSize: 12.5, fontWeight: 600,
+            color: pathname === '/organization' ? 'var(--brand)' : '#667',
+            textDecoration: 'none',
+          }}
+        >
+          <LayoutGrid size={14} strokeWidth={2} />
+          نظرة عامة على كل الفروع
+        </Link>
+      )}
     </div>
   )
 }
