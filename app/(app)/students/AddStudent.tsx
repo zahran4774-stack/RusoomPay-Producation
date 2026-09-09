@@ -95,6 +95,11 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
       p_code: f.code || null,
       p_annual_fee: Number(f.annual_fee),
       p_discount_pct: Number(f.discount_pct) || 0,
+      // ⚠️ إصلاح: كان هذا الحقل مفقوداً رغم أن النموذج يعرض قسم النقل المدرسي
+      // كاملاً — بدونه يبقى transport_type='none' للأبد مهما اختار المستخدم
+      // باصاً فعلياً (ولا توجد دالة تعديل تصلحه لاحقاً)، فتفوت جملة "شاملة
+      // النقل" في وصف الفاتورة التي تبنيها add_student() بالفعل.
+      p_transport_type: wantsTransport && selectedBus ? 'school' : 'none',
     })
     setSaving(false)
     if (error) { setErr(error.message); return }
