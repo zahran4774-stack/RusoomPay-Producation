@@ -1,7 +1,24 @@
 // Middleware — يحدّث جلسة المستخدم ويحمي المسارات
 // يعمل على الخادم قبل كل طلب — لا يمكن تجاوزه من المتصفح
+//
+// ⚠️ إصلاح أمني: الإصدار السابق استخدم قائمة "مسارات محمية" يدوية، ونسيت
+// سبعة مسارات فعلية (cafeteria, feedback, inventory, parent, payroll,
+// settings, transport) — كل صفحة فيها كانت تحمي نفسها داخلياً (طبقة دفاع
+// ثانية سليمة)، لكن أي صفحة جديدة تُنسى فيها تلك السطور تبقى مكشوفة بلا أي
+// حماية على مستوى middleware. الآن معكوسة: قائمة صريحة بالمسارات العامة
+// فقط، وكل ما عداها محمي افتراضياً (deny-by-default).
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+
+// المسارات العامة الوحيدة التي لا تتطلب تسجيل دخول
+const PUBLIC_PATHS = [
+  '/', '/login', '/register', '/parent-register', '/staff-register', '/reset-password',
+  '/subscribe', '/privacy', '/terms', '/help', '/offline', '/payment-result',
+]
+
+function isPublicPath(pathname: string): boolean {
+  return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))
+}
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request })
@@ -28,12 +45,11 @@ export async function middleware(request: NextRequest) {
   // تحديث الجلسة
   const { data: { user } } = await supabase.auth.getUser()
 
-  // المسارات المحمية — تتطلب تسجيل دخول
-  const protectedPaths = ['/dashboard', '/students', '/employees', '/fees', '/subscription', '/accounting', '/platform', '/activity']
-  const isProtected = protectedPaths.some((p) => request.nextUrl.pathname.startsWith(p))
+  // كل مسار API له حمايته الخاصة (توقيع Webhook، CRON_SECRET، إلخ) — يُستثنى هنا
+  const isApi = request.nextUrl.pathname.startsWith('/api/')
 
-  if (isProtected && !user) {
-    // غير مُصادَق → إعادة توجيه لتسجيل الدخول
+  if (!isApi && !isPublicPath(request.nextUrl.pathname) && !user) {
+    // غير مُصادَق ومسار غير عام → إعادة توجيه لتسجيل الدخول
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
