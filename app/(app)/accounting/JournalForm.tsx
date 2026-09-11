@@ -2,28 +2,27 @@
 // نموذج إدخال قيد محاسبي — يفرض توازن المدين والدائن قبل الترحيل
 // توجيه تلقائي: كل سطر يقفل خانته المعاكسة لعكس السطر الذي قبله مباشرة —
 // يمنع الخطأ البشري بتحديد أي خانة (مدين/دائن) يُسمح بالكتابة فيها لكل سطر تلقائياً.
+// يستخدم create_manual_journal_entry (تحقق توازن خادمي + دعم "أخرى" لإنشاء حساب جديد تلقائياً).
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
 import { isBalanced, fmtCurrency, type Account } from '@/lib/accounting'
 
-type Line = { account_id: string; debit: number; credit: number }
-// جهة السطر المسموح بها: 'debit' (مدين فقط) · 'credit' (دائن فقط) · null (مفتوح، لم يُحدَّد بعد)
+type Line = { account_id: string; debit: number; credit: number; is_new: boolean; new_name: string }
 type Side = 'debit' | 'credit' | null
 
-// حسابات الرواتب المؤتمتة بالكامل عبر دورة الرواتب الرسمية (pay_payroll_run) —
-// ممنوعة من القيد اليدوي لتفادي التكرار أو كسر الربط مع سجل الرواتب.
-// 2320/2330 (مستحقات) تبقى متاحة عمداً — للتصحيح الفردي في حالات استثنائية (مثل خطأ راتب موظف واحد).
 const PAYROLL_LOCKED_CODES = ['5110', '5120']
+const NEW_ACCOUNT_VALUE = '__NEW__'
 
 export default function JournalForm({ accounts, currency }: { accounts: Account[]; currency: string }) {
   const router = useRouter()
   const supabase = createClient()
   const [open, setOpen] = useState(false)
   const [desc, setDesc] = useState('')
+  const [entryDate, setEntryDate] = useState(new Date().toISOString().slice(0, 10))
   const [lines, setLines] = useState<Line[]>([
-    { account_id: '', debit: 0, credit: 0 },
-    { account_id: '', debit: 0, credit: 0 },
+    { account_id: '', debit: 0, credit: 0, is_new: false, new_name: '' },
+    { account_id: '', debit: 0, credit: 0, is_new: false, new_name: '' },
   ])
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
@@ -32,56 +31,79 @@ export default function JournalForm({ accounts, currency }: { accounts: Account[
   const totalC = lines.reduce((s, l) => s + l.credit, 0)
   const balanced = isBalanced(lines)
   const fmt = (n: number) => fmtCurrency(n, currency)
-  // قائمة الحسابات المتاحة للاختيار — تستبعد حسابات الرواتب المؤتمتة (5110/5120)
   const availableAccounts = accounts.filter((a) => !PAYROLL_LOCKED_CODES.includes(a.code))
 
-  // جهة كل سطر: أول سطر له قيمة فعلية تحدد جهته، وكل سطر تالٍ يُقفل على عكس السطر الذي قبله
   function sideOf(line: Line): Side {
     if (line.debit > 0) return 'debit'
     if (line.credit > 0) return 'credit'
     return null
   }
-  // القيد ثابت على سطرين دائماً (مدين ودائن متقابلان) — لا سطر ثالث ولا قيد مركّب
   function allowedSide(index: number): Side {
-    if (index === 0) return null // السطر الأول مفتوح دائماً — هو من يحدد البداية
+    if (index === 0) return null
     const prevSide = sideOf(lines[index - 1])
     if (prevSide === 'debit') return 'credit'
     if (prevSide === 'credit') return 'debit'
-    return null // السطر السابق لسه فاضٍ — هذا السطر يبقى مفتوحاً حتى يتحدد ما قبله
+    return null
   }
 
-  function setLine(i: number, k: keyof Line, v: string | number) {
+  function setLine(i: number, k: keyof Line, v: string | number | boolean) {
     const next = [...lines]
     next[i] = { ...next[i], [k]: v } as Line
-    // عند إدخال قيمة موجبة في المدين، فرّغ الدائن لنفس السطر (والعكس) — كل سطر جانب واحد
     if (k === 'debit' && Number(v) > 0) next[i].credit = 0
     if (k === 'credit' && Number(v) > 0) next[i].debit = 0
     setLines(next)
   }
 
+  function onAccountChange(i: number, value: string) {
+    if (value === NEW_ACCOUNT_VALUE) {
+      setLine(i, 'account_id', value)
+      setLine(i, 'is_new', true)
+    } else {
+      setLine(i, 'account_id', value)
+      setLine(i, 'is_new', false)
+      setLine(i, 'new_name', '')
+    }
+  }
 
   async function post() {
     setMsg('')
     const valid = lines.filter((l) => l.account_id && (l.debit > 0 || l.credit > 0))
     if (valid.length < 2) { setMsg('يلزم سطران على الأقل'); return }
     if (!balanced) { setMsg('القيد غير متوازن: مجموع المدين يجب أن يساوي الدائن'); return }
+    if (!desc.trim()) { setMsg('البيان مطلوب'); return }
+
+    // تحقق: كل سطر "حساب جديد" يجب أن يحمل اسماً
+    for (const l of valid) {
+      if (l.is_new && !l.new_name.trim()) { setMsg('أدخل اسم الحساب الجديد'); return }
+    }
+
     setBusy(true)
-    const schoolId = (await supabase.from('profiles').select('school_id').single()).data?.school_id
 
-    // إنشاء القيد
-    const { data: entry, error: e1 } = await supabase
-      .from('journal_entries')
-      .insert({ school_id: schoolId, description: desc, reference: 'JV-' + Date.now() })
-      .select('id').single()
-    if (e1 || !entry) { setMsg('تعذّر إنشاء القيد'); setBusy(false); return }
+    const payloadLines = valid.map((l) => {
+      const acc = availableAccounts.find((a) => a.id === l.account_id)
+      return {
+        account_code: l.is_new ? 'NEW' : (acc?.code ?? ''),
+        account_name: l.is_new ? l.new_name.trim() : null,
+        debit: l.debit,
+        credit: l.credit,
+      }
+    })
 
-    // إدراج السطور
-    const rows = valid.map((l) => ({ ...l, entry_id: entry.id, school_id: schoolId }))
-    const { error: e2 } = await supabase.from('journal_lines').insert(rows)
-    if (e2) { setMsg('تعذّر ترحيل السطور'); setBusy(false); return }
+    const { error } = await supabase.rpc('create_manual_journal_entry', {
+      p_description: desc.trim(),
+      p_date: entryDate,
+      p_lines: payloadLines,
+    })
 
-    setBusy(false); setOpen(false)
-    setLines([{ account_id: '', debit: 0, credit: 0 }, { account_id: '', debit: 0, credit: 0 }]); setDesc('')
+    setBusy(false)
+    if (error) { setMsg(error.message); return }
+
+    setOpen(false)
+    setLines([
+      { account_id: '', debit: 0, credit: 0, is_new: false, new_name: '' },
+      { account_id: '', debit: 0, credit: 0, is_new: false, new_name: '' },
+    ])
+    setDesc('')
     router.refresh()
   }
 
@@ -97,17 +119,22 @@ export default function JournalForm({ accounts, currency }: { accounts: Account[
   const sel = { padding: 8, borderRadius: 8, border: '1.5px solid #DDE3EC', width: '100%' }
   const num = { padding: 8, borderRadius: 8, border: '1.5px solid #DDE3EC', width: '100%' }
   const numDisabled = { ...num, background: '#F0F2F5', color: '#B0B8C4', cursor: 'not-allowed' }
+  const newNameInput = { padding: 8, borderRadius: 8, border: '1.5px solid #D4A017', width: '100%', marginTop: 6 }
 
   return (
     <div style={{ background: '#fff', borderRadius: 14, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
       <h3 style={{ color: '#0F2744', marginBottom: 12 }}>قيد محاسبي جديد</h3>
 
       <input placeholder="البيان (وصف القيد)" value={desc} onChange={(e) => setDesc(e.target.value)}
+        style={{ width: '100%', padding: 10, borderRadius: 9, border: '1.5px solid #DDE3EC', marginBottom: 10 }} />
+
+      <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} dir="ltr"
         style={{ width: '100%', padding: 10, borderRadius: 9, border: '1.5px solid #DDE3EC', marginBottom: 12 }} />
 
       <div style={{ background: '#F2F6FA', border: '1px solid #DCE6F0', borderRadius: 9, padding: '10px 13px', marginBottom: 14, fontSize: 12.5, color: '#3A526B', lineHeight: 1.9 }}>
-        💡 <b>كيف تختار مدين ودائن؟</b> كل عملية لها طرفان: <b>مدين</b> = الحساب الذي استفاد أو زاد (مثل: مصروف صُرف، أو حساب ارتفع رصيده) — <b>دائن</b> = الحساب الذي منه خرجت القيمة (مثل: البنك أو الصندوق الذي دُفع منه).
+        💡 <b>كيف تختار مدين ودائن؟</b> كل عملية لها طرفان: <b>مدين</b> = الحساب الذي استفاد أو زاد — <b>دائن</b> = الحساب الذي منه خرجت القيمة.
         النظام يوجّهك تلقائياً: اختر جهة السطر الأول، ويُقفل السطر الثاني على الجهة المقابلة ليبقى القيد متوازناً دائماً.
+        اختر <b>«أخرى — حساب جديد»</b> لإنشاء حساب غير موجود في القائمة تلقائياً.
       </div>
 
       <table style={{ width: '100%', fontSize: 14, marginBottom: 10 }}>
@@ -121,13 +148,22 @@ export default function JournalForm({ accounts, currency }: { accounts: Account[
             const creditDisabled = allowed === 'debit'
             return (
               <tr key={i}>
-                <td style={{ padding: 4 }}>
-                  <select value={l.account_id} onChange={(e) => setLine(i, 'account_id', e.target.value)} style={sel}>
+                <td style={{ padding: 4, verticalAlign: 'top' }}>
+                  <select value={l.account_id} onChange={(e) => onAccountChange(i, e.target.value)} style={sel}>
                     <option value="">— اختر الحساب —</option>
                     {availableAccounts.map((a) => <option key={a.id} value={a.id}>{a.code} · {a.name}</option>)}
+                    <option value={NEW_ACCOUNT_VALUE}>➕ أخرى — حساب جديد</option>
                   </select>
+                  {l.is_new && (
+                    <input
+                      placeholder="اسم الحساب الجديد"
+                      value={l.new_name}
+                      onChange={(e) => setLine(i, 'new_name', e.target.value)}
+                      style={newNameInput}
+                    />
+                  )}
                 </td>
-                <td style={{ padding: 4 }}>
+                <td style={{ padding: 4, verticalAlign: 'top' }}>
                   <input
                     type="number"
                     value={l.debit || ''}
@@ -137,7 +173,7 @@ export default function JournalForm({ accounts, currency }: { accounts: Account[
                     title={debitDisabled ? 'السطر السابق مدين — هذا السطر يُكتب في الدائن فقط' : undefined}
                   />
                 </td>
-                <td style={{ padding: 4 }}>
+                <td style={{ padding: 4, verticalAlign: 'top' }}>
                   <input
                     type="number"
                     value={l.credit || ''}
@@ -157,7 +193,6 @@ export default function JournalForm({ accounts, currency }: { accounts: Account[
         💡 مصروف الرواتب والتأمينات (5110 / 5120) يُسجَّلان تلقائياً عبر دورة الرواتب فقط — غير متاحين هنا لتفادي التكرار.
       </p>
 
-      {/* مؤشر التوازن */}
       <div style={{ display: 'flex', justifyContent: 'space-between', padding: 10, borderRadius: 9, background: balanced ? '#E6F4EC' : '#FCE9E6', color: balanced ? '#1A7A45' : '#C0392B', fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
         <span>مدين: {fmt(totalD)}</span>
         <span>دائن: {fmt(totalC)}</span>
