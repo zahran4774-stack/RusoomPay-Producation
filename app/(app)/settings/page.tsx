@@ -97,7 +97,7 @@ export default async function SettingsPage() {
   const intelligenceContent = engines && engines.length > 0
 
   const tabs: SettingsTab[] = [
-    {
+    
           {
       id: 'security', label: 'الأمان',
       content: (
