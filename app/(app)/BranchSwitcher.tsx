@@ -104,7 +104,7 @@ export default function BranchSwitcher() {
           style={{
             display: 'flex', alignItems: 'center', gap: 7, marginTop: 6,
             padding: '6px 12px', borderRadius: 8, fontSize: 12.5, fontWeight: 600,
-            color: pathname === '/organization' ? 'var(--brand)' : '#667',
+            color: pathname === '/organization' ? 'var(--brand)' : '#D4A017',
             textDecoration: 'none',
           }}
         >
