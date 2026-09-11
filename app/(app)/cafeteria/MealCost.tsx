@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase-client'
 
 type Supplier = { id: string; name: string; contact_name: string | null; phone: string | null; email: string | null; vat_number: string | null; active: boolean }
-type Purchase = { id: string; supplier_id: string | null; supplier_name: string | null; purchase_date: string; purchase_type: string; meals_count: number; unit_cost: number; total_cost: number; period: string | null; paid: boolean; notes: string | null }
+type Purchase = { id: string; supplier_id: string | null; supplier_name: string | null; purchase_date: string; purchase_type: string; meals_count: number; unit_cost: number; total_cost: number; period: string | null; paid: boolean; notes: string | null; item_type: string | null }
 type Report = { meals_purchased: number; total_cost: number; avg_per_meal: number; meal_students: number; avg_per_student: number; suppliers: { supplier: string; meals: number; cost: number; avg_cost: number }[] }
 
 const TYPES: Record<string, string> = { daily: 'يومي', monthly: 'شهري', bulk: 'جملة', other: 'أخرى' }
@@ -112,11 +112,14 @@ function ReportView({ report, sym }: { report: Report | null; sym: string }) {
   )
 }
 
+// اقتراحات نوع المنتج — تظهر أثناء الكتابة، مع حرية كتابة أي نص آخر
+const ITEM_TYPE_SUGGESTIONS = ['أرز', 'دجاج', 'لحوم', 'خضار وفواكه', 'ألبان', 'مخبوزات', 'مشروبات', 'أدوات مطبخ', 'أخرى']
+
 // ═══ المشتريات ═══
 function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purchases: Purchase[]; suppliers: Supplier[]; period: string; sym: string; onChange: () => void }) {
   const supabase = createClient()
   const [open, setOpen] = useState(false)
-  const [f, setF] = useState({ supplier: '', date: new Date().toISOString().slice(0, 10), type: 'daily', meals: '', unit: '', paid: false, notes: '' })
+  const [f, setF] = useState({ supplier: '', date: new Date().toISOString().slice(0, 10), type: 'daily', meals: '', unit: '', paid: false, notes: '', itemType: '' })
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -133,11 +136,12 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
       p_id: null, p_supplier: f.supplier || null, p_date: f.date,
       p_type: f.type, p_meals: Number(f.meals), p_unit_cost: Number(f.unit),
       p_period: period, p_paid: f.paid, p_notes: f.notes || null,
+      p_item_type: f.itemType || null,
     })
     setBusy(false)
     if (error) { setErr(error.message); return }
     setOpen(false)
-    setF({ supplier: '', date: new Date().toISOString().slice(0, 10), type: 'daily', meals: '', unit: '', paid: false, notes: '' })
+    setF({ supplier: '', date: new Date().toISOString().slice(0, 10), type: 'daily', meals: '', unit: '', paid: false, notes: '', itemType: '' })
     onChange()
   }
 
@@ -167,7 +171,8 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
           <thead><tr style={{ background: '#F7FAFC', textAlign: 'right' }}>
             <th style={{ padding: 10 }}>التاريخ</th><th style={{ padding: 10 }}>المورّد</th>
-            <th style={{ padding: 10 }}>النوع</th><th style={{ padding: 10 }}>الوجبات</th>
+            <th style={{ padding: 10 }}>النوع</th><th style={{ padding: 10 }}>المنتج</th>
+            <th style={{ padding: 10 }}>الوجبات</th>
             <th style={{ padding: 10 }}>الوحدة</th><th style={{ padding: 10 }}>الإجمالي</th>
             <th style={{ padding: 10 }}>الحالة</th><th style={{ padding: 10 }}></th>
           </tr></thead>
@@ -177,6 +182,7 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
                 <td style={{ padding: 10, direction: 'ltr', textAlign: 'right' }}>{p.purchase_date}</td>
                 <td style={{ padding: 10 }}>{p.supplier_name || '—'}</td>
                 <td style={{ padding: 10 }}>{TYPES[p.purchase_type] || p.purchase_type}</td>
+                <td style={{ padding: 10 }}>{p.item_type || '—'}</td>
                 <td style={{ padding: 10 }}>{fmt0(p.meals_count)}</td>
                 <td style={{ padding: 10 }}>{fmt3(p.unit_cost)}</td>
                 <td style={{ padding: 10, fontWeight: 700 }}>{fmt3(p.total_cost)} {sym}</td>
@@ -194,7 +200,7 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
                 </td>
               </tr>
             ))}
-            {purchases.length === 0 && <tr><td colSpan={8} style={{ padding: 18, textAlign: 'center', color: '#999' }}>لا مشتريات</td></tr>}
+            {purchases.length === 0 && <tr><td colSpan={9} style={{ padding: 18, textAlign: 'center', color: '#999' }}>لا مشتريات</td></tr>}
           </tbody>
         </table>
       </div>
@@ -223,6 +229,13 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
                 <select style={input} value={f.type} onChange={(e) => set('type', e.target.value)}>
                   {Object.entries(TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
+              </div>
+              <div style={cell}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#0F2744' }}>نوع المنتج</label>
+                <input style={input} value={f.itemType} onChange={(e) => set('itemType', e.target.value)} placeholder="مثال: أرز، دجاج، خضار" list="item-type-suggestions" />
+                <datalist id="item-type-suggestions">
+                  {ITEM_TYPE_SUGGESTIONS.map((t) => <option key={t} value={t} />)}
+                </datalist>
               </div>
               <div style={cell}>
                 <label style={{ fontSize: 12, fontWeight: 700, color: '#0F2744' }}>عدد الوجبات</label>
