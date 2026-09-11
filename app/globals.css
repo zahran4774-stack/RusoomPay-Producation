@@ -120,12 +120,13 @@ html[dir="rtl"] .app-sidebar { inset-inline-start: auto; inset-inline-end: 0; tr
 .school-logo-fallback {
   display: grid; place-items: center;
   color: #fff; font-weight: 800; font-size: 1rem;
-}
+   
 .school-name {
-  color: rgba(255,255,255,.88); font-size: .88rem; font-weight: 600;
+  color: #D4A017; font-size: .88rem; font-weight: 600;
   line-height: 1.35; overflow: hidden; display: -webkit-box;
   -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
+
 
 .side-nav { padding: 14px 12px; display: flex; flex-direction: column; gap: 4px; }
 .side-nav .nav-group {
