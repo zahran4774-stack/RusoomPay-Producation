@@ -97,9 +97,16 @@ export default async function SettingsPage() {
 
   const tabs: SettingsTab[] = [
     {
+          {
       id: 'security', label: 'الأمان',
-      content: <MfaSetup />,
+      content: (
+        <>
+          <ChangePassword />
+          <MfaSetup />
+        </>
+      ),
     },
+
     {
       id: 'identity', label: 'الهوية والمظهر',
       content: (
