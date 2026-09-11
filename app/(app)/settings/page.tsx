@@ -13,6 +13,7 @@ import GradePricing from './GradePricing'
 import AcademicYearSettings from './AcademicYearSettings'
 import BranchManager from './BranchManager'
 import SettingsTabs, { type SettingsTab } from './SettingsTabs'
+import ChangePassword from './ChangePassword'
 
 export default async function SettingsPage() {
   const supabase = await createClient()
