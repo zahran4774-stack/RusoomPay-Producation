@@ -119,7 +119,7 @@ html[dir="rtl"] .app-sidebar { inset-inline-start: auto; inset-inline-end: 0; tr
 }
 
 .school-name {
-  color: #D4A017; font-size: .88rem; font-weight: 600;
+  color: red !important; font-size: .88rem; font-weight: 600;
   line-height: 1.35; overflow: hidden; display: -webkit-box;
   -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
