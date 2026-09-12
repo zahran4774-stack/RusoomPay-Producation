@@ -1,10 +1,8 @@
 'use client'
 // تبويبات صفحة المحاسبة — نفس نمط .module-tab المستخدم في بقية النظام،
-// بأيقونات lucide-react. التبويب النشط يُقرأ من ?tab=... في الرابط —
-// هذا ضروري لأن روابط الشريط الجانبي (AppShell) تشير إلى
-// /accounting?tab=trial ، /accounting?tab=journal إلخ. بلا هذه القراءة،
-// كل الروابط تصل للصفحة لكن يبقى المعروض دائماً "نظرة عامة" افتراضياً —
-// وهذا العطل الذي أدّى لظهور القائمة المنسدلة بلا أي تأثير فعلي عند النقر.
+// بأيقونات lucide-react. التبويب النشط يُقرأ من ?tab=... في الرابط.
+// عرض شرطي حقيقي (&&) بدل خاصية hidden — يضمن عدم وجود أكثر من قسم
+// واحد في الصفحة في آن واحد بصرف النظر عن أي CSS خارجي قد يكتب فوق hidden.
 import { useSearchParams } from 'next/navigation'
 import { LayoutGrid, Scale, BookOpen, CalendarRange, TrendingUp, type LucideIcon } from 'lucide-react'
 import Link from 'next/link'
@@ -54,13 +52,12 @@ export default function AccountingTabs({
         })}
       </div>
 
-      {/* كل الأقسام تبقى في الـDOM (hidden) بدل إزالتها — يحافظ على أي حالة
-          داخلية (مثل نموذج القيد المفتوح) عند التنقّل بين التبويبات والعودة. */}
-      <div hidden={tab !== 'overview'}>{overview}</div>
-      <div hidden={tab !== 'trial'}>{trialBalance}</div>
-      <div hidden={tab !== 'journal'}>{journal}</div>
-      <div hidden={tab !== 'periods'}>{periodReports}</div>
-      <div hidden={tab !== 'forecast'}>{forecast}</div>
+      {/* عرض شرطي حقيقي — قسم واحد فقط يُدرَج في الشجرة، لا الخمسة معاً */}
+      {tab === 'overview' && overview}
+      {tab === 'trial' && trialBalance}
+      {tab === 'journal' && journal}
+      {tab === 'periods' && periodReports}
+      {tab === 'forecast' && forecast}
     </div>
   )
 }
