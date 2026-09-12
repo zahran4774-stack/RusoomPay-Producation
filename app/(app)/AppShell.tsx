@@ -3,7 +3,7 @@
 // هوية المدرسة: لون brandColor يُحقن كمتغيّرات CSS فيلوّن الرابط النشط والشعار.
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
 import type { Role } from '@/lib/roles'
 import { isStaff, canAccessFinance, isOwner } from '@/lib/roles'
@@ -83,7 +83,6 @@ export default function AppShell({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
-  const searchParams = useSearchParams()
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [openGroup, setOpenGroup] = useState<string | null>(null)
@@ -91,27 +90,8 @@ export default function AppShell({
   // إغلاق الدرج تلقائياً عند تغيّر المسار (تنقّل فعلي عبر رابط)
   useEffect(() => { setOpen(false) }, [pathname])
 
-  function isActive(href: string) {
-    // الروابط التي تحمل معامل استعلام (?tab=...) يجب أن تُطابق المسار
-    // بالإضافة إلى قيمة كل معامل مذكور في href — بدون الاعتماد على
-    // window.location (يسبب اختلاف رندر السيرفر/العميل — hydration mismatch).
-    const [hrefPath, hrefQuery] = href.split('?')
-    if (hrefQuery) {
-      if (pathname !== hrefPath) return false
-      const hrefParams = new URLSearchParams(hrefQuery)
-      for (const [key, value] of hrefParams.entries()) {
-        if (searchParams.get(key) !== value) return false
-      }
-      return true
-    }
-    if (href === '/dashboard') return pathname === href
-    return pathname === href || pathname.startsWith(href + '/')
-  }
-
   // فتح تلقائي للمجموعة التي يقع المسار الحالي داخلها — حتى يرى المستخدم
   // فوراً أين هو ضمن الشريط الجانبي دون أن يضغط شيئاً بنفسه.
-  // يعتمد أيضاً على searchParams حتى يعمل عند تبديل التبويبات (?tab=...)
-  // على نفس المسار، حيث لا يتغيّر pathname وحده.
   useEffect(() => {
     for (const entry of NAV) {
       if (entry.type === 'group' && entry.children.some((c) => isActive(c.href))) {
@@ -120,10 +100,20 @@ export default function AppShell({
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname, searchParams])
+  }, [pathname])
 
   function toggleGroup(key: string) {
     setOpenGroup((prev) => (prev === key ? null : key))
+  }
+
+  function isActive(href: string) {
+    // الروابط التي تحمل معامل استعلام (?tab=...) يجب أن تُطابق كامل href
+    // بما فيه المعامل — وإلا ستظهر كل تبويبات /accounting نشطة معاً دائماً.
+    if (href.includes('?')) {
+      return pathname + (typeof window !== 'undefined' ? window.location.search : '') === href
+    }
+    if (href === '/dashboard') return pathname === href
+    return pathname === href || pathname.startsWith(href + '/')
   }
 
   async function handleLogout() {
