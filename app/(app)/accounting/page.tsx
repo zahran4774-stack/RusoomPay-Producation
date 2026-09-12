@@ -1,14 +1,11 @@
 // صفحة المحاسبة — دليل الحسابات + ميزان المراجعة + قائمة الدخل
 // الأرصدة تُحسب في قاعدة البيانات (لحظية مهما تراكمت القيود)
-// مُنظَّمة في تبويبات (نظرة عامة / ميزان المراجعة / القيود / التقارير الدورية / التوقعات)
-// بنفس نمط .module-tab المستخدم في بقية النظام.
 import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import { fmtCurrency, curSymbol, type Account } from '@/lib/accounting'
 import { canAccessFinance, type Role } from '@/lib/roles'
 import JournalForm from './JournalForm'
 import PrintButton from '../PrintButton'
-import AccountingTabs from './AccountingTabs'
 import {
   LazyPeriodReports as PeriodReports,
   LazyJournalList as JournalList,
@@ -22,12 +19,14 @@ export default async function AccountingPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
+  // الصلاحية: المدير والمحاسب فقط
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
   if (!canAccessFinance(profile?.role as Role)) redirect('/dashboard')
 
   const { data: school } = await supabase.from('schools').select('name, vat_number, currency').single()
   const currency = school?.currency ?? 'OMR'
 
+  // الأرصدة والملخّص والقيود وملخّص مشتريات المخزون — تُجلب معاً بالتوازي (أسرع من التسلسل)
   const [balancesRes, summaryRes, entriesRes, purchasesRes] = await Promise.all([
     supabase.rpc('account_balances'),
     supabase.rpc('financial_summary').single(),
@@ -35,7 +34,7 @@ export default async function AccountingPage() {
       .from('journal_entries')
       .select('id, entry_date, description, reference, reversed_by_entry, reverses_entry, journal_lines(debit)')
       .order('entry_date', { ascending: false })
-      .limit(60),
+      .limit(60), // كافٍ لعشر صفحات تصفّح (6 لكل صفحة) — يوازن بين تاريخ كافٍ وحجم استجابة معقول
     supabase.rpc('inventory_purchases_summary'),
   ])
 
@@ -46,6 +45,8 @@ export default async function AccountingPage() {
 
   const bal = (balances ?? []) as { account_id: string; code: string; name: string; type: string; balance: number; is_active: boolean }[]
 
+  // قائمة الحسابات لنموذج القيد الجديد — تستبعد الحسابات المعطَّلة (مثل 4210 بعد إلغائها)
+  // بينما جدول "الحسابات والأرصدة" وميزان المراجعة أدناه يعرضان كل الحسابات دون استثناء (شفافية كاملة)
   const acc = bal.filter((b) => b.is_active !== false).map((b) => ({ id: b.account_id, code: b.code, name: b.name, type: b.type })) as Account[]
 
   const ent = (entries ?? []) as { id: string; entry_date: string; description: string | null; reference: string | null; reversed_by_entry: string | null; reverses_entry: string | null; journal_lines: { debit: number }[] }[]
@@ -61,6 +62,7 @@ export default async function AccountingPage() {
 
   const typeLabel = (t: string) => ({ asset: 'أصول', liability: 'خصوم', equity: 'حقوق ملكية', revenue: 'إيرادات', expense: 'مصروفات' } as Record<string, string>)[t] || t
 
+  // ميزان المراجعة — من الأرصدة المحسوبة خادمياً
   const trial = bal.map((a) => ({
     id: a.account_id, code: a.code, name: a.name, type: a.type,
     debit: a.balance > 0 ? a.balance : 0,
@@ -70,14 +72,19 @@ export default async function AccountingPage() {
   const totalCredit = trial.reduce((sum, r) => sum + r.credit, 0)
   const balanced = Math.abs(totalDebit - totalCredit) < 0.0005
 
-  const canReverse = ['owner', 'accountant'].includes(profile?.role ?? '')
-
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }} dir="rtl">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10, marginBottom: 4 }}>
+      <div style={{ marginBottom: 18 }}>
+        <JournalForm accounts={acc} currency={currency} />
+      </div>
+
+      <DailyPaymentsReport />
+      <PayrollYearlyReport currency={currency} />
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
         <div>
           <h1 style={{ color: '#0F2744', marginBottom: 4 }}>المحاسبة والتقارير</h1>
-          <p style={{ color: '#667', fontSize: 14, marginBottom: 0 }}>قيد مزدوج · ميزان مراجعة · قائمة الدخل</p>
+          <p style={{ color: '#667', fontSize: 14, marginBottom: 20 }}>قيد مزدوج · ميزان مراجعة · قائمة الدخل</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <PrintButton
@@ -105,84 +112,77 @@ export default async function AccountingPage() {
         </div>
       </div>
 
-      <AccountingTabs
-        overview={
-          <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 13, marginBottom: 22 }}>
-              <KPI label="الإيرادات" v={fmt(fin.revenue)} sym={sym} color="#1E8E5A" />
-              <KPI label="المصروفات" v={fmt(fin.expense)} sym={sym} color="#C0392B" />
-              <KPI label="صافي الربح" v={fmt(fin.profit)} sym={sym} color="#163B68" />
-              <KPI label="النقدية والبنوك" v={fmt(fin.cash)} sym={sym} color="#D4A017" />
-              <KPI label="مشتريات المخزون (كتب وزي)" v={fmt(purchases.general_purchases ?? 0)} sym={sym} color="#6D5EA6" />
-              <KPI label="مشتريات التغذية" v={fmt(purchases.food_purchases ?? 0)} sym={sym} color="#2E8B8B" />
-            </div>
+      {/* المؤشرات المالية */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 13, marginBottom: 22 }}>
+        <KPI label="الإيرادات" v={fmt(fin.revenue)} sym={sym} color="#1E8E5A" />
+        <KPI label="المصروفات" v={fmt(fin.expense)} sym={sym} color="#C0392B" />
+        <KPI label="صافي الربح" v={fmt(fin.profit)} sym={sym} color="#163B68" />
+        <KPI label="النقدية والبنوك" v={fmt(fin.cash)} sym={sym} color="#D4A017" />
+        <KPI label="مشتريات المخزون (كتب وزي)" v={fmt(purchases.general_purchases ?? 0)} sym={sym} color="#6D5EA6" />
+        <KPI label="مشتريات التغذية" v={fmt(purchases.food_purchases ?? 0)} sym={sym} color="#2E8B8B" />
+      </div>
 
-            <h2 style={{ color: '#0F2744', fontSize: 18, margin: '24px 0 12px' }}>قائمة الدخل</h2>
-            <div style={{ background: '#fff', borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
-              <Row label="إجمالي الإيرادات" v={fmt(fin.revenue)} sym={sym} />
-              <Row label="إجمالي المصروفات" v={`(${fmt(fin.expense)})`} sym={sym} />
-              <div style={{ borderTop: '2px solid #0F2744', marginTop: 8, paddingTop: 8 }}>
-                <Row label="صافي الربح / الخسارة" v={fmt(fin.profit)} sym={sym} bold color={fin.profit >= 0 ? '#1A7A45' : '#C0392B'} />
-              </div>
-            </div>
-          </>
-        }
-        trialBalance={
-          bal.length === 0 ? (
-            <div style={{ background: '#fff', borderRadius: 14, padding: 28, textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
-              <div style={{ fontWeight: 700, color: '#0F2744', marginBottom: 4 }}>لا توجد حسابات حتى الآن</div>
-              <div style={{ color: '#8A94A6', fontSize: 13.5 }}>ستظهر هنا جميع الحسابات وأرصدتها بمجرد تسجيل أول عملية مالية.</div>
-            </div>
-          ) : (
-            <div style={{ background: '#fff', borderRadius: 14, overflow: 'auto', boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-                <thead>
-                  <tr style={{ background: '#0F2744', color: '#fff', textAlign: 'right' }}>
-                    <th style={{ padding: 12 }}>الرمز</th><th style={{ padding: 12 }}>الحساب</th>
-                    <th style={{ padding: 12 }}>النوع</th>
-                    <th style={{ padding: 12 }}>مدين</th><th style={{ padding: 12 }}>دائن</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {trial.map((r) => (
-                    <tr key={r.id} style={{ borderBottom: '1px solid #EEF2F1' }}>
-                      <td style={{ padding: 10, fontWeight: 700 }}>{r.code}</td>
-                      <td style={{ padding: 10 }}>{r.name}</td>
-                      <td style={{ padding: 10, color: '#8A94A6', fontSize: 13 }}>{typeLabel(r.type)}</td>
-                      <td style={{ padding: 10 }}>{r.debit ? fmt(r.debit) : '—'}</td>
-                      <td style={{ padding: 10 }}>{r.credit ? fmt(r.credit) : '—'}</td>
-                    </tr>
-                  ))}
-                  <tr style={{ borderTop: '2px solid #0F2744', fontWeight: 700, background: balanced ? '#E6F4EC' : '#FCE9E6' }}>
-                    <td style={{ padding: 12 }} colSpan={3}>الإجمالي {balanced ? '✓ متوازن' : '⚠️ غير متوازن'}</td>
-                    <td style={{ padding: 12 }}>{fmt(totalDebit)}</td>
-                    <td style={{ padding: 12 }}>{fmt(totalCredit)}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          )
-        }
-        journal={
-          <>
-            <div style={{ marginBottom: 18 }}>
-              <JournalForm accounts={acc} currency={currency} />
-            </div>
-            <h2 style={{ color: '#0F2744', fontSize: 18, margin: '24px 0 12px' }}>آخر القيود</h2>
-            <div style={{ background: '#fff', borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
-              <JournalList entries={ent} currency={currency} canReverse={canReverse} />
-            </div>
-          </>
-        }
-        periodReports={
-          <>
-            <DailyPaymentsReport />
-            <PayrollYearlyReport currency={currency} />
-            <PeriodReports school={{ name: school?.name ?? 'مدرسة', vat_number: school?.vat_number ?? null, currency }} />
-          </>
-        }
-        forecast={<ForecastPanel currency={currency} />}
-      />
+      {/* (acc مشتقّة من الأرصدة، تُستخدم في نموذج القيد بأعلى الصفحة) */}
+
+      {/* ميزان المراجعة — يضم أيضاً نوع كل حساب (أصول/خصوم/إيرادات...) بدل قسم منفصل مكرِّر */}
+      <h2 style={{ color: '#0F2744', fontSize: 18, margin: '24px 0 12px' }}>ميزان المراجعة</h2>
+      {bal.length === 0 ? (
+        <div style={{ background: '#fff', borderRadius: 14, padding: 28, textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
+          <div style={{ fontWeight: 700, color: '#0F2744', marginBottom: 4 }}>لا توجد حسابات حتى الآن</div>
+          <div style={{ color: '#8A94A6', fontSize: 13.5 }}>ستظهر هنا جميع الحسابات وأرصدتها بمجرد تسجيل أول عملية مالية.</div>
+        </div>
+      ) : (
+      <div style={{ background: '#fff', borderRadius: 14, overflow: 'auto', boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+          <thead>
+            <tr style={{ background: '#0F2744', color: '#fff', textAlign: 'right' }}>
+              <th style={{ padding: 12 }}>الرمز</th><th style={{ padding: 12 }}>الحساب</th>
+              <th style={{ padding: 12 }}>النوع</th>
+              <th style={{ padding: 12 }}>مدين</th><th style={{ padding: 12 }}>دائن</th>
+            </tr>
+          </thead>
+          <tbody>
+            {trial.map((r) => (
+              <tr key={r.id} style={{ borderBottom: '1px solid #EEF2F1' }}>
+                <td style={{ padding: 10, fontWeight: 700 }}>{r.code}</td>
+                <td style={{ padding: 10 }}>{r.name}</td>
+                <td style={{ padding: 10, color: '#8A94A6', fontSize: 13 }}>{typeLabel(r.type)}</td>
+                <td style={{ padding: 10 }}>{r.debit ? fmt(r.debit) : '—'}</td>
+                <td style={{ padding: 10 }}>{r.credit ? fmt(r.credit) : '—'}</td>
+              </tr>
+            ))}
+            <tr style={{ borderTop: '2px solid #0F2744', fontWeight: 700, background: balanced ? '#E6F4EC' : '#FCE9E6' }}>
+              <td style={{ padding: 12 }} colSpan={3}>الإجمالي {balanced ? '✓ متوازن' : '⚠️ غير متوازن'}</td>
+              <td style={{ padding: 12 }}>{fmt(totalDebit)}</td>
+              <td style={{ padding: 12 }}>{fmt(totalCredit)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      )}
+
+      {/* قائمة الدخل المبسّطة */}
+      <h2 style={{ color: '#0F2744', fontSize: 18, margin: '24px 0 12px' }}>قائمة الدخل</h2>
+      <div style={{ background: '#fff', borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
+        <Row label="إجمالي الإيرادات" v={fmt(fin.revenue)} sym={sym} />
+        <Row label="إجمالي المصروفات" v={`(${fmt(fin.expense)})`} sym={sym} />
+        <div style={{ borderTop: '2px solid #0F2744', marginTop: 8, paddingTop: 8 }}>
+          <Row label="صافي الربح / الخسارة" v={fmt(fin.profit)} sym={sym} bold color={fin.profit >= 0 ? '#1A7A45' : '#C0392B'} />
+        </div>
+      </div>
+
+      {/* آخر القيود */}
+      <h2 style={{ color: '#0F2744', fontSize: 18, margin: '24px 0 12px' }}>آخر القيود</h2>
+      <div style={{ background: '#fff', borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
+        <JournalList
+          entries={ent}
+          currency={currency}
+          canReverse={['owner', 'accountant'].includes(profile?.role ?? '')}
+        />
+      </div>
+
+      <PeriodReports school={{ name: school?.name ?? 'مدرسة', vat_number: school?.vat_number ?? null, currency }} />
+      <ForecastPanel currency={currency} />
     </div>
   )
 }
