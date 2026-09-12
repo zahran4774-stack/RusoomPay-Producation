@@ -12,7 +12,8 @@ import BranchSwitcher from './BranchSwitcher'
 import {
   LayoutDashboard, GraduationCap, ReceiptText, Users, Apple, Bus,
   Package, BarChart3, ClipboardList, Gem, MessageCircle, Settings, Wallet,
-  Building2, ChevronDown, type LucideIcon,
+  Building2, ChevronDown, LayoutGrid, Scale, BookOpen, CalendarRange, TrendingUp,
+  type LucideIcon,
 } from 'lucide-react'
 
 type NavLeaf = { type: 'link'; href: string; icon: LucideIcon; label: string; show: (r: Role) => boolean }
