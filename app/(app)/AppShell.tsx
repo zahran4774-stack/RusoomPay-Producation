@@ -87,33 +87,15 @@ export default function AppShell({
   const [open, setOpen] = useState(false)
   const [openGroup, setOpenGroup] = useState<string | null>(null)
 
-  // إغلاق الدرج تلقائياً عند تغيّر المسار (تنقّل فعلي عبر رابط)
   useEffect(() => { setOpen(false) }, [pathname])
 
-  // فتح تلقائي للمجموعة التي يقع المسار الحالي داخلها — حتى يرى المستخدم
-  // فوراً أين هو ضمن الشريط الجانبي دون أن يضغط شيئاً بنفسه.
-  useEffect(() => {
-    for (const entry of NAV) {
-      if (entry.type === 'group' && entry.children.some((c) => isActive(c.href))) {
-        setOpenGroup(entry.key)
-        return
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname])
+  function isActive(href: string) {
+    if (href === '/dashboard') return pathname === href
+    return pathname === href || pathname.startsWith(href + '/')
+  }
 
   function toggleGroup(key: string) {
     setOpenGroup((prev) => (prev === key ? null : key))
-  }
-
-  function isActive(href: string) {
-    // الروابط التي تحمل معامل استعلام (?tab=...) يجب أن تُطابق كامل href
-    // بما فيه المعامل — وإلا ستظهر كل تبويبات /accounting نشطة معاً دائماً.
-    if (href.includes('?')) {
-      return pathname + (typeof window !== 'undefined' ? window.location.search : '') === href
-    }
-    if (href === '/dashboard') return pathname === href
-    return pathname === href || pathname.startsWith(href + '/')
   }
 
   async function handleLogout() {
@@ -136,7 +118,6 @@ export default function AppShell({
         ['--brand-tint-22' as any]: `rgba(${brandRgb},.22)`,
       }}
     >
-      {/* شريط علوي (جوال فقط) — همبرغر لفتح الدرج */}
       <header className="app-topbar">
         <button className="hamburger" onClick={() => setOpen(true)} aria-label="فتح القائمة">
           <span /><span /><span />
@@ -144,15 +125,12 @@ export default function AppShell({
         <div className="topbar-brand"><LogoMark size={26} /> <span>Rusoom<span style={{ color: 'var(--brand)' }}>Pay</span></span></div>
       </header>
 
-      {/* خلفية معتمة (جوال) — الإغلاق بالنقر خارج الدرج */}
       <div className={`drawer-overlay ${open ? 'open' : ''}`} onClick={() => setOpen(false)} aria-hidden="true" />
 
-      {/* الشريط الجانبي / الدرج */}
       <aside className={`app-sidebar ${open ? 'open' : ''}`}>
         <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
           <div className="side-brand"><LogoMark size={32} /> <span>Rusoom<span style={{ color: 'var(--brand)' }}>Pay</span></span></div>
 
-          {/* هوية المدرسة — شعارها واسمها، حاضران في كل صفحة */}
           {(schoolLogo || schoolName) && (
             <div className="school-identity">
               {schoolLogo
@@ -166,7 +144,6 @@ export default function AppShell({
             </div>
           )}
 
-          {/* مبدّل الفروع — يظهر تلقائياً فقط لمن يملك عضوية فعّالة في أكثر من فرع */}
           <BranchSwitcher />
 
           <nav className="side-nav">
@@ -181,11 +158,9 @@ export default function AppShell({
                 )
               }
 
-              // مجموعة قابلة للطي — كل طفل يُفلتَر بشرط الصلاحية الخاص به فقط
               const visibleChildren = entry.children.filter((c) => c.show(role))
-              if (visibleChildren.length === 0) return null // لا شيء لعرضه لهذا الدور — لا مجموعة فارغة
+              if (visibleChildren.length === 0) return null
 
-              // طفل ظاهر واحد فقط → رابط مباشر بلا قائمة منسدلة ولا سهم عديم الفائدة
               if (visibleChildren.length === 1) {
                 const c = visibleChildren[0]
                 const CIcon = c.icon
@@ -196,8 +171,6 @@ export default function AppShell({
                 )
               }
 
-              // طفلان أو أكثر → مجموعة قابلة للطي. العنوان يطوي/يفتح فقط (لا يتنقّل) —
-              // كل تنقّل فعلي يتم من رابط الطفل نفسه، لتفادي ازدواج سلوك النقر.
               const GroupIcon = entry.icon
               const expanded = openGroup === entry.key
               const panelId = `nav-group-${entry.key}`
@@ -230,7 +203,6 @@ export default function AppShell({
               )
             })}
 
-            {/* رابط دعم واتساب — Help (يفتح محادثة واتساب في تبويب جديد) */}
             <a href={WA_LINK} target="_blank" rel="noopener noreferrer" className="side-link">
               <span className="ic" style={{ color: '#25D366' }}>
                 <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -248,7 +220,6 @@ export default function AppShell({
         </div>
       </aside>
 
-      {/* المحتوى */}
       <main className="app-main">
         {children}
       </main>
