@@ -1,11 +1,14 @@
 // صفحة المحاسبة — دليل الحسابات + ميزان المراجعة + قائمة الدخل
 // الأرصدة تُحسب في قاعدة البيانات (لحظية مهما تراكمت القيود)
+// مُنظَّمة في تبويبات (نظرة عامة / ميزان المراجعة / القيود / التقارير الدورية / التوقعات)
+// عبر AccountingTabs — التبويب النشط يُقرأ من ?tab=... في الرابط.
 import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import { fmtCurrency, curSymbol, type Account } from '@/lib/accounting'
 import { canAccessFinance, type Role } from '@/lib/roles'
 import JournalForm from './JournalForm'
 import PrintButton from '../PrintButton'
+import AccountingTabs from './AccountingTabs'
 import {
   LazyPeriodReports as PeriodReports,
   LazyJournalList as JournalList,
@@ -74,13 +77,6 @@ export default async function AccountingPage() {
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }} dir="rtl">
-      <div style={{ marginBottom: 18 }}>
-        <JournalForm accounts={acc} currency={currency} />
-      </div>
-
-      <DailyPaymentsReport />
-      <PayrollYearlyReport currency={currency} />
-
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
         <div>
           <h1 style={{ color: '#0F2744', marginBottom: 4 }}>المحاسبة والتقارير</h1>
@@ -112,77 +108,90 @@ export default async function AccountingPage() {
         </div>
       </div>
 
-      {/* المؤشرات المالية */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 13, marginBottom: 22 }}>
-        <KPI label="الإيرادات" v={fmt(fin.revenue)} sym={sym} color="#1E8E5A" />
-        <KPI label="المصروفات" v={fmt(fin.expense)} sym={sym} color="#C0392B" />
-        <KPI label="صافي الربح" v={fmt(fin.profit)} sym={sym} color="#163B68" />
-        <KPI label="النقدية والبنوك" v={fmt(fin.cash)} sym={sym} color="#D4A017" />
-        <KPI label="مشتريات المخزون (كتب وزي)" v={fmt(purchases.general_purchases ?? 0)} sym={sym} color="#6D5EA6" />
-        <KPI label="مشتريات التغذية" v={fmt(purchases.food_purchases ?? 0)} sym={sym} color="#2E8B8B" />
-      </div>
+      <AccountingTabs
+        overview={
+          <>
+            {/* المؤشرات المالية */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 13, marginBottom: 22 }}>
+              <KPI label="الإيرادات" v={fmt(fin.revenue)} sym={sym} color="#1E8E5A" />
+              <KPI label="المصروفات" v={fmt(fin.expense)} sym={sym} color="#C0392B" />
+              <KPI label="صافي الربح" v={fmt(fin.profit)} sym={sym} color="#163B68" />
+              <KPI label="النقدية والبنوك" v={fmt(fin.cash)} sym={sym} color="#D4A017" />
+              <KPI label="مشتريات المخزون (كتب وزي)" v={fmt(purchases.general_purchases ?? 0)} sym={sym} color="#6D5EA6" />
+              <KPI label="مشتريات التغذية" v={fmt(purchases.food_purchases ?? 0)} sym={sym} color="#2E8B8B" />
+            </div>
 
-      {/* (acc مشتقّة من الأرصدة، تُستخدم في نموذج القيد بأعلى الصفحة) */}
-
-      {/* ميزان المراجعة — يضم أيضاً نوع كل حساب (أصول/خصوم/إيرادات...) بدل قسم منفصل مكرِّر */}
-      <h2 style={{ color: '#0F2744', fontSize: 18, margin: '24px 0 12px' }}>ميزان المراجعة</h2>
-      {bal.length === 0 ? (
-        <div style={{ background: '#fff', borderRadius: 14, padding: 28, textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
-          <div style={{ fontWeight: 700, color: '#0F2744', marginBottom: 4 }}>لا توجد حسابات حتى الآن</div>
-          <div style={{ color: '#8A94A6', fontSize: 13.5 }}>ستظهر هنا جميع الحسابات وأرصدتها بمجرد تسجيل أول عملية مالية.</div>
-        </div>
-      ) : (
-      <div style={{ background: '#fff', borderRadius: 14, overflow: 'auto', boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-          <thead>
-            <tr style={{ background: '#0F2744', color: '#fff', textAlign: 'right' }}>
-              <th style={{ padding: 12 }}>الرمز</th><th style={{ padding: 12 }}>الحساب</th>
-              <th style={{ padding: 12 }}>النوع</th>
-              <th style={{ padding: 12 }}>مدين</th><th style={{ padding: 12 }}>دائن</th>
-            </tr>
-          </thead>
-          <tbody>
-            {trial.map((r) => (
-              <tr key={r.id} style={{ borderBottom: '1px solid #EEF2F1' }}>
-                <td style={{ padding: 10, fontWeight: 700 }}>{r.code}</td>
-                <td style={{ padding: 10 }}>{r.name}</td>
-                <td style={{ padding: 10, color: '#8A94A6', fontSize: 13 }}>{typeLabel(r.type)}</td>
-                <td style={{ padding: 10 }}>{r.debit ? fmt(r.debit) : '—'}</td>
-                <td style={{ padding: 10 }}>{r.credit ? fmt(r.credit) : '—'}</td>
-              </tr>
-            ))}
-            <tr style={{ borderTop: '2px solid #0F2744', fontWeight: 700, background: balanced ? '#E6F4EC' : '#FCE9E6' }}>
-              <td style={{ padding: 12 }} colSpan={3}>الإجمالي {balanced ? '✓ متوازن' : '⚠️ غير متوازن'}</td>
-              <td style={{ padding: 12 }}>{fmt(totalDebit)}</td>
-              <td style={{ padding: 12 }}>{fmt(totalCredit)}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      )}
-
-      {/* قائمة الدخل المبسّطة */}
-      <h2 style={{ color: '#0F2744', fontSize: 18, margin: '24px 0 12px' }}>قائمة الدخل</h2>
-      <div style={{ background: '#fff', borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
-        <Row label="إجمالي الإيرادات" v={fmt(fin.revenue)} sym={sym} />
-        <Row label="إجمالي المصروفات" v={`(${fmt(fin.expense)})`} sym={sym} />
-        <div style={{ borderTop: '2px solid #0F2744', marginTop: 8, paddingTop: 8 }}>
-          <Row label="صافي الربح / الخسارة" v={fmt(fin.profit)} sym={sym} bold color={fin.profit >= 0 ? '#1A7A45' : '#C0392B'} />
-        </div>
-      </div>
-
-      {/* آخر القيود */}
-      <h2 style={{ color: '#0F2744', fontSize: 18, margin: '24px 0 12px' }}>آخر القيود</h2>
-      <div style={{ background: '#fff', borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
-        <JournalList
-          entries={ent}
-          currency={currency}
-          canReverse={['owner', 'accountant'].includes(profile?.role ?? '')}
-        />
-      </div>
-
-      <PeriodReports school={{ name: school?.name ?? 'مدرسة', vat_number: school?.vat_number ?? null, currency }} />
-      <ForecastPanel currency={currency} />
+            {/* قائمة الدخل المبسّطة */}
+            <h2 style={{ color: '#0F2744', fontSize: 18, margin: '24px 0 12px' }}>قائمة الدخل</h2>
+            <div style={{ background: '#fff', borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
+              <Row label="إجمالي الإيرادات" v={fmt(fin.revenue)} sym={sym} />
+              <Row label="إجمالي المصروفات" v={`(${fmt(fin.expense)})`} sym={sym} />
+              <div style={{ borderTop: '2px solid #0F2744', marginTop: 8, paddingTop: 8 }}>
+                <Row label="صافي الربح / الخسارة" v={fmt(fin.profit)} sym={sym} bold color={fin.profit >= 0 ? '#1A7A45' : '#C0392B'} />
+              </div>
+            </div>
+          </>
+        }
+        trialBalance={
+          bal.length === 0 ? (
+            <div style={{ background: '#fff', borderRadius: 14, padding: 28, textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
+              <div style={{ fontWeight: 700, color: '#0F2744', marginBottom: 4 }}>لا توجد حسابات حتى الآن</div>
+              <div style={{ color: '#8A94A6', fontSize: 13.5 }}>ستظهر هنا جميع الحسابات وأرصدتها بمجرد تسجيل أول عملية مالية.</div>
+            </div>
+          ) : (
+            <div style={{ background: '#fff', borderRadius: 14, overflow: 'auto', boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                <thead>
+                  <tr style={{ background: '#0F2744', color: '#fff', textAlign: 'right' }}>
+                    <th style={{ padding: 12 }}>الرمز</th><th style={{ padding: 12 }}>الحساب</th>
+                    <th style={{ padding: 12 }}>النوع</th>
+                    <th style={{ padding: 12 }}>مدين</th><th style={{ padding: 12 }}>دائن</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {trial.map((r) => (
+                    <tr key={r.id} style={{ borderBottom: '1px solid #EEF2F1' }}>
+                      <td style={{ padding: 10, fontWeight: 700 }}>{r.code}</td>
+                      <td style={{ padding: 10 }}>{r.name}</td>
+                      <td style={{ padding: 10, color: '#8A94A6', fontSize: 13 }}>{typeLabel(r.type)}</td>
+                      <td style={{ padding: 10 }}>{r.debit ? fmt(r.debit) : '—'}</td>
+                      <td style={{ padding: 10 }}>{r.credit ? fmt(r.credit) : '—'}</td>
+                    </tr>
+                  ))}
+                  <tr style={{ borderTop: '2px solid #0F2744', fontWeight: 700, background: balanced ? '#E6F4EC' : '#FCE9E6' }}>
+                    <td style={{ padding: 12 }} colSpan={3}>الإجمالي {balanced ? '✓ متوازن' : '⚠️ غير متوازن'}</td>
+                    <td style={{ padding: 12 }}>{fmt(totalDebit)}</td>
+                    <td style={{ padding: 12 }}>{fmt(totalCredit)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )
+        }
+        journal={
+          <>
+            <div style={{ marginBottom: 18 }}>
+              <JournalForm accounts={acc} currency={currency} />
+            </div>
+            <h2 style={{ color: '#0F2744', fontSize: 18, margin: '24px 0 12px' }}>آخر القيود</h2>
+            <div style={{ background: '#fff', borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
+              <JournalList
+                entries={ent}
+                currency={currency}
+                canReverse={['owner', 'accountant'].includes(profile?.role ?? '')}
+              />
+            </div>
+          </>
+        }
+        periodReports={
+          <>
+            <DailyPaymentsReport />
+            <PayrollYearlyReport currency={currency} />
+            <PeriodReports school={{ name: school?.name ?? 'مدرسة', vat_number: school?.vat_number ?? null, currency }} />
+          </>
+        }
+        forecast={<ForecastPanel currency={currency} />}
+      />
     </div>
   )
 }
