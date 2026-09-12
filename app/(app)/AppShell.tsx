@@ -41,13 +41,16 @@ const NAV: NavEntry[] = [
       { type: 'link', href: '/transport', icon: Bus, label: 'النقل المدرسي', show: (r) => isStaff(r) },
       { type: 'link', href: '/inventory', icon: Package, label: 'المخزون', show: (r) => isStaff(r) },
     ],
+   {
+    type: 'group', key: 'accounting', icon: BarChart3, label: 'المحاسبة والتقارير',
+    children: [
+      { type: 'link', href: '/accounting', icon: LayoutGrid, label: 'نظرة عامة', show: (r) => canAccessFinance(r) },
+      { type: 'link', href: '/accounting?tab=trial', icon: Scale, label: 'ميزان المراجعة', show: (r) => canAccessFinance(r) },
+      { type: 'link', href: '/accounting?tab=journal', icon: BookOpen, label: 'القيود', show: (r) => canAccessFinance(r) },
+      { type: 'link', href: '/accounting?tab=periods', icon: CalendarRange, label: 'التقارير الدورية', show: (r) => canAccessFinance(r) },
+      { type: 'link', href: '/accounting?tab=forecast', icon: TrendingUp, label: 'التوقعات', show: (r) => canAccessFinance(r) },
+    ],
   },
-  { type: 'link', href: '/accounting', icon: BarChart3, label: 'المحاسبة والتقارير', show: (r) => canAccessFinance(r) },
-  { type: 'link', href: '/activity', icon: ClipboardList, label: 'سجل النشاط', show: (r) => isOwner(r) },
-  { type: 'link', href: '/subscription', icon: Gem, label: 'اشتراك المنصة', show: (r) => isOwner(r) },
-  { type: 'link', href: '/feedback', icon: MessageCircle, label: 'الدعم والملاحظات', show: (r) => isStaff(r) },
-  { type: 'link', href: '/settings', icon: Settings, label: 'الإعدادات والأمان', show: () => true },
-]
 
 // رقم دعم واتساب
 const WA_NUM = '96895476649'
