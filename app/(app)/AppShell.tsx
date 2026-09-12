@@ -3,7 +3,7 @@
 // هوية المدرسة: لون brandColor يُحقن كمتغيّرات CSS فيلوّن الرابط النشط والشعار.
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
 import type { Role } from '@/lib/roles'
 import { isStaff, canAccessFinance, isOwner } from '@/lib/roles'
@@ -42,7 +42,7 @@ const NAV: NavEntry[] = [
       { type: 'link', href: '/inventory', icon: Package, label: 'المخزون', show: (r) => isStaff(r) },
     ],
   },
-   {
+  {
     type: 'group', key: 'accounting', icon: BarChart3, label: 'المحاسبة والتقارير',
     children: [
       { type: 'link', href: '/accounting', icon: LayoutGrid, label: 'نظرة عامة', show: (r) => canAccessFinance(r) },
@@ -52,6 +52,11 @@ const NAV: NavEntry[] = [
       { type: 'link', href: '/accounting?tab=forecast', icon: TrendingUp, label: 'التوقعات', show: (r) => canAccessFinance(r) },
     ],
   },
+  { type: 'link', href: '/activity', icon: ClipboardList, label: 'سجل النشاط', show: (r) => isOwner(r) },
+  { type: 'link', href: '/subscription', icon: Gem, label: 'اشتراك المنصة', show: (r) => isOwner(r) },
+  { type: 'link', href: '/feedback', icon: MessageCircle, label: 'الدعم والملاحظات', show: (r) => isStaff(r) },
+  { type: 'link', href: '/settings', icon: Settings, label: 'الإعدادات والأمان', show: () => true },
+]
 
 // رقم دعم واتساب
 const WA_NUM = '96895476649'
@@ -68,81 +73,85 @@ function toRgb(hex: string): string | null {
   return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`
 }
 
-// درجة أفتح من اللون — لنصّ الرابط النشط فوق خلفية داكنة (تباين مقروء)
-function lighten(hex: string, amount = 0.45): string {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
-  if (!m) return '#6FE0B8'
-  const n = parseInt(m[1], 16)
-  const mix = (c: number) => Math.round(c + (255 - c) * amount)
-  const r = mix((n >> 16) & 255), g = mix((n >> 8) & 255), b = mix(n & 255)
-  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`
-}
-
-export default function AppShell({ role, brandColor, schoolLogo, schoolName, children }: {
+export default function AppShell({
+  role, brandColor, schoolLogo, schoolName, children,
+}: {
   role: Role
-  brandColor?: string | null
-  schoolLogo?: string | null
-  schoolName?: string | null
+  brandColor: string | null
+  schoolLogo: string | null
+  schoolName: string | null
   children: React.ReactNode
 }) {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const router = useRouter()
-  const supabase = createClient()
+  const [open, setOpen] = useState(false)
+  const [openGroup, setOpenGroup] = useState<string | null>(null)
 
-  // تسجيل خروج حقيقي — الزرّ السابق كان مجرّد رابط لصفحة /login بلا استدعاء signOut()،
-  // فتبقى الجلسة صالحة والمتصفح يعيد فتح آخر حساب تلقائياً فور الوصول لصفحة الدخول.
-  async function handleLogout() {
-    await supabase.auth.signOut()
-    // نستخدم إعادة تحميل كاملة (لا router.push) عمداً — تضمن مسح أي حالة/ذاكرة تخزين
-    // مؤقتة في الصفحة الحالية قبل وصول المستخدم لشاشة الدخول.
-    window.location.href = '/login'
+  // إغلاق الدرج تلقائياً عند تغيّر المسار (تنقّل فعلي عبر رابط)
+  useEffect(() => { setOpen(false) }, [pathname])
+
+  function isActive(href: string) {
+    // الروابط التي تحمل معامل استعلام (?tab=...) يجب أن تُطابق المسار
+    // بالإضافة إلى قيمة كل معامل مذكور في href — بدون الاعتماد على
+    // window.location (يسبب اختلاف رندر السيرفر/العميل — hydration mismatch).
+    const [hrefPath, hrefQuery] = href.split('?')
+    if (hrefQuery) {
+      if (pathname !== hrefPath) return false
+      const hrefParams = new URLSearchParams(hrefQuery)
+      for (const [key, value] of hrefParams.entries()) {
+        if (searchParams.get(key) !== value) return false
+      }
+      return true
+    }
+    if (href === '/dashboard') return pathname === href
+    return pathname === href || pathname.startsWith(href + '/')
   }
 
-  // زر الرجوع: يظهر في كل صفحة ما عدا لوحة التحكّم (نقطة البداية بعد الدخول).
-  // يستخدم سجلّ المتصفح (router.back) — يرجع لآخر صفحة زارها المستخدم فعلياً،
-  // بلا افتراض "أب" منطقي، فيعمل بثبات في كل الصفحات (المحاسبة، الطلاب، إلخ).
-  const showBack = pathname !== '/dashboard'
-  const [open, setOpen] = useState(false)
-  const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/')
-
-  // أي مجموعة تحتوي المسار الحالي — تُحسب أولاً لأن حالة الفتح الابتدائية تعتمد عليها
-  const activeGroupKey = NAV.find(
-    (n): n is NavGroup => n.type === 'group' && n.children.some((c) => isActive(c.href))
-  )?.key ?? null
-
-  // مجموعة واحدة مفتوحة عادة في نفس الوقت — تبدأ مفتوحة على القسم النشط حالياً
-  const [openGroup, setOpenGroup] = useState<string | null>(activeGroupKey)
-  const toggleGroup = (key: string) => setOpenGroup((cur) => (cur === key ? null : key))
-
-  // عند تغيّر المسار (تنقّل بين الصفحات) وسّع تلقائياً المجموعة التي تحوي الصفحة النشطة
-  useEffect(() => { if (activeGroupKey) setOpenGroup(activeGroupKey) }, [activeGroupKey])
-
-  // إغلاق الدرج عند تغيير الصفحة
-  useEffect(() => { setOpen(false) }, [pathname])
-  // منع تمرير الخلفية عند فتح الدرج
+  // فتح تلقائي للمجموعة التي يقع المسار الحالي داخلها — حتى يرى المستخدم
+  // فوراً أين هو ضمن الشريط الجانبي دون أن يضغط شيئاً بنفسه.
+  // يعتمد أيضاً على searchParams حتى يعمل عند تبديل التبويبات (?tab=...)
+  // على نفس المسار، حيث لا يتغيّر pathname وحده.
   useEffect(() => {
-    document.body.style.overflow = open ? 'hidden' : ''
-    return () => { document.body.style.overflow = '' }
-  }, [open])
+    for (const entry of NAV) {
+      if (entry.type === 'group' && entry.children.some((c) => isActive(c.href))) {
+        setOpenGroup(entry.key)
+        return
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, searchParams])
 
-  // بناء متغيّرات اللون — تتجاوز قيم :root الافتراضية
-  const brand = (brandColor && toRgb(brandColor)) ? brandColor.trim() : DEFAULT_BRAND
-  const rgb = toRgb(brand) ?? '15,157,116'
-  const brandVars = {
-    '--brand': brand,
-    '--brand-soft': lighten(brand),
-    '--brand-tint-22': `rgba(${rgb},.22)`,
-    '--brand-tint-08': `rgba(${rgb},.08)`,
-  } as React.CSSProperties
+  function toggleGroup(key: string) {
+    setOpenGroup((prev) => (prev === key ? null : key))
+  }
+
+  async function handleLogout() {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
+
+  const brand = brandColor && toRgb(brandColor) ? brandColor : DEFAULT_BRAND
+  const brandRgb = toRgb(brand) ?? toRgb(DEFAULT_BRAND)
 
   return (
-    <div className="layout" style={brandVars}>
-      {/* شريط علوي للجوال */}
-      <header className="app-header">
-        <div className="topbar">
-          <div className="brand"><LogoMark size={30} /> <span>Rusoom<span style={{ color: 'var(--brand)' }}>Pay</span></span></div>
-          <button className="menu-btn" onClick={() => setOpen(true)} aria-label="فتح القائمة">☰</button>
-        </div>
+    <div
+      className="app-shell"
+      style={{
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ['--brand' as any]: brand,
+        ['--brand-rgb' as any]: brandRgb,
+        ['--brand-tint-08' as any]: `rgba(${brandRgb},.08)`,
+        ['--brand-tint-22' as any]: `rgba(${brandRgb},.22)`,
+      }}
+    >
+      {/* شريط علوي (جوال فقط) — همبرغر لفتح الدرج */}
+      <header className="app-topbar">
+        <button className="hamburger" onClick={() => setOpen(true)} aria-label="فتح القائمة">
+          <span /><span /><span />
+        </button>
+        <div className="topbar-brand"><LogoMark size={26} /> <span>Rusoom<span style={{ color: 'var(--brand)' }}>Pay</span></span></div>
       </header>
 
       {/* خلفية معتمة (جوال) — الإغلاق بالنقر خارج الدرج */}
@@ -251,12 +260,6 @@ export default function AppShell({ role, brandColor, schoolLogo, schoolName, chi
 
       {/* المحتوى */}
       <main className="app-main">
-        {showBack && (
-          <button onClick={() => router.back()}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#fff', border: '1px solid #E3E8EE', borderRadius: 10, padding: '8px 15px', marginBottom: 16, cursor: 'pointer', color: '#0F2744', fontWeight: 700, fontSize: 13.5, fontFamily: 'inherit', boxShadow: '0 1px 3px rgba(10,37,64,.06)' }}>
-            <span style={{ fontSize: 17, lineHeight: 1, color: 'var(--brand)' }}>→</span> رجوع
-          </button>
-        )}
         {children}
       </main>
     </div>
