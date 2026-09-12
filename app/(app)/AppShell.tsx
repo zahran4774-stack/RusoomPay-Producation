@@ -41,6 +41,7 @@ const NAV: NavEntry[] = [
       { type: 'link', href: '/transport', icon: Bus, label: 'النقل المدرسي', show: (r) => isStaff(r) },
       { type: 'link', href: '/inventory', icon: Package, label: 'المخزون', show: (r) => isStaff(r) },
     ],
+  },
    {
     type: 'group', key: 'accounting', icon: BarChart3, label: 'المحاسبة والتقارير',
     children: [
