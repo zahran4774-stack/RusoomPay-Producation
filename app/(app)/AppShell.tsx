@@ -109,7 +109,7 @@ export default function AppShell({
 
   return (
     <div
-      className="app-shell"
+      className="layout"
       style={{
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ['--brand' as any]: brand,
@@ -118,11 +118,11 @@ export default function AppShell({
         ['--brand-tint-22' as any]: `rgba(${brandRgb},.22)`,
       }}
     >
-      <header className="app-topbar">
-        <button className="hamburger" onClick={() => setOpen(true)} aria-label="فتح القائمة">
+      <header className="topbar">
+        <button className="menu-btn" onClick={() => setOpen(true)} aria-label="فتح القائمة">
           <span /><span /><span />
         </button>
-        <div className="topbar-brand"><LogoMark size={26} /> <span>Rusoom<span style={{ color: 'var(--brand)' }}>Pay</span></span></div>
+        <div className="brand"><LogoMark size={26} /> <span>Rusoom<span style={{ color: 'var(--brand)' }}>Pay</span></span></div>
       </header>
 
       <div className={`drawer-overlay ${open ? 'open' : ''}`} onClick={() => setOpen(false)} aria-hidden="true" />
