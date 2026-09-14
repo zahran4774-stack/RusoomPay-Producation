@@ -1,13 +1,17 @@
 'use client'
 // تعديل بيانات الطالب — كل الحقول المتاحة في نموذج إضافة طالب، بما فيها
-// الرسوم السنوية والتخفيض٪ والرقم المدرسي. تعديل الرسوم هنا مرجعي فقط —
-// لا يُعدّل فاتورة الرسوم القائمة تلقائياً (تُدار من قسم الرسوم والفواتير).
+// الرسوم السنوية والتخفيض٪ والرقم المدرسي، بالإضافة إلى الإعفاء الكامل
+// والحالة الخاصة. تعديل الرسوم هنا مرجعي فقط — لا يُعدّل فاتورة الرسوم
+// القائمة تلقائياً (تُدار من قسم الرسوم والفواتير).
 // تحذير مزدوج بارز (أعلى النموذج + تحت الحقل نفسه) بعد حادثة التباس فعلية —
 // موظف عدّل "الرسوم السنوية" هنا ظنّاً منه أنها تُنشئ فاتورة، فلم تُنشأ.
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
 import { GRADES, SECTIONS, isValidGrade, isValidSection, GULF_COUNTRIES, DEFAULT_COUNTRY, cleanLocalNumber, isValidLocalNumber } from '@/lib/academic'
+
+// اقتراحات سبب الحالة الخاصة — نص حر مع قائمة اقتراحات، لا قيد مقفل
+const SPECIAL_CASE_SUGGESTIONS = ['ابن موظف', 'صدقة', 'مساعدة لوجه الله', 'أسرة محتاجة', 'أخرى']
 
 // يفصل رقماً مخزَّناً (قد يكون بصيغة قديمة محلية بلا كود دولة، أو دولية
 // كاملة +XXXXXXXXXXX) إلى {كود الدولة، الرقم المحلي} لعرضهما بحقلين منفصلين.
@@ -43,6 +47,8 @@ export type StudentEditable = {
   code?: string | null
   annual_fee?: number | null
   discount_pct?: number | null
+  is_exempt?: boolean | null
+  special_case_reason?: string | null
 }
 
 type Bus = { id: string; routes_label: string; fee: number }
@@ -81,6 +87,19 @@ export default function EditStudent({ student, buses = [], currentBusId = null }
     set('guardian_phone', cleanLocalNumber(raw).slice(0, country?.localLen ?? 9))
   }
 
+  // معفى بالكامل / حالة خاصة (تخفيض) — مستقلّان تماماً عن بعضهما
+  const [isExempt, setIsExempt] = useState(student.is_exempt ?? false)
+  const [hasSpecialCase, setHasSpecialCase] = useState(!!student.special_case_reason)
+  const [specialCaseReason, setSpecialCaseReason] = useState(student.special_case_reason ?? '')
+
+  function toggleSpecialCase(checked: boolean) {
+    setHasSpecialCase(checked)
+    if (!checked) {
+      setSpecialCaseReason('')
+      set('discount_pct', '0')
+    }
+  }
+
   // النقل المدرسي — نبدأ من الاشتراك الحالي إن وُجد (currentBusId)
   const [wantsTransport, setWantsTransport] = useState(!!currentBusId)
   const [selectedBus, setSelectedBus] = useState(currentBusId ?? '')
@@ -97,7 +116,15 @@ export default function EditStudent({ student, buses = [], currentBusId = null }
     if (!f.section.trim()) { setErr('الشعبة مطلوبة'); return }
     if (!f.guardian_phone.trim()) { setErr('رقم ولي الأمر مطلوب'); return }
     if (!phoneValid) { setErr('رقم ولي الأمر غير مكتمل أو غير صالح لهذه الدولة'); return }
-    if (!f.annual_fee || Number(f.annual_fee) <= 0) { setErr('الرسوم السنوية مطلوبة ويجب أن تكون أكبر من صفر'); return }
+    if (!isExempt && (!f.annual_fee || Number(f.annual_fee) <= 0)) {
+      setErr('الرسوم السنوية مطلوبة ويجب أن تكون أكبر من صفر'); return
+    }
+    if (hasSpecialCase && !specialCaseReason.trim()) {
+      setErr('حدد سبب الحالة الخاصة'); return
+    }
+    if (hasSpecialCase && Number(f.discount_pct) <= 0) {
+      setErr('حدد نسبة التخفيض المرتبطة بالحالة الخاصة'); return
+    }
     setSaving(true)
     const fullPhone = `+${countryCode}${f.guardian_phone}`
     const { error } = await supabase.rpc('update_student', {
@@ -111,8 +138,10 @@ export default function EditStudent({ student, buses = [], currentBusId = null }
       p_birth_date: f.birth_date || null,
       p_gender: f.gender || null,
       p_code: f.code || null,
-      p_annual_fee: Number(f.annual_fee),
+      p_annual_fee: isExempt ? 0 : Number(f.annual_fee),
       p_discount_pct: Number(f.discount_pct) || 0,
+      p_is_exempt: isExempt,
+      p_special_case_reason: hasSpecialCase ? specialCaseReason.trim() : null,
     })
     if (error) { setSaving(false); setErr(error.message); return }
 
@@ -250,17 +279,52 @@ export default function EditStudent({ student, buses = [], currentBusId = null }
               <option value="female">أنثى</option>
             </select>
           </div>
+
+          {/* معفى بالكامل من الدفع */}
+          <div style={{ flex: '1 1 100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid #E3E8EE', borderRadius: 10, background: isExempt ? '#F4F8F6' : '#fff' }}>
+              <input type="checkbox" checked={isExempt} onChange={(e) => setIsExempt(e.target.checked)} style={{ width: 18, height: 18, cursor: 'pointer' }} />
+              <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: '#0F2744' }}>🎗️ معفى بالكامل من الرسوم</span>
+            </div>
+          </div>
+
           <div style={cell}>
-            <label style={label}>الرسوم السنوية (ر.ع) *</label>
-            <input type="number" style={input} value={f.annual_fee} onChange={(e) => set('annual_fee', e.target.value)} dir="ltr" />
+            <label style={label}>الرسوم السنوية (ر.ع) {isExempt ? '' : '*'}</label>
+            <input type="number" style={{ ...input, opacity: isExempt ? 0.5 : 1 }} value={f.annual_fee} onChange={(e) => set('annual_fee', e.target.value)} dir="ltr" disabled={isExempt} />
             <div style={{ fontSize: 10.5, color: '#B5720E', marginTop: 4 }}>
               ⚠️ سجل مرجعي فقط — لا يُنشئ فاتورة. استخدم «الرسوم والفواتير» لإضافة رسم فعلي.
             </div>
           </div>
           <div style={cell}>
             <label style={label}>التخفيض ٪</label>
-            <input type="number" min={0} max={100} style={input} value={f.discount_pct} onChange={(e) => set('discount_pct', e.target.value)} dir="ltr" />
+            <input type="number" min={0} max={100} style={{ ...input, opacity: isExempt ? 0.5 : 1 }} value={f.discount_pct} onChange={(e) => set('discount_pct', e.target.value)} dir="ltr" disabled={isExempt} />
           </div>
+
+          {/* حالة خاصة — تخفيض بسبب موثّق، مستقلّة تماماً عن الإعفاء الكامل */}
+          {!isExempt && (
+            <div style={{ flex: '1 1 100%' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid #E3E8EE', borderRadius: 10, background: hasSpecialCase ? '#FDF8ED' : '#fff' }}>
+                <input type="checkbox" checked={hasSpecialCase} onChange={(e) => toggleSpecialCase(e.target.checked)} style={{ width: 18, height: 18, cursor: 'pointer' }} />
+                <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: '#0F2744' }}>⭐ حالة خاصة (تخفيض بسبب موثّق)</span>
+              </div>
+              {hasSpecialCase && (
+                <div style={{ marginTop: 8 }}>
+                  <label style={label}>سبب الحالة الخاصة *</label>
+                  <input
+                    style={input} value={specialCaseReason}
+                    onChange={(e) => setSpecialCaseReason(e.target.value)}
+                    placeholder="مثال: ابن موظف" list="special-case-suggestions-edit"
+                  />
+                  <datalist id="special-case-suggestions-edit">
+                    {SPECIAL_CASE_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
+                  </datalist>
+                  <div style={{ color: '#8A6D0F', fontSize: 12, marginTop: 4 }}>
+                    استخدم حقل «التخفيض ٪» أعلاه لتحديد نسبة الخصم المرتبطة بهذه الحالة.
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* حقول إضافية — تُستخدم أساساً في بطاقة الطالب المطبوعة */}
           <div style={cell}>
