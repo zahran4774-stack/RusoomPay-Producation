@@ -10,12 +10,12 @@ type Result = { ok: number; failed: number; errors: { row: number; name: string;
 const HEADERS = [
   'الاسم الكامل', 'الصف', 'الشعبة', 'اسم ولي الأمر', 'رقم ولي الأمر',
   'بريد ولي الأمر', 'تاريخ الميلاد', 'الجنس', 'الرسوم السنوية',
-  'باقة التغذية', 'مبلغ التغذية السنوي',
+  'معفى بالكامل (نعم/لا)', 'سبب الحالة الخاصة', 'نسبة التخفيض٪',
 ]
 const KEYS = [
   'full_name', 'grade', 'section', 'guardian_name', 'guardian_phone',
   'guardian_email', 'birth_date', 'gender', 'annual_fee',
-  'meal_plan', 'meal_annual',
+  'is_exempt', 'special_case_reason', 'discount_pct',
 ]
 
 // محلّل CSV بسيط يدعم الحقول المقتبسة
@@ -51,7 +51,7 @@ export default function ImportStudents() {
 
   function downloadTemplate() {
     // BOM لضمان قراءة Excel للعربية بشكل صحيح
-    const sample = ['محمد أحمد الكندي', 'الصف الخامس', 'أ', 'أحمد الكندي', '99123456', 'parent@email.com', '2014-05-20', 'male', '900', '', '']
+    const sample = ['محمد أحمد الكندي', 'الصف الخامس', 'أ', 'أحمد الكندي', '99123456', 'parent@email.com', '2014-05-20', 'male', '900', 'لا', '', '0']
     const csv = '\uFEFF' + HEADERS.join(',') + '\n' + sample.join(',') + '\n'
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const a = document.createElement('a')
@@ -117,9 +117,13 @@ export default function ImportStudents() {
         <h3 style={{ color: '#0F2744', margin: 0, fontSize: 18 }}>استيراد الطلاب من ملف</h3>
         <button onClick={() => setOpen(false)} style={{ background: 'none', border: 0, fontSize: 22, cursor: 'pointer', color: '#667' }}>×</button>
       </div>
-      <p style={{ color: '#667', fontSize: 13, margin: '0 0 16px', lineHeight: 1.8 }}>
+      <p style={{ color: '#667', fontSize: 13, margin: '0 0 6px', lineHeight: 1.8 }}>
         نزّل القالب، املأه في Excel، ثم احفظه بصيغة <b>CSV UTF-8</b> وارفعه.
         الرقم المدرسي يُولَّد تلقائياً.
+      </p>
+      <p style={{ color: '#8A6D0F', fontSize: 12.5, margin: '0 0 16px', lineHeight: 1.8, background: '#FBF3D5', padding: '8px 12px', borderRadius: 8 }}>
+        💡 عمود «معفى بالكامل» يقبل «نعم» أو «لا» فقط. إن كان الطالب معفى، تُترك «الرسوم السنوية» فارغة أو صفراً.
+        «سبب الحالة الخاصة» و«نسبة التخفيض٪» اختياريان معاً — املأهما معاً أو اتركهما فارغين.
       </p>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', marginBottom: 16 }}>
@@ -146,6 +150,7 @@ export default function ImportStudents() {
                   <th style={{ padding: '8px 10px', textAlign: 'right', color: '#667', fontSize: 12 }}>الصف</th>
                   <th style={{ padding: '8px 10px', textAlign: 'right', color: '#667', fontSize: 12 }}>ولي الأمر</th>
                   <th style={{ padding: '8px 10px', textAlign: 'right', color: '#667', fontSize: 12 }}>الرسوم</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'right', color: '#667', fontSize: 12 }}>معفى</th>
                 </tr>
               </thead>
               <tbody>
@@ -155,6 +160,9 @@ export default function ImportStudents() {
                     <td style={{ padding: '8px 10px' }}>{r.grade || '—'}</td>
                     <td style={{ padding: '8px 10px' }}>{r.guardian_name || '—'}</td>
                     <td style={{ padding: '8px 10px', direction: 'ltr', textAlign: 'right' }}>{r.annual_fee || '0'}</td>
+                    <td style={{ padding: '8px 10px' }}>
+                      {r.is_exempt?.trim() === 'نعم' ? <span style={{ color: '#1A7A45', fontWeight: 700 }}>نعم</span> : '—'}
+                    </td>
                   </tr>
                 ))}
               </tbody>
