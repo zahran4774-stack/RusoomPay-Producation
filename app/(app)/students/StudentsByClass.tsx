@@ -6,6 +6,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import CertificatesButton from './CertificatesButton'
 import EditStudent from './EditStudent'
+import PaymentTracker from './PaymentTracker'
 import { printStudentCard, printClassCards } from '@/lib/print-student-card'
 
 type Student = {
@@ -16,6 +17,7 @@ type Student = {
   birth_date?: string | null; gender?: string | null
   father_phone?: string | null; mother_phone?: string | null; address?: string | null
   annual_fee?: number | null; discount_pct?: number | null
+  is_exempt?: boolean | null; special_case_reason?: string | null
   // لتمكين فلتر "بلا رسوم فقط" — لا نحتاج غير وجود/عدم وجود صف واحد على الأقل
   student_fees?: { id: string }[] | null
 }
@@ -27,6 +29,31 @@ const statusLabel = (s: string) => s === 'active' ? 'منتظم' : s === 'transf
 const statusColor = (s: string) => s === 'active' ? '#067647' : s === 'transferred' ? '#B54708' : '#667085'
 
 const PAGE_SIZE = 10
+
+// شارات دائمة بجانب اسم الطالب — معفى بالكامل / حالة خاصة (مع تلميح السبب)
+function StudentBadges({ s }: { s: Student }) {
+  if (!s.is_exempt && !s.special_case_reason) return null
+  return (
+    <span style={{ display: 'inline-flex', gap: 4, marginInlineStart: 6, verticalAlign: 'middle' }}>
+      {s.is_exempt && (
+        <span title="معفى بالكامل من الرسوم" style={{
+          display: 'inline-flex', alignItems: 'center', fontSize: 11, fontWeight: 700,
+          background: '#E6F4EC', color: '#1A7A45', borderRadius: 20, padding: '2px 7px',
+        }}>
+          🎗️ معفى
+        </span>
+      )}
+      {s.special_case_reason && (
+        <span title={`حالة خاصة: ${s.special_case_reason}${s.discount_pct ? ` — تخفيض ${s.discount_pct}%` : ''}`} style={{
+          display: 'inline-flex', alignItems: 'center', fontSize: 11, fontWeight: 700,
+          background: '#FDF3D5', color: '#8A6D0F', borderRadius: 20, padding: '2px 7px',
+        }}>
+          ⭐ حالة خاصة
+        </span>
+      )}
+    </span>
+  )
+}
 
 export default function StudentsByClass({
   students, school, busMap = {}, buses = [], studentBusIdMap = {},
@@ -42,6 +69,7 @@ export default function StudentsByClass({
   // بلا رسوم فقط — قادمة من زر "مراجعة الطلاب" في School Copilot (missing_fees)
   const [noFeeOnly, setNoFeeOnly] = useState(false)
   const [pageMap, setPageMap] = useState<Record<string, number>>({})   // صفحة كل شعبة (مستقلّة لكل كرت)
+  const [trackerStudent, setTrackerStudent] = useState<Student | null>(null)   // لوحة التتبع الشهري المفتوحة
 
   // ─── تفعيل الفلتر تلقائياً عند القدوم من School Copilot (?filter=nofee) ───
   const searchParams = useSearchParams()
@@ -186,13 +214,14 @@ export default function StudentsByClass({
                       </button>
                     </div>
                   </div>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, minWidth: 560 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, minWidth: 620 }}>
                     <thead>
                       <tr style={{ background: '#F4F8F7', color: '#0F2744', textAlign: 'right' }}>
                         <th style={{ padding: 11 }}>الرقم</th>
                         <th style={{ padding: 11 }}>الطالب</th>
                         <th style={{ padding: 11 }}>ولي الأمر</th>
                         <th style={{ padding: 11 }}>الحالة</th>
+                        <th style={{ padding: 11 }}>الدفعات</th>
                         <th style={{ padding: 11 }}>الشهادات</th>
                         <th style={{ padding: 11 }}>البطاقة</th>
                         <th style={{ padding: 11 }}>تعديل</th>
@@ -202,10 +231,21 @@ export default function StudentsByClass({
                       {gPageStudents.map((s) => (
                         <tr key={s.id} style={{ borderBottom: '1px solid #EEF2F1' }}>
                           <td style={{ padding: 11, fontWeight: 700 }}>{s.code}</td>
-                          <td style={{ padding: 11 }}>{s.full_name}</td>
+                          <td style={{ padding: 11 }}>
+                            {s.full_name}
+                            <StudentBadges s={s} />
+                          </td>
                           <td style={{ padding: 11 }}>{s.guardian_name || '—'}</td>
                           <td style={{ padding: 11 }}>
                             <span style={{ color: statusColor(s.status), fontWeight: 600 }}>{statusLabel(s.status)}</span>
+                          </td>
+                          <td style={{ padding: 11 }}>
+                            <button
+                              onClick={() => setTrackerStudent(s)}
+                              title="تتبع الدفعات الشهرية"
+                              style={{ background: '#EEF2F9', color: '#163B68', border: 0, padding: '6px 12px', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+                              📅 التتبع
+                            </button>
                           </td>
                           <td style={{ padding: 11 }}>
                             <CertificatesButton studentId={s.id} studentName={s.full_name} school={school} />
@@ -235,6 +275,8 @@ export default function StudentsByClass({
                               code: s.code ?? null,
                               annual_fee: s.annual_fee ?? null,
                               discount_pct: s.discount_pct ?? null,
+                              is_exempt: s.is_exempt ?? null,
+                              special_case_reason: s.special_case_reason ?? null,
                             }} buses={buses} currentBusId={studentBusIdMap[s.id] ?? null} />
                           </td>
                         </tr>
@@ -281,6 +323,14 @@ export default function StudentsByClass({
         <div style={{ textAlign: 'center', color: '#999', padding: 24 }}>
           {noFeeOnly ? 'لا يوجد طلاب بلا رسوم — كل الطلاب لهم فواتير مسجّلة.' : 'لا نتائج مطابقة لبحثك.'}
         </div>
+      )}
+
+      {trackerStudent && (
+        <PaymentTracker
+          studentId={trackerStudent.id}
+          studentName={trackerStudent.full_name}
+          onClose={() => setTrackerStudent(null)}
+        />
       )}
     </div>
   )
