@@ -1,10 +1,16 @@
 'use client'
+// نموذج إضافة طالب — يشمل الإعفاء الكامل، الحالة الخاصة (تخفيض)، وخيار
+// دمج النقل والتغذية ضمن الرسوم الدراسية (إن فُعِّل هذا الإعداد من الإعدادات).
+// عند التفعيل: حقلا التغذية/النقل يعملان، وقيمتاهما تُدمَج تلقائياً في رسم
+// واحد موحّد (تُقرأ من قاعدة البيانات في add_student، لا تُدخَل يدوياً).
+// عند التعطيل: الحقلان مجمّدان تماماً — لا يمكن إدخال بيانات فيهما.
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
 import { GULF_COUNTRIES, DEFAULT_COUNTRY, cleanLocalNumber, isValidLocalNumber, GRADES } from '@/lib/academic'
 
 type Bus = { id: string; routes_label: string; fee: number }
+type MealPlan = { id: string; name: string; fee: number }
 
 // اقتراحات سبب الحالة الخاصة — نص حر مع قائمة اقتراحات، لا قيد مقفل
 const SPECIAL_CASE_SUGGESTIONS = ['ابن موظف', 'صدقة', 'مساعدة لوجه الله', 'أسرة محتاجة', 'أخرى']
@@ -17,7 +23,7 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
   const [err, setErr] = useState<string | null>(null)
   const [ok, setOk] = useState(false)
 
-  const [mealPlans, setMealPlans] = useState<{ id: string; name: string; fee: number }[]>([])
+  const [mealPlans, setMealPlans] = useState<MealPlan[]>([])
   const [selectedMeals, setSelectedMeals] = useState<Record<string, string>>({})
   const toggleMealPlan = (planId: string) => {
     setSelectedMeals((prev) => {
@@ -30,6 +36,11 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
 
   const [wantsTransport, setWantsTransport] = useState(false)
   const [selectedBus, setSelectedBus] = useState('')
+
+  // دمج النقل والتغذية — إعداد على مستوى المدرسة، يُجلب مرة عند فتح النموذج
+  const [bundleEnabled, setBundleEnabled] = useState<boolean | null>(null) // null = لم يُحمَّل بعد
+  const [bundleMealPlanId, setBundleMealPlanId] = useState('')
+  const [bundleBusId, setBundleBusId] = useState('')
 
   // معفى بالكامل / حالة خاصة (تخفيض) — مستقلّان تماماً عن بعضهما
   const [isExempt, setIsExempt] = useState(false)
@@ -44,6 +55,9 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
     supabase.rpc('cafeteria_plans').then(({ data }) => { if (data) setMealPlans(data) })
     supabase.rpc('grade_fees_list').then(({ data }) => {
       if (data) setGradeFees(Object.fromEntries(data.map((g: { grade: string; annual_fee: number }) => [g.grade, g.annual_fee])))
+    })
+    supabase.from('schools').select('bundle_transport_meals').single().then(({ data }) => {
+      setBundleEnabled(!!data?.bundle_transport_meals)
     })
   }, [supabase])
 
@@ -90,6 +104,12 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
     }
   }
 
+  // مجموع تقديري يُعرض للمستخدم فقط (الحساب الفعلي والدقيق يتم في add_student
+  // خادمياً من القيم الحقيقية المخزَّنة، هذا فقط لمعاينة سريعة قبل الحفظ)
+  const bundleMealFee = bundleMealPlanId ? (mealPlans.find((p) => p.id === bundleMealPlanId)?.fee ?? 0) : 0
+  const bundleBusFee = bundleBusId ? (buses.find((b) => b.id === bundleBusId)?.fee ?? 0) : 0
+  const estimatedGrandTotal = (Number(f.annual_fee) || 0) + bundleMealFee + bundleBusFee
+
   async function submit() {
     setErr(null); setOk(false)
     if (!f.full_name.trim()) { setErr('اسم الطالب مطلوب'); return }
@@ -97,8 +117,8 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
     if (!f.section.trim()) { setErr('الشعبة مطلوبة'); return }
     if (!f.guardian_phone.trim()) { setErr('رقم ولي الأمر مطلوب'); return }
     if (!phoneValid) { setErr('رقم ولي الأمر غير مكتمل أو غير صالح لهذه الدولة'); return }
-    // الرسوم مطلوبة فقط إن لم يكن الطالب معفى بالكامل
-    if (!isExempt && (!f.annual_fee || Number(f.annual_fee) <= 0)) {
+    // الرسوم مطلوبة فقط إن لم يكن الطالب معفى بالكامل (وبلا دمج مضاف)
+    if (!isExempt && (!f.annual_fee || Number(f.annual_fee) <= 0) && !bundleMealPlanId && !bundleBusId) {
       setErr('الرسوم السنوية مطلوبة ويجب أن تكون أكبر من صفر'); return
     }
     if (hasSpecialCase && !specialCaseReason.trim()) {
@@ -119,20 +139,24 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
       p_birth_date: f.birth_date || null,
       p_gender: f.gender || null,
       p_code: f.code || null,
-      p_annual_fee: isExempt ? 0 : Number(f.annual_fee),
+      p_annual_fee: isExempt ? 0 : Number(f.annual_fee || 0),
       p_discount_pct: Number(f.discount_pct) || 0,
       // ⚠️ إصلاح: كان هذا الحقل مفقوداً رغم أن النموذج يعرض قسم النقل المدرسي
       // كاملاً — بدونه يبقى transport_type='none' للأبد مهما اختار المستخدم
       // باصاً فعلياً (ولا توجد دالة تعديل تصلحه لاحقاً)، فتفوت جملة "شاملة
       // النقل" في وصف الفاتورة التي تبنيها add_student() بالفعل.
-      p_transport_type: wantsTransport && selectedBus ? 'school' : 'none',
+      p_transport_type: (bundleEnabled && bundleBusId) || (!bundleEnabled && wantsTransport && selectedBus) ? 'school' : 'none',
       p_is_exempt: isExempt,
       p_special_case_reason: hasSpecialCase ? specialCaseReason.trim() : null,
+      // الدمج: تُقرأ القيم الحقيقية من قاعدة البيانات، لا نمرّر مبلغاً يدوياً
+      p_bundle_meal_plan_id: bundleEnabled && bundleMealPlanId ? bundleMealPlanId : null,
+      p_bundle_bus_id: bundleEnabled && bundleBusId ? bundleBusId : null,
     })
     setSaving(false)
     if (error) { setErr(error.message); return }
     setOk(true)
-    if (newId) {
+    if (newId && !bundleEnabled) {
+      // المسار القديم (غير المدمج) — كما كان، فواتير منفصلة للتغذية والنقل
       for (const [planId, amount] of Object.entries(selectedMeals)) {
         if (Number(amount) > 0) {
           await supabase.rpc('add_annual_meal_fee', {
@@ -147,6 +171,8 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
     setSelectedMeals({})
     setWantsTransport(false)
     setSelectedBus('')
+    setBundleMealPlanId('')
+    setBundleBusId('')
     setIsExempt(false)
     setHasSpecialCase(false)
     setSpecialCaseReason('')
@@ -158,7 +184,7 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
   }
 
   const label: React.CSSProperties = { fontSize: 13, fontWeight: 700, color: '#0F2744', marginBottom: 5, display: 'block' }
-  const input: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #E3E8EE', fontSize: 14, fontFamily: 'inherit' }
+  const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #E3E8EE', fontSize: 14, fontFamily: 'inherit' }
   const cell: React.CSSProperties = { flex: '1 1 220px' }
   const fmt = (n: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 
@@ -181,29 +207,29 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
         <div style={cell}>
           <label style={label}>الاسم الكامل *</label>
-          <input style={input} value={f.full_name} onChange={(e) => set('full_name', e.target.value)} placeholder="محمد أحمد الكندي" />
+          <input style={inputStyle} value={f.full_name} onChange={(e) => set('full_name', e.target.value)} placeholder="محمد أحمد الكندي" />
         </div>
         <div style={cell}>
           <label style={label}>الصف / المرحلة *</label>
-          <select style={input} value={f.grade} onChange={(e) => applyGrade(e.target.value)}>
+          <select style={inputStyle} value={f.grade} onChange={(e) => applyGrade(e.target.value)}>
             <option value="">— اختر الصف —</option>
             {GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
           </select>
         </div>
         <div style={cell}>
           <label style={label}>الشعبة *</label>
-          <select style={input} value={f.section} onChange={(e) => set('section', e.target.value)}>
+          <select style={inputStyle} value={f.section} onChange={(e) => set('section', e.target.value)}>
             <option value="">— اختر الشعبة —</option>
             {sectionOptions.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
         <div style={cell}>
           <label style={label}>الرقم المدرسي (تلقائي إن تُرك فارغاً)</label>
-          <input style={input} value={f.code} onChange={(e) => set('code', e.target.value)} placeholder="STU-001" />
+          <input style={inputStyle} value={f.code} onChange={(e) => set('code', e.target.value)} placeholder="STU-001" />
         </div>
         <div style={cell}>
           <label style={label}>اسم ولي الأمر</label>
-          <input style={input} value={f.guardian_name} onChange={(e) => set('guardian_name', e.target.value)} placeholder="أحمد الكندي" />
+          <input style={inputStyle} value={f.guardian_name} onChange={(e) => set('guardian_name', e.target.value)} placeholder="أحمد الكندي" />
         </div>
         <div style={cell}>
           <label style={label}>رقم ولي الأمر *</label>
@@ -211,14 +237,14 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
             <select
               value={countryCode}
               onChange={(e) => { setCountryCode(e.target.value); set('guardian_phone', '') }}
-              style={{ ...input, flex: '0 0 108px', cursor: 'pointer', padding: '0 8px' }}
+              style={{ ...inputStyle, flex: '0 0 108px', cursor: 'pointer', padding: '0 8px' }}
             >
               {GULF_COUNTRIES.map((c) => (
                 <option key={c.code} value={c.code}>{c.flag} +{c.code}</option>
               ))}
             </select>
             <input
-              style={{ ...input, direction: 'ltr', textAlign: 'right', borderColor: f.guardian_phone && !phoneValid ? '#E0A3A3' : '#E3E8EE' }}
+              style={{ ...inputStyle, direction: 'ltr', textAlign: 'right', borderColor: f.guardian_phone && !phoneValid ? '#E0A3A3' : '#E3E8EE' }}
               value={f.guardian_phone} onChange={(e) => onPhoneChange(e.target.value)}
               inputMode="numeric" placeholder={country?.code === '968' ? '9xxxxxxx' : 'xxxxxxxx'} dir="ltr"
             />
@@ -229,15 +255,15 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
         </div>
         <div style={cell}>
           <label style={label}>بريد ولي الأمر</label>
-          <input style={input} value={f.guardian_email} onChange={(e) => set('guardian_email', e.target.value)} placeholder="parent@email.com" dir="ltr" />
+          <input style={inputStyle} value={f.guardian_email} onChange={(e) => set('guardian_email', e.target.value)} placeholder="parent@email.com" dir="ltr" />
         </div>
         <div style={cell}>
           <label style={label}>تاريخ الميلاد</label>
-          <input type="date" style={input} value={f.birth_date} onChange={(e) => set('birth_date', e.target.value)} dir="ltr" />
+          <input type="date" style={inputStyle} value={f.birth_date} onChange={(e) => set('birth_date', e.target.value)} dir="ltr" />
         </div>
         <div style={cell}>
           <label style={label}>الجنس</label>
-          <select style={input} value={f.gender} onChange={(e) => set('gender', e.target.value)}>
+          <select style={inputStyle} value={f.gender} onChange={(e) => set('gender', e.target.value)}>
             <option value="">—</option>
             <option value="male">ذكر</option>
             <option value="female">أنثى</option>
@@ -257,14 +283,17 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
 
         <div style={cell}>
           <label style={label}>الرسوم السنوية (ر.ع) {isExempt ? '' : '*'}</label>
-          <input type="number" style={{ ...input, opacity: isExempt ? 0.5 : 1 }} value={f.annual_fee} onChange={(e) => set('annual_fee', e.target.value)} placeholder="0" dir="ltr" disabled={isExempt} />
+          <input type="number" style={{ ...inputStyle, opacity: isExempt ? 0.5 : 1 }} value={f.annual_fee} onChange={(e) => set('annual_fee', e.target.value)} placeholder="0" dir="ltr" disabled={isExempt} />
           {basePrice !== null && !isExempt && (
             <div style={{ color: '#8A94A6', fontSize: 11.5, marginTop: 4 }}>السعر الأساسي للمرحلة: {basePrice.toLocaleString('en-US', { minimumFractionDigits: 3 })} ر.ع</div>
           )}
         </div>
         <div style={cell}>
           <label style={label}>التخفيض ٪</label>
-          <input type="number" min={0} max={100} style={{ ...input, opacity: isExempt ? 0.5 : 1 }} value={f.discount_pct} onChange={(e) => applyDiscount(e.target.value)} placeholder="0" dir="ltr" disabled={isExempt} />
+          <input type="number" min={0} max={100} style={{ ...inputStyle, opacity: isExempt ? 0.5 : 1 }} value={f.discount_pct} onChange={(e) => applyDiscount(e.target.value)} placeholder="0" dir="ltr" disabled={isExempt} />
+          {bundleEnabled && (bundleMealFee > 0 || bundleBusFee > 0) && !isExempt && (
+            <div style={{ color: '#8A6D0F', fontSize: 11, marginTop: 4 }}>يُطبَّق على إجمالي الرسوم والنقل والتغذية مجموعة.</div>
+          )}
         </div>
 
         {/* حالة خاصة — تخفيض بسبب موثّق، مستقلّة تماماً عن الإعفاء الكامل */}
@@ -278,7 +307,7 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
               <div style={{ marginTop: 8 }}>
                 <label style={label}>سبب الحالة الخاصة *</label>
                 <input
-                  style={input} value={specialCaseReason}
+                  style={inputStyle} value={specialCaseReason}
                   onChange={(e) => setSpecialCaseReason(e.target.value)}
                   placeholder="مثال: ابن موظف" list="special-case-suggestions"
                 />
@@ -293,46 +322,63 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
           </div>
         )}
 
-        {mealPlans.length > 0 && (
-          <div style={{ flex: '1 1 100%' }}>
-            <label style={label}>باقات التغذية (سنوية — تُضاف للرسوم، يمكن اختيار أكثر من باقة)</label>
+        {/* ═══ باقات التغذية والنقل — سلوكهما يعتمد على إعداد الدمج ═══ */}
+        {bundleEnabled === false && (
+          <div style={{ flex: '1 1 100%', background: '#F7F9FC', border: '1px dashed #DCE3EC', borderRadius: 10, padding: '10px 14px', fontSize: 12.5, color: '#8A94A6' }}>
+            🔒 التغذية والنقل مجمّدان — فعّلهما من «الإعدادات → دمج النقل والتغذية» لإدخال بياناتهما هنا،
+            أو أضفهما لاحقاً من صفحتيهما الخاصتين بعد حفظ الطالب.
+          </div>
+        )}
+
+        {bundleEnabled === true && mealPlans.length > 0 && !isExempt && (
+          <div style={cell}>
+            <label style={label}>باقة التغذية (اختياري — تُدمج تلقائياً)</label>
+            <select style={inputStyle} value={bundleMealPlanId} onChange={(e) => setBundleMealPlanId(e.target.value)}>
+              <option value="">— بدون —</option>
+              {mealPlans.map((p) => <option key={p.id} value={p.id}>{p.name} — {fmt(p.fee)} ر.ع</option>)}
+            </select>
+          </div>
+        )}
+
+        {bundleEnabled === true && buses.length > 0 && !isExempt && (
+          <div style={cell}>
+            <label style={label}>مسار النقل (اختياري — يُدمج تلقائياً)</label>
+            <select style={inputStyle} value={bundleBusId} onChange={(e) => setBundleBusId(e.target.value)}>
+              <option value="">— بدون —</option>
+              {buses.map((b) => <option key={b.id} value={b.id}>{b.routes_label} — {fmt(b.fee)} ر.ع</option>)}
+            </select>
+          </div>
+        )}
+
+        {bundleEnabled === true && (bundleMealFee > 0 || bundleBusFee > 0) && !isExempt && (
+          <div style={{ flex: '1 1 100%', background: '#F4F8F6', border: '1px solid #BFE5D0', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#0F2744' }}>
+            <b>الإجمالي التقديري قبل التخفيض:</b> {fmt(estimatedGrandTotal)} ر.ع
+            {bundleMealFee > 0 && <span> (يشمل تغذية {fmt(bundleMealFee)})</span>}
+            {bundleBusFee > 0 && <span> (يشمل نقل {fmt(bundleBusFee)})</span>}
+          </div>
+        )}
+
+        {/* المسار القديم (بلا دمج) — يبقى كما كان تماماً، معروض معطّلاً بصرياً فقط */}
+        {bundleEnabled === false && mealPlans.length > 0 && (
+          <div style={{ flex: '1 1 100%', opacity: 0.5, pointerEvents: 'none' }}>
+            <label style={label}>باقات التغذية (سنوية)</label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {mealPlans.map((p) => {
-                const checked = p.id in selectedMeals
-                return (
-                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: '1px solid #E3E8EE', borderRadius: 10, background: checked ? '#F4F8F6' : '#fff' }}>
-                    <input type="checkbox" checked={checked} onChange={() => toggleMealPlan(p.id)} style={{ width: 18, height: 18, cursor: 'pointer' }} />
-                    <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: '#0F2744' }}>{p.name}</span>
-                    {checked && (
-                      <input
-                        type="number" style={{ ...input, width: 130 }} dir="ltr"
-                        value={selectedMeals[p.id]}
-                        onChange={(e) => setSelectedMeals((prev) => ({ ...prev, [p.id]: e.target.value }))}
-                        placeholder="المبلغ السنوي (ر.ع)"
-                      />
-                    )}
-                  </div>
-                )
-              })}
+              {mealPlans.map((p) => (
+                <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: '1px solid #E3E8EE', borderRadius: 10, background: '#fff' }}>
+                  <input type="checkbox" checked={false} disabled style={{ width: 18, height: 18 }} />
+                  <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: '#0F2744' }}>{p.name}</span>
+                </div>
+              ))}
             </div>
           </div>
         )}
-        {buses.length > 0 && (
-          <div style={{ flex: '1 1 100%' }}>
+        {bundleEnabled === false && buses.length > 0 && (
+          <div style={{ flex: '1 1 100%', opacity: 0.5, pointerEvents: 'none' }}>
             <label style={label}>النقل المدرسي</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: '1px solid #E3E8EE', borderRadius: 10, background: wantsTransport ? '#F4F8F6' : '#fff' }}>
-              <input type="checkbox" checked={wantsTransport} onChange={(e) => { setWantsTransport(e.target.checked); if (!e.target.checked) setSelectedBus('') }} style={{ width: 18, height: 18, cursor: 'pointer' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: '1px solid #E3E8EE', borderRadius: 10, background: '#fff' }}>
+              <input type="checkbox" checked={false} disabled style={{ width: 18, height: 18 }} />
               <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: '#0F2744' }}>اشتراك بالنقل المدرسي</span>
-              {wantsTransport && (
-                <select style={{ ...input, width: 260 }} value={selectedBus} onChange={(e) => setSelectedBus(e.target.value)}>
-                  <option value="">— اختر المسار/الباص —</option>
-                  {buses.map((b) => <option key={b.id} value={b.id}>{b.routes_label} — {fmt(b.fee)} ر.ع</option>)}
-                </select>
-              )}
             </div>
-            {wantsTransport && !selectedBus && (
-              <div style={{ color: '#8A6D1D', fontSize: 12, marginTop: 4 }}>اختر مساراً ليُربط الطالب بالباص عند الحفظ</div>
-            )}
           </div>
         )}
       </div>
