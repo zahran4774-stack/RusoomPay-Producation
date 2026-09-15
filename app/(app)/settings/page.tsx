@@ -45,6 +45,7 @@ export default async function SettingsPage() {
   let accentColor: string | null = null
   let schoolName: string | null = null
   let sectionStyles: string[] = ['ar_letters']
+  let customSectionNames: string[] = []
   let bundleEnabled = false
   let bank: {
     bank_name: string | null; bank_account: string | null
@@ -54,7 +55,7 @@ export default async function SettingsPage() {
   if (isOwner && profile?.school_id) {
     const { data: school } = await supabase
       .from('schools')
-      .select('logo_url, color, card_accent_color, name, section_styles, bank_name, bank_account, bank_iban, bank_holder, bank_enabled, bundle_transport_meals')
+      .select('logo_url, color, card_accent_color, name, section_styles, custom_section_names, bank_name, bank_account, bank_iban, bank_holder, bank_enabled, bundle_transport_meals')
       .eq('id', profile.school_id)
       .maybeSingle()
     logo = school?.logo_url ?? null
@@ -62,6 +63,7 @@ export default async function SettingsPage() {
     accentColor = school?.card_accent_color ?? null
     schoolName = school?.name ?? null
     sectionStyles = school?.section_styles ?? ['ar_letters']
+    customSectionNames = school?.custom_section_names ?? []
     bundleEnabled = school?.bundle_transport_meals ?? false
     if (school) {
       bank = {
@@ -114,7 +116,13 @@ export default async function SettingsPage() {
       content: (
         <>
           <SchoolBranding initialLogo={logo} initialColor={color} initialAccentColor={accentColor} canEdit={isOwner} />
-          {isOwner && <SectionStyleSetting initial={sectionStyles} canEdit={isOwner} />}
+          {isOwner && (
+            <SectionStyleSetting
+              initial={sectionStyles}
+              initialCustomNames={customSectionNames}
+              canEdit={isOwner}
+            />
+          )}
         </>
       ),
     },
