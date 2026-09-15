@@ -25,9 +25,12 @@ export const SECTIONS = [
 ] as const
 // ═══════════════════════════════════════════════════════════════
 // أنماط ترميز الشُّعب — المدرسة تختار نمطاً أو أكثر من الإعدادات.
+// "custom" مختلف عن البقية: بدل قائمة ثابتة، قيمه تأتي من
+// schools.custom_section_names (نص حر يكتبه الإداري، بعدد غير محدود) —
+// لذلك buildSectionOptions يستقبل معاملاً ثانياً اختيارياً لهذه القائمة.
 // ═══════════════════════════════════════════════════════════════
 
-export type SectionStyle = 'ar_letters' | 'numbers' | 'en_letters' | 'en_numbers'
+export type SectionStyle = 'ar_letters' | 'numbers' | 'en_letters' | 'en_numbers' | 'custom'
 
 export const SECTION_STYLE_META: Record<
   SectionStyle,
@@ -37,6 +40,7 @@ export const SECTION_STYLE_META: Record<
   numbers:    { label: 'أرقام عربية (١، ٢، ٣)', sample: '١ ٢ ٣' },
   en_letters: { label: 'حروف لاتينية (A, B, C)', sample: 'A B C' },
   en_numbers: { label: 'أرقام لاتينية (1, 2, 3)', sample: '1 2 3' },
+  custom:     { label: 'أسماء مخصّصة (تكتبها بنفسك)', sample: 'النور، الأمل، الرواد' },
 }
 
 const AR_LETTERS = ['أ', 'ب', 'ج', 'د', 'هـ', 'و', 'ز', 'ح', 'ط', 'ي']
@@ -44,7 +48,9 @@ const AR_NUMBERS = ['١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '١٠'
 const EN_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']
 const EN_NUMBERS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']
 
-const STYLE_VALUES: Record<SectionStyle, string[]> = {
+// "custom" مستثنى عمداً من هذا القاموس — قيمه ليست ثابتة في الكود، بل
+// تُمرَّر ديناميكياً كمعامل ثانٍ لـ buildSectionOptions (انظر أدناه).
+const STYLE_VALUES: Partial<Record<SectionStyle, string[]>> = {
   ar_letters: AR_LETTERS,
   numbers: AR_NUMBERS,
   en_letters: EN_LETTERS,
@@ -52,10 +58,23 @@ const STYLE_VALUES: Record<SectionStyle, string[]> = {
 }
 
 // يبني قائمة خيارات الشُّعب من الأنماط المختارة، بلا تكرار.
-export function buildSectionOptions(styles: string[] | null | undefined): string[] {
+// customNames: قائمة الأسماء الحرة (من schools.custom_section_names) —
+// تُستخدم فقط إن كان "custom" ضمن الأنماط المفعَّلة. بعدد غير محدود من
+// الإضافات؛ لا حد أعلى مفروض هنا أو في قاعدة البيانات.
+export function buildSectionOptions(
+  styles: string[] | null | undefined,
+  customNames: string[] | null | undefined = []
+): string[] {
   const active = (styles && styles.length ? styles : ['ar_letters']) as SectionStyle[]
   const out: string[] = []
   for (const style of active) {
+    if (style === 'custom') {
+      for (const v of customNames ?? []) {
+        const trimmed = v.trim()
+        if (trimmed && !out.includes(trimmed)) out.push(trimmed)
+      }
+      continue
+    }
     const vals = STYLE_VALUES[style]
     if (!vals) continue
     for (const v of vals) if (!out.includes(v)) out.push(v)
