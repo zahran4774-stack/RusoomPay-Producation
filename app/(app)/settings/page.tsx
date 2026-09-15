@@ -45,6 +45,7 @@ export default async function SettingsPage() {
   let accentColor: string | null = null
   let schoolName: string | null = null
   let sectionStyles: string[] = ['ar_letters']
+  let bundleEnabled = false
   let bank: {
     bank_name: string | null; bank_account: string | null
     bank_iban: string | null; bank_holder: string | null; bank_enabled: boolean
@@ -53,7 +54,7 @@ export default async function SettingsPage() {
   if (isOwner && profile?.school_id) {
     const { data: school } = await supabase
       .from('schools')
-      .select('logo_url, color, card_accent_color, name, section_styles, bank_name, bank_account, bank_iban, bank_holder, bank_enabled')
+      .select('logo_url, color, card_accent_color, name, section_styles, bank_name, bank_account, bank_iban, bank_holder, bank_enabled, bundle_transport_meals')
       .eq('id', profile.school_id)
       .maybeSingle()
     logo = school?.logo_url ?? null
@@ -61,6 +62,7 @@ export default async function SettingsPage() {
     accentColor = school?.card_accent_color ?? null
     schoolName = school?.name ?? null
     sectionStyles = school?.section_styles ?? ['ar_letters']
+    bundleEnabled = school?.bundle_transport_meals ?? false
     if (school) {
       bank = {
         bank_name: school.bank_name, bank_account: school.bank_account,
@@ -97,8 +99,7 @@ export default async function SettingsPage() {
   const intelligenceContent = engines && engines.length > 0
 
   const tabs: SettingsTab[] = [
-    
-          {
+    {
       id: 'security', label: 'الأمان',
       content: (
         <>
@@ -139,7 +140,7 @@ export default async function SettingsPage() {
     }] : []),
     ...(canManageGrades ? [{
       id: 'grade-pricing', label: 'تسعير المراحل',
-      content: <GradePricing initial={gradeFees} canEdit={canManageGrades} />,
+      content: <GradePricing initial={gradeFees} canEdit={canManageGrades} bundleEnabled={bundleEnabled} />,
     }] : []),
     ...(isOwner ? [{
       id: 'academic-year', label: 'العام الدراسي',
