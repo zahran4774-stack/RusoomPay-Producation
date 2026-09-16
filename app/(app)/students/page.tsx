@@ -1,6 +1,6 @@
 // صفحة سجل الطلاب — مكوّن خادم
 // لا نكتب where school_id — سياسات RLS تُطبّق العزل تلقائياً.
-// تحسين الأداء: الاستعلامات المستقلّة تُنفَّذ متوازية (Promise.all).
+// تحسين الأداء: الاستعلامات المستقلّة تُنفَذ متوازية (Promise.all).
 import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import { isStaff, isOwner, type Role } from '@/lib/roles'
@@ -19,7 +19,7 @@ export default async function StudentsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // ═══ كل الاستعلامات المستقلّة معاً — بدل أربع رحلات متتابعة ═══
+  // ═══ كل الاستعلامات المستقلّة معاً — بدل رحلات متتابعة ═══
   const [
     { data: profile },
     { data: myRole },
@@ -28,6 +28,8 @@ export default async function StudentsPage() {
     { data: busSubs },
     { data: buses },
     { data: busSubRows },
+    { data: mealPlans },
+    { data: mealSubRows },
   ] = await Promise.all([
     supabase.from('profiles').select('role').eq('id', user.id).single(),
     supabase.rpc('my_role'),
@@ -54,6 +56,10 @@ export default async function StudentsPage() {
     // معرّف الباص الحالي لكل طالب مشترك (نفس RPC أعلاه لا يرجّع bus_id، فقط
     // التسمية النصية — نحتاج المعرّف الفعلي لتحديد الخيار مسبقاً بنموذج التعديل).
     supabase.from('bus_subscriptions').select('student_id, bus_id'),
+    // باقات التغذية المتاحة — لعرض خيار "اشتراك بالتغذية" عند إضافة/تعديل طالب.
+    supabase.rpc('cafeteria_plans'),
+    // معرّف باقة التغذية الحالية لكل طالب مشترك (لتحديد الخيار مسبقاً بنموذج التعديل).
+    supabase.rpc('cafeteria_subscribers'),
   ])
 
   // التحقّق من الصلاحية بعد الجلب (الجلب المتوازي أسرع من التحقّق المتسلسل)
@@ -72,6 +78,12 @@ export default async function StudentsPage() {
   const busIdMap = new Map<string, string>()
   for (const r of (busSubRows ?? []) as { student_id: string; bus_id: string }[]) {
     busIdMap.set(r.student_id, r.bus_id)
+  }
+
+  // خريطة طالب ← معرّف باقة التغذية (لتحديد الخيار مسبقاً في نموذج تعديل الطالب)
+  const mealPlanIdMap = new Map<string, string>()
+  for (const r of (mealSubRows ?? []) as { student_id: string; plan_id: string }[]) {
+    mealPlanIdMap.set(r.student_id, r.plan_id)
   }
 
   return (
@@ -141,6 +153,8 @@ export default async function StudentsPage() {
           busMap={Object.fromEntries(busMap)}
           buses={buses ?? []}
           studentBusIdMap={Object.fromEntries(busIdMap)}
+          mealPlans={mealPlans ?? []}
+          studentMealPlanIdMap={Object.fromEntries(mealPlanIdMap)}
         />
       </div>
     </div>
