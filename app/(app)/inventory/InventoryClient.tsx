@@ -1,5 +1,6 @@
 'use client'
 // مكوّن المخزون — أصناف مصنَّفة (فئة + نوع فرعي) + شراء + بيع لطالب + صرف استهلاكي داخلي (غير مفوتر) + فلترة وتقرير + طباعة
+// عند الشراء: يسأل صراحة عن مصدر الدفع (صندوق أم بنك) بدل افتراض البنك دائماً.
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import { printReport, type SchoolHeader } from '@/lib/print-report'
@@ -10,6 +11,7 @@ type Item = {
 }
 type Student = { id: string; full_name: string; guardian_name: string | null }
 type CategoryReportRow = { category: string; items_count: number; total_qty: number; total_value: number }
+type PaymentSource = 'cash' | 'bank'
 
 const card: React.CSSProperties = {
   background: '#fff', border: '1px solid #E6EBF1', borderRadius: 14,
@@ -34,7 +36,6 @@ const btnSm: React.CSSProperties = {
 }
 const fmt = (n: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 
-// أسباب صرف شائعة — اختصار سريع، مع إمكانية كتابة سبب مخصّص
 const DISPENSE_REASONS = ['قرطاسية صفوف', 'مواد نظافة', 'صيانة وأدوات', 'استخدام إداري', 'أخرى']
 
 export default function InventoryClient({ initialItems, students, school }: {
@@ -45,7 +46,6 @@ export default function InventoryClient({ initialItems, students, school }: {
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
 
-  // صنف جديد
   const [name, setName] = useState('')
   const [qty, setQty] = useState('')
   const [cost, setCost] = useState('')
@@ -54,22 +54,21 @@ export default function InventoryClient({ initialItems, students, school }: {
   const [subtype, setSubtype] = useState('')
   const [customCategory, setCustomCategory] = useState('')
 
-  // الفئات المتاحة + فلترة العرض حسب الفئة
   const [categories, setCategories] = useState<string[]>(['كتب', 'زي مدرسي', 'قرطاسية', 'أخرى'])
   const [filterCategory, setFilterCategory] = useState<string>('all')
 
-  // تقرير ملخّص حسب الفئة
   const [categoryReport, setCategoryReport] = useState<CategoryReportRow[]>([])
   const [showReport, setShowReport] = useState(false)
 
-  // حركة (شراء/بيع/صرف)
   const [moveItem, setMoveItem] = useState<Item | null>(null)
   const [moveMode, setMoveMode] = useState<'buy' | 'sell' | 'dispense'>('buy')
   const [moveQty, setMoveQty] = useState('1')
   const [moveStudent, setMoveStudent] = useState('')
-  const [applyTax, setApplyTax] = useState(true)   // مع ضريبة افتراضياً
+  const [applyTax, setApplyTax] = useState(true)
   const [dispenseReason, setDispenseReason] = useState(DISPENSE_REASONS[0])
   const [customReason, setCustomReason] = useState('')
+  // مصدر الدفع عند الشراء — يظهر فقط لـ moveMode === 'buy'
+  const [paymentSource, setPaymentSource] = useState<PaymentSource>('bank')
 
   async function refresh(cat?: string) {
     const activeFilter = cat !== undefined ? cat : filterCategory
@@ -109,7 +108,7 @@ export default function InventoryClient({ initialItems, students, school }: {
 
   function openMove(item: Item, mode: 'buy' | 'sell' | 'dispense') {
     setMoveItem(item); setMoveMode(mode); setMoveQty('1'); setMoveStudent(''); setApplyTax(true)
-    setDispenseReason(DISPENSE_REASONS[0]); setCustomReason(''); setMsg('')
+    setDispenseReason(DISPENSE_REASONS[0]); setCustomReason(''); setPaymentSource('bank'); setMsg('')
   }
 
   async function execMove() {
@@ -119,16 +118,15 @@ export default function InventoryClient({ initialItems, students, school }: {
     setBusy(true); setMsg('')
 
     if (moveMode === 'buy') {
-      const { error } = await supabase.rpc('inventory_purchase', { p_item: moveItem.id, p_qty: q })
+      const { error } = await supabase.rpc('inventory_purchase', { p_item: moveItem.id, p_qty: q, p_payment_source: paymentSource })
       if (error) { setMsg('خطأ: ' + error.message); setBusy(false); return }
-      setMsg('✓ تم الشراء — مخزون مدين / بنك دائن')
+      setMsg(`✓ تم الشراء — مخزون مدين / ${paymentSource === 'cash' ? 'الصندوق' : 'البنك'} دائن`)
     } else if (moveMode === 'sell') {
       if (!moveStudent) { setMsg('اختر الطالب'); setBusy(false); return }
       const { error } = await supabase.rpc('inventory_sell', { p_item: moveItem.id, p_qty: q, p_student: moveStudent, p_apply_tax: applyTax })
       if (error) { setMsg('خطأ: ' + error.message); setBusy(false); return }
       setMsg('✓ صدرت فاتورة للطالب + قيد تكلفة وانخفض المخزون')
     } else {
-      // صرف استهلاكي داخلي — بلا فاتورة وبلا طالب
       const reason = dispenseReason === 'أخرى' ? customReason.trim() : dispenseReason
       const { error } = await supabase.rpc('inventory_dispense', { p_item: moveItem.id, p_qty: q, p_reason: reason || null })
       if (error) { setMsg('خطأ: ' + error.message); setBusy(false); return }
@@ -141,7 +139,6 @@ export default function InventoryClient({ initialItems, students, school }: {
     <>
       {msg && <div style={{ ...card, padding: 12, marginBottom: 12, color: msg.startsWith('✓') ? '#1A7A45' : '#C0392B' }}>{msg}</div>}
 
-      {/* جدول المخزون */}
       {/* ملخّص المخزون حسب الفئة */}
       <div style={card}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: showReport ? 14 : 0 }}>
@@ -177,6 +174,7 @@ export default function InventoryClient({ initialItems, students, school }: {
         )}
       </div>
 
+      {/* جدول المخزون */}
       <div style={card}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
           <h3 style={{ margin: 0, color: '#0F2744', fontSize: 16 }}>الأصناف</h3>
@@ -297,6 +295,38 @@ export default function InventoryClient({ initialItems, students, school }: {
             <label style={lbl}>الكمية</label>
             <input style={{ ...input, marginBottom: 14 }} type="number" value={moveQty} onChange={(e) => setMoveQty(e.target.value)} />
 
+            {moveMode === 'buy' && (
+              <>
+                <label style={lbl}>مصدر الدفع</label>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                  <button type="button" onClick={() => setPaymentSource('cash')}
+                    style={{
+                      flex: 1, padding: '10px 12px', borderRadius: 10, fontFamily: 'inherit', fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
+                      border: paymentSource === 'cash' ? '2px solid #163B68' : '1px solid #E3E8EE',
+                      background: paymentSource === 'cash' ? '#EAF0FA' : '#fff',
+                      color: paymentSource === 'cash' ? '#163B68' : '#667',
+                    }}>
+                    💵 من الصندوق
+                  </button>
+                  <button type="button" onClick={() => setPaymentSource('bank')}
+                    style={{
+                      flex: 1, padding: '10px 12px', borderRadius: 10, fontFamily: 'inherit', fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
+                      border: paymentSource === 'bank' ? '2px solid #163B68' : '1px solid #E3E8EE',
+                      background: paymentSource === 'bank' ? '#EAF0FA' : '#fff',
+                      color: paymentSource === 'bank' ? '#163B68' : '#667',
+                    }}>
+                    🏦 من البنك
+                  </button>
+                </div>
+                <div style={{ background: '#F7FAFC', border: '1px solid #EEF1F5', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 13 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0F2744' }}>
+                    <span>إجمالي الشراء</span>
+                    <b>{fmt((parseInt(moveQty) || 0) * moveItem.cost)}</b>
+                  </div>
+                </div>
+              </>
+            )}
+
             {moveMode === 'sell' && (
               <>
                 <label style={lbl}>الطالب</label>
@@ -305,7 +335,6 @@ export default function InventoryClient({ initialItems, students, school }: {
                   {students.map((s) => <option key={s.id} value={s.id}>{s.full_name} — {s.guardian_name}</option>)}
                 </select>
 
-                {/* خيار الضريبة */}
                 <label style={lbl}>الضريبة</label>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
                   <button type="button" onClick={() => setApplyTax(true)}
@@ -328,7 +357,6 @@ export default function InventoryClient({ initialItems, students, school }: {
                   </button>
                 </div>
 
-                {/* ملخّص المبلغ */}
                 <div style={{ background: '#F7FAFC', border: '1px solid #EEF1F5', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 13 }}>
                   {(() => {
                     const q = parseInt(moveQty) || 0
