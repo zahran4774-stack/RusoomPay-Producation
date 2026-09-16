@@ -31,10 +31,12 @@ export default async function StudentsPage() {
   ] = await Promise.all([
     supabase.from('profiles').select('role').eq('id', user.id).single(),
     supabase.rpc('my_role'),
-        supabase.from('schools').select('name, vat_number, section_styles, logo_url, color, card_accent_color').single(),
+    supabase.from('schools').select('name, vat_number, section_styles, custom_section_names, logo_url, color, card_accent_color').single(),
     supabase.from('students')
+      // ⚠️ إضافة student_fees(id): لتمكين فلتر "بلا رسوم فقط" (?filter=nofee
+      // القادم من School Copilot) من التمييز فعلياً بين طالب له فاتورة وآخر
+      // بلا أي فاتورة — نجلب المعرّف فقط (لا مبالغ)، كافٍ لهذا الغرض وخفيف.
       .select('id, code, full_name, grade, section, guardian_name, guardian_phone, guardian_email, birth_date, gender, status, father_phone, mother_phone, address, annual_fee, discount_pct, is_exempt, special_case_reason, student_fees(id)')
-
       // ⚠️ إصلاح: بدون هذا الفلتر، الطلاب المحذوفين بصمت (soft_delete لا يغيّر
       // status، فتبقى 'active') كانوا يظهرون بقائمة الطلاب كأنهم حقيقيون —
       // اكتُشف عبر تناقض بين هذي الصفحة (32) وشاشة الاشتراك (2 فعلياً)
@@ -57,7 +59,7 @@ export default async function StudentsPage() {
   // التحقّق من الصلاحية بعد الجلب (الجلب المتوازي أسرع من التحقّق المتسلسل)
   const role = (myRole ?? profile?.role) as Role
   if (!isStaff(role)) redirect('/dashboard')
-  const sectionOptions = buildSectionOptions(school?.section_styles)
+  const sectionOptions = buildSectionOptions(school?.section_styles, school?.custom_section_names)
 
   // خريطة طالب ← باص/مشرفة (busSubs.id هو معرّف الطالب نفسه — نفس الاستخدام
   // في app/(app)/transport/TransportClient.tsx)
@@ -114,8 +116,7 @@ export default async function StudentsPage() {
       )}
 
       <div style={{ marginBottom: 18, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-      <AddStudent sectionOptions={sectionOptions} buses={buses ?? []} />
- 
+        <AddStudent sectionOptions={sectionOptions} buses={buses ?? []} />
 
         <ImportStudents />
         <div id="invite-parents" style={{ scrollMarginTop: 80 }}>
