@@ -1,5 +1,8 @@
 'use client'
 // تتبّع تكلفة الوجبات — الموردون + المشتريات + تقرير التكلفة
+// كل عملية دفع (تسجيل شراء مدفوع، أو تعليم شراء كمدفوع لاحقاً) تسأل صراحة
+// عن مصدر الدفع (صندوق نقدي أم بنك) بدل افتراض البنك دائماً — يضمن أن ميزان
+// المراجعة يعكس حركة الأموال الفعلية بدقة.
 
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase-client'
@@ -7,11 +10,31 @@ import { createClient } from '@/lib/supabase-client'
 type Supplier = { id: string; name: string; contact_name: string | null; phone: string | null; email: string | null; vat_number: string | null; active: boolean }
 type Purchase = { id: string; supplier_id: string | null; supplier_name: string | null; purchase_date: string; purchase_type: string; meals_count: number; unit_cost: number; total_cost: number; period: string | null; paid: boolean; notes: string | null; item_type: string | null }
 type Report = { meals_purchased: number; total_cost: number; avg_per_meal: number; meal_students: number; avg_per_student: number; suppliers: { supplier: string; meals: number; cost: number; avg_cost: number }[] }
+type PaymentSource = 'cash' | 'bank'
 
 const TYPES: Record<string, string> = { daily: 'يومي', monthly: 'شهري', bulk: 'جملة', other: 'أخرى' }
 const fmt3 = (n: number) => (n || 0).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 const fmt0 = (n: number) => (n || 0).toLocaleString('en-US')
 const thisPeriod = () => new Date().toISOString().slice(0, 7)
+
+function PaymentSourcePicker({ value, onChange }: { value: PaymentSource; onChange: (v: PaymentSource) => void }) {
+  const opt = (v: PaymentSource): React.CSSProperties => ({
+    flex: 1, padding: '10px 12px', borderRadius: 9, cursor: 'pointer', textAlign: 'center',
+    fontWeight: 700, fontSize: 13.5, fontFamily: 'inherit',
+    border: `1.5px solid ${value === v ? '#163B68' : '#E3E8EE'}`,
+    background: value === v ? '#F0F5FB' : '#fff',
+    color: value === v ? '#163B68' : '#667',
+  })
+  return (
+    <div>
+      <label style={{ fontSize: 12, fontWeight: 700, color: '#0F2744', display: 'block', marginBottom: 6 }}>مصدر الدفع</label>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <div style={opt('cash')} onClick={() => onChange('cash')}>💵 من الصندوق</div>
+        <div style={opt('bank')} onClick={() => onChange('bank')}>🏦 من البنك</div>
+      </div>
+    </div>
+  )
+}
 
 export default function MealCost({ sym = 'ر.ع' }: { sym?: string }) {
   const supabase = createClient()
@@ -63,7 +86,6 @@ export default function MealCost({ sym = 'ر.ع' }: { sym?: string }) {
   )
 }
 
-// ═══ التقرير ═══
 function ReportView({ report, sym }: { report: Report | null; sym: string }) {
   if (!report) return <div style={{ color: '#8A94A6' }}>لا بيانات</div>
 
@@ -112,17 +134,18 @@ function ReportView({ report, sym }: { report: Report | null; sym: string }) {
   )
 }
 
-// اقتراحات نوع المنتج — تظهر أثناء الكتابة، مع حرية كتابة أي نص آخر
 const ITEM_TYPE_SUGGESTIONS = ['أرز', 'دجاج', 'لحوم', 'خضار وفواكه', 'ألبان', 'مخبوزات', 'مشروبات', 'أدوات مطبخ', 'أخرى']
 
-// ═══ المشتريات ═══
 function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purchases: Purchase[]; suppliers: Supplier[]; period: string; sym: string; onChange: () => void }) {
   const supabase = createClient()
   const [open, setOpen] = useState(false)
   const [f, setF] = useState({ supplier: '', date: new Date().toISOString().slice(0, 10), type: 'daily', meals: '', unit: '', paid: false, notes: '', itemType: '' })
+  const [paymentSource, setPaymentSource] = useState<PaymentSource>('bank')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [payingId, setPayingId] = useState<string | null>(null)
+  const [payingSource, setPayingSource] = useState<PaymentSource>('bank')
 
   const set = (k: string, v: string | boolean) => setF((p) => ({ ...p, [k]: v }))
   const total = (Number(f.meals) || 0) * (Number(f.unit) || 0)
@@ -137,11 +160,13 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
       p_type: f.type, p_meals: Number(f.meals), p_unit_cost: Number(f.unit),
       p_period: period, p_paid: f.paid, p_notes: f.notes || null,
       p_item_type: f.itemType || null,
+      p_payment_source: paymentSource,
     })
     setBusy(false)
     if (error) { setErr(error.message); return }
     setOpen(false)
     setF({ supplier: '', date: new Date().toISOString().slice(0, 10), type: 'daily', meals: '', unit: '', paid: false, notes: '', itemType: '' })
+    setPaymentSource('bank')
     onChange()
   }
 
@@ -150,11 +175,14 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
     onChange()
   }
 
-  async function markPaid(p: Purchase) {
-    setBusyId(p.id)
-    const { error } = await supabase.rpc('mark_meal_purchase_paid', { p_id: p.id })
+  async function confirmMarkPaid() {
+    if (!payingId) return
+    setBusyId(payingId)
+    const { error } = await supabase.rpc('mark_meal_purchase_paid', { p_id: payingId, p_payment_source: payingSource })
     setBusyId(null)
     if (error) { alert(error.message); return }
+    setPayingId(null)
+    setPayingSource('bank')
     onChange()
   }
 
@@ -191,7 +219,7 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
                 </td>
                 <td style={{ padding: 10, display: 'flex', gap: 8 }}>
                   {!p.paid && (
-                    <button onClick={() => markPaid(p)} disabled={busyId === p.id}
+                    <button onClick={() => { setPayingId(p.id); setPayingSource('bank') }} disabled={busyId === p.id}
                       style={{ background: '#EAF7EE', color: '#067647', border: 0, borderRadius: 8, padding: '6px 10px', cursor: busyId === p.id ? 'default' : 'pointer', fontSize: 12, fontWeight: 700 }}>
                       {busyId === p.id ? '...' : '✓ تم الدفع'}
                     </button>
@@ -204,6 +232,25 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
           </tbody>
         </table>
       </div>
+
+      {payingId && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(10,37,64,.45)', display: 'grid', placeItems: 'center', zIndex: 999, padding: 16 }} onClick={() => setPayingId(null)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: 22, width: '100%', maxWidth: 360 }}>
+            <h4 style={{ margin: '0 0 14px', color: '#0F2744' }}>تأكيد السداد</h4>
+            <PaymentSourcePicker value={payingSource} onChange={setPayingSource} />
+            <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+              <button onClick={confirmMarkPaid} disabled={busyId === payingId}
+                style={{ flex: 1, background: '#163B68', color: '#fff', border: 0, padding: 11, borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                {busyId === payingId ? 'جارٍ...' : 'تأكيد السداد'}
+              </button>
+              <button onClick={() => setPayingId(null)}
+                style={{ background: '#F2F5F8', color: '#0F2744', border: 0, padding: '11px 16px', borderRadius: 10, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {open && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(10,37,64,.45)', display: 'grid', placeItems: 'center', zIndex: 999, padding: 16 }} onClick={() => !busy && setOpen(false)}>
@@ -249,14 +296,19 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
                 <label style={{ fontSize: 12, fontWeight: 700, color: '#0F2744' }}>الإجمالي (تلقائي)</label>
                 <input style={{ ...input, background: '#F7FAFC', fontWeight: 700 }} value={`${fmt3(total)} ${sym}`} readOnly dir="ltr" />
               </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: '#0F2744', cursor: 'pointer' }}>
+                <input type="checkbox" checked={f.paid} onChange={(e) => set('paid', e.target.checked)} style={{ width: 17, height: 17 }} />
+                مدفوع الآن
+              </label>
+              {f.paid && (
+                <div style={{ flex: '1 1 100%' }}>
+                  <PaymentSourcePicker value={paymentSource} onChange={setPaymentSource} />
+                </div>
+              )}
               <div style={{ flex: '1 1 100%' }}>
                 <label style={{ fontSize: 12, fontWeight: 700, color: '#0F2744' }}>ملاحظات</label>
                 <input style={input} value={f.notes} onChange={(e) => set('notes', e.target.value)} />
               </div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: '#0F2744', cursor: 'pointer' }}>
-                <input type="checkbox" checked={f.paid} onChange={(e) => set('paid', e.target.checked)} style={{ width: 17, height: 17 }} />
-                مدفوع
-              </label>
             </div>
             {err && <div style={{ color: '#C0392B', marginTop: 12, fontWeight: 600, fontSize: 13 }}>⚠ {err}</div>}
             <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
@@ -272,7 +324,6 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
   )
 }
 
-// ═══ الموردون ═══
 function SuppliersView({ suppliers, onChange }: { suppliers: Supplier[]; onChange: () => void }) {
   const supabase = createClient()
   const [open, setOpen] = useState(false)
