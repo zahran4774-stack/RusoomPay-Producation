@@ -1,22 +1,25 @@
 'use client'
 // تعديل بيانات الطالب — كل الحقول المتاحة في نموذج إضافة طالب، بما فيها
-// الرسوم السنوية والتخفيض٪ والرقم المدرسي، بالإضافة إلى الإعفاء الكامل
-// والحالة الخاصة. تعديل الرسوم هنا مرجعي فقط — لا يُعدّل فاتورة الرسوم
-// القائمة تلقائياً (تُدار من قسم الرسوم والفواتير).
-// تحذير مزدوج بارز (أعلى النموذج + تحت الحقل نفسه) بعد حادثة التباس فعلية —
-// موظف عدّل "الرسوم السنوية" هنا ظنّاً منه أنها تُنشئ فاتورة، فلم تُنشأ.
+// الرسوم السنوية والتخفيض٪ والرقم المدرسي، الإعفاء الكامل، الحالة الخاصة،
+// حالة الطالب (بما فيها "منسحب" الجديدة)، وإدارة كاملة للنقل والتغذية.
+// تعديل الرسوم هنا مرجعي فقط — لا يُعدّل فاتورة الرسوم القائمة تلقائياً
+// (تُدار من قسم الرسوم والفواتير).
+// "منسحب": حالة جديدة تبقي الطالب ظاهراً في السجل، بلا أي أثر مالي تلقائي —
+// الفواتير المعلّقة تبقى كما هي، والقرار المالي متروك للإدارة يدوياً.
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
 import { GRADES, SECTIONS, isValidGrade, isValidSection, GULF_COUNTRIES, DEFAULT_COUNTRY, cleanLocalNumber, isValidLocalNumber } from '@/lib/academic'
 
-// اقتراحات سبب الحالة الخاصة — نص حر مع قائمة اقتراحات، لا قيد مقفل
 const SPECIAL_CASE_SUGGESTIONS = ['ابن موظف', 'صدقة', 'مساعدة لوجه الله', 'أسرة محتاجة', 'أخرى']
 
-// يفصل رقماً مخزَّناً (قد يكون بصيغة قديمة محلية بلا كود دولة، أو دولية
-// كاملة +XXXXXXXXXXX) إلى {كود الدولة، الرقم المحلي} لعرضهما بحقلين منفصلين.
-// بيانات الطلاب الحاليين (قبل هذا الإصلاح) أغلبها مخزّنة كرقم محلي 8 خانات
-// بلا كود — لذلك الافتراض الآمن لها هو عُمان (نفس افتراض toE164 السابق).
+const STATUS_OPTIONS: { value: string; label: string }[] = [
+  { value: 'active', label: 'نشط (منتظم)' },
+  { value: 'transferred', label: 'منقول' },
+  { value: 'graduated', label: 'متخرج' },
+  { value: 'withdrawn', label: 'منسحب' },
+]
+
 function splitPhone(stored: string | null): { code: string; local: string } {
   const raw = (stored || '').trim()
   if (!raw) return { code: DEFAULT_COUNTRY, local: '' }
@@ -26,8 +29,6 @@ function splitPhone(stored: string | null): { code: string; local: string } {
       return { code: c.code, local: digits.slice(c.code.length) }
     }
   }
-  // لم يطابق أي كود دولة معروف — نعرضه كما هو تحت الافتراضي، والتحقق
-  // البصري (رقم غير صالح) ينبّه الموظف ليصحّحه بنفسه
   return { code: DEFAULT_COUNTRY, local: cleanLocalNumber(digits) }
 }
 
@@ -49,11 +50,20 @@ export type StudentEditable = {
   discount_pct?: number | null
   is_exempt?: boolean | null
   special_case_reason?: string | null
+  status?: string | null
 }
 
 type Bus = { id: string; routes_label: string; fee: number }
+type MealPlan = { id: string; name: string; fee: number }
 
-export default function EditStudent({ student, buses = [], currentBusId = null }: { student: StudentEditable; buses?: Bus[]; currentBusId?: string | null }) {
+export default function EditStudent({
+  student, buses = [], currentBusId = null,
+  mealPlans = [], currentMealPlanId = null,
+}: {
+  student: StudentEditable
+  buses?: Bus[]; currentBusId?: string | null
+  mealPlans?: MealPlan[]; currentMealPlanId?: string | null
+}) {
   const router = useRouter()
   const supabase = createClient()
   const [open, setOpen] = useState(false)
@@ -70,8 +80,6 @@ export default function EditStudent({ student, buses = [], currentBusId = null }
     guardian_email: student.guardian_email ?? '',
     birth_date: student.birth_date ?? '',
     gender: student.gender ?? '',
-    // حقول بسيطة (بدون تقسيم كود دولة) — تُستخدم للعرض على بطاقة الطالب
-    // فقط، لا للإرسال الآلي (واتساب/رسائل)، فلا تحتاج نفس تحقّق guardian_phone.
     father_phone: student.father_phone ?? '',
     mother_phone: student.mother_phone ?? '',
     address: student.address ?? '',
@@ -79,6 +87,7 @@ export default function EditStudent({ student, buses = [], currentBusId = null }
     annual_fee: student.annual_fee != null ? String(student.annual_fee) : '',
     discount_pct: student.discount_pct != null ? String(student.discount_pct) : '0',
   })
+  const [status, setStatus] = useState(student.status ?? 'active')
   const [countryCode, setCountryCode] = useState(splitPhone(student.guardian_phone).code)
   const country = GULF_COUNTRIES.find((c) => c.code === countryCode)
   const phoneValid = f.guardian_phone !== '' && isValidLocalNumber(f.guardian_phone, countryCode)
@@ -87,7 +96,6 @@ export default function EditStudent({ student, buses = [], currentBusId = null }
     set('guardian_phone', cleanLocalNumber(raw).slice(0, country?.localLen ?? 9))
   }
 
-  // معفى بالكامل / حالة خاصة (تخفيض) — مستقلّان تماماً عن بعضهما
   const [isExempt, setIsExempt] = useState(student.is_exempt ?? false)
   const [hasSpecialCase, setHasSpecialCase] = useState(!!student.special_case_reason)
   const [specialCaseReason, setSpecialCaseReason] = useState(student.special_case_reason ?? '')
@@ -100,12 +108,12 @@ export default function EditStudent({ student, buses = [], currentBusId = null }
     }
   }
 
-  // النقل المدرسي — نبدأ من الاشتراك الحالي إن وُجد (currentBusId)
   const [wantsTransport, setWantsTransport] = useState(!!currentBusId)
   const [selectedBus, setSelectedBus] = useState(currentBusId ?? '')
 
-  // حماية: لو حمل الطالب قيمة قديمة غير معتمدة، اعرضها كخيار مؤقت
-  // كي لا تختفي القائمة فارغة — يراها المستخدم ويصحّحها.
+  const [wantsMeal, setWantsMeal] = useState(!!currentMealPlanId)
+  const [selectedMealPlan, setSelectedMealPlan] = useState(currentMealPlanId ?? '')
+
   const gradeOptions = f.grade && !isValidGrade(f.grade) ? [f.grade, ...GRADES] : [...GRADES]
   const sectionOptions = f.section && !isValidSection(f.section) ? [f.section, ...SECTIONS] : [...SECTIONS]
 
@@ -142,10 +150,10 @@ export default function EditStudent({ student, buses = [], currentBusId = null }
       p_discount_pct: Number(f.discount_pct) || 0,
       p_is_exempt: isExempt,
       p_special_case_reason: hasSpecialCase ? specialCaseReason.trim() : null,
+      p_status: status,
     })
     if (error) { setSaving(false); setErr(error.message); return }
 
-    // حقول العائلة الجديدة — دالة منفصلة (راجع migration 35)
     const { error: famError } = await supabase.rpc('update_student_family_info', {
       p_student_id: student.id,
       p_father_phone: f.father_phone || null,
@@ -154,14 +162,23 @@ export default function EditStudent({ student, buses = [], currentBusId = null }
     })
     if (famError) { setSaving(false); setErr(famError.message); return }
 
-    // النقل المدرسي — نغيّر الاشتراك فقط لو تغيّر فعلياً عن الحالة الأصلية
-    // (تفادي نداء شبكة زائد لو المستخدم فتح القائمة وما بدّل شيء)
     if (wantsTransport && selectedBus && selectedBus !== currentBusId) {
       const { error: busError } = await supabase.rpc('subscribe_bus', { p_student: student.id, p_bus: selectedBus })
       if (busError) { setSaving(false); setErr(busError.message); return }
     } else if (!wantsTransport && currentBusId) {
       const { error: busError } = await supabase.rpc('unsubscribe_bus', { p_student: student.id })
       if (busError) { setSaving(false); setErr(busError.message); return }
+    }
+
+    if (wantsMeal && selectedMealPlan && selectedMealPlan !== currentMealPlanId) {
+      if (currentMealPlanId) {
+        await supabase.rpc('unsubscribe_meal', { p_student: student.id })
+      }
+      const { error: mealError } = await supabase.rpc('subscribe_meal', { p_student: student.id, p_plan: selectedMealPlan })
+      if (mealError) { setSaving(false); setErr(mealError.message); return }
+    } else if (!wantsMeal && currentMealPlanId) {
+      const { error: mealError } = await supabase.rpc('unsubscribe_meal', { p_student: student.id })
+      if (mealError) { setSaving(false); setErr(mealError.message); return }
     }
 
     setSaving(false)
@@ -195,7 +212,6 @@ export default function EditStudent({ student, buses = [], currentBusId = null }
           <button onClick={() => setOpen(false)} style={{ background: 'none', border: 0, fontSize: 22, cursor: 'pointer', color: '#667' }}>×</button>
         </div>
 
-        {/* تحذير بارز — لا يُنشئ فاتورة فعلية، فقط سجل مرجعي */}
         <div style={{
           background: '#FBF3D5', border: '1px solid #EAD9A0', borderRadius: 10,
           padding: '12px 14px', marginBottom: 18, fontSize: 13, color: '#7A5C0A', lineHeight: 1.8,
@@ -208,13 +224,24 @@ export default function EditStudent({ student, buses = [], currentBusId = null }
           واستخدم زر «إضافة رسم».
         </div>
 
+        <div style={{ marginBottom: 14 }}>
+          <label style={label}>حالة الطالب</label>
+          <select style={select} value={status} onChange={(e) => setStatus(e.target.value)}>
+            {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          {status === 'withdrawn' && (
+            <div style={{ color: '#8A6D0F', fontSize: 11.5, marginTop: 4 }}>
+              الانسحاب لا يُلغي أي فاتورة معلّقة تلقائياً — راجع حالته المالية يدوياً من صفحة الرسوم إن لزم.
+            </div>
+          )}
+        </div>
+
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 13 }}>
           <div style={cell}>
             <label style={label}>الاسم الكامل *</label>
             <input style={input} value={f.full_name} onChange={(e) => set('full_name', e.target.value)} />
           </div>
 
-          {/* قائمة ثابتة — تمنع تكرار الصفوف بصيغ مختلفة */}
           <div style={cell}>
             <label style={label}>الصف / المرحلة *</label>
             <select style={select} value={f.grade} onChange={(e) => set('grade', e.target.value)}>
@@ -223,7 +250,6 @@ export default function EditStudent({ student, buses = [], currentBusId = null }
             </select>
           </div>
 
-          {/* قائمة ثابتة — عشر شعب بالترتيب الأبجدي */}
           <div style={cell}>
             <label style={label}>الشعبة *</label>
             <select style={select} value={f.section} onChange={(e) => set('section', e.target.value)}>
@@ -280,7 +306,6 @@ export default function EditStudent({ student, buses = [], currentBusId = null }
             </select>
           </div>
 
-          {/* معفى بالكامل من الدفع */}
           <div style={{ flex: '1 1 100%' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid #E3E8EE', borderRadius: 10, background: isExempt ? '#F4F8F6' : '#fff' }}>
               <input type="checkbox" checked={isExempt} onChange={(e) => setIsExempt(e.target.checked)} style={{ width: 18, height: 18, cursor: 'pointer' }} />
@@ -300,7 +325,6 @@ export default function EditStudent({ student, buses = [], currentBusId = null }
             <input type="number" min={0} max={100} style={{ ...input, opacity: isExempt ? 0.5 : 1 }} value={f.discount_pct} onChange={(e) => set('discount_pct', e.target.value)} dir="ltr" disabled={isExempt} />
           </div>
 
-          {/* حالة خاصة — تخفيض بسبب موثّق، مستقلّة تماماً عن الإعفاء الكامل */}
           {!isExempt && (
             <div style={{ flex: '1 1 100%' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid #E3E8EE', borderRadius: 10, background: hasSpecialCase ? '#FDF8ED' : '#fff' }}>
@@ -326,7 +350,6 @@ export default function EditStudent({ student, buses = [], currentBusId = null }
             </div>
           )}
 
-          {/* حقول إضافية — تُستخدم أساساً في بطاقة الطالب المطبوعة */}
           <div style={cell}>
             <label style={label}>هاتف الأب</label>
             <input style={{ ...input, direction: 'ltr', textAlign: 'right' }} value={f.father_phone} onChange={(e) => set('father_phone', e.target.value)} inputMode="tel" />
@@ -356,6 +379,25 @@ export default function EditStudent({ student, buses = [], currentBusId = null }
             </div>
             {wantsTransport && !selectedBus && (
               <div style={{ color: '#8A6D1D', fontSize: 12, marginTop: 4 }}>اختر مساراً ليُربط الطالب بالباص عند الحفظ</div>
+            )}
+          </div>
+        )}
+
+        {mealPlans.length > 0 && (
+          <div style={{ marginTop: 13 }}>
+            <label style={label}>التغذية المدرسية</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: '1px solid #E3E8EE', borderRadius: 10, background: wantsMeal ? '#F4F8F6' : '#fff' }}>
+              <input type="checkbox" checked={wantsMeal} onChange={(e) => { setWantsMeal(e.target.checked); if (!e.target.checked) setSelectedMealPlan('') }} style={{ width: 18, height: 18, cursor: 'pointer' }} />
+              <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: '#0F2744' }}>اشتراك بالتغذية المدرسية</span>
+              {wantsMeal && (
+                <select style={{ ...select, width: 260 }} value={selectedMealPlan} onChange={(e) => setSelectedMealPlan(e.target.value)}>
+                  <option value="">— اختر الباقة —</option>
+                  {mealPlans.map((p) => <option key={p.id} value={p.id}>{p.name} — {fmt(p.fee)} ر.ع</option>)}
+                </select>
+              )}
+            </div>
+            {wantsMeal && !selectedMealPlan && (
+              <div style={{ color: '#8A6D1D', fontSize: 12, marginTop: 4 }}>اختر باقة ليُربط الطالب بها عند الحفظ</div>
             )}
           </div>
         )}
