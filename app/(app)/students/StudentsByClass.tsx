@@ -1,7 +1,6 @@
 'use client'
 // app/(app)/students/StudentsByClass.tsx
 // كروت الشعب الصفّية — كل كرت يعرض الصف/الشعبة وعدد الطلاب، وبنقرة يتوسّع لعرض طلابها.
-// التوسّع في المتصفّح (لا طلبات إضافية) — سريع ومناسب حتى مئات الطلاب.
 import { useState, useMemo, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import CertificatesButton from './CertificatesButton'
@@ -18,19 +17,18 @@ type Student = {
   father_phone?: string | null; mother_phone?: string | null; address?: string | null
   annual_fee?: number | null; discount_pct?: number | null
   is_exempt?: boolean | null; special_case_reason?: string | null
-  // لتمكين فلتر "بلا رسوم فقط" — لا نحتاج غير وجود/عدم وجود صف واحد على الأقل
   student_fees?: { id: string }[] | null
 }
 
 type ClassGroup = { key: string; grade: string; section: string; students: Student[] }
 type Bus = { id: string; routes_label: string; fee: number }
+type MealPlan = { id: string; name: string; fee: number }
 
-const statusLabel = (s: string) => s === 'active' ? 'منتظم' : s === 'transferred' ? 'منقول' : 'متخرج'
-const statusColor = (s: string) => s === 'active' ? '#067647' : s === 'transferred' ? '#B54708' : '#667085'
+const statusLabel = (s: string) => s === 'active' ? 'منتظم' : s === 'transferred' ? 'منقول' : s === 'withdrawn' ? 'منسحب' : 'متخرج'
+const statusColor = (s: string) => s === 'active' ? '#067647' : s === 'transferred' ? '#B54708' : s === 'withdrawn' ? '#8A6D0F' : '#667085'
 
 const PAGE_SIZE = 10
 
-// شارات دائمة بجانب اسم الطالب — معفى بالكامل / حالة خاصة (مع تلميح السبب)
 function StudentBadges({ s }: { s: Student }) {
   if (!s.is_exempt && !s.special_case_reason) return null
   return (
@@ -57,33 +55,32 @@ function StudentBadges({ s }: { s: Student }) {
 
 export default function StudentsByClass({
   students, school, busMap = {}, buses = [], studentBusIdMap = {},
+  mealPlans = [], studentMealPlanIdMap = {},
 }: {
   students: Student[]
   school: { name: string; vat: string | null; logoUrl?: string | null; primaryColor?: string | null; accentColor?: string | null }
   busMap?: Record<string, { label: string; supervisor: string | null }>
   buses?: Bus[]
   studentBusIdMap?: Record<string, string>
+  mealPlans?: MealPlan[]
+  studentMealPlanIdMap?: Record<string, string>
 }) {
   const [openKey, setOpenKey] = useState<string | null>(null)
   const [query, setQuery] = useState('')
-  // بلا رسوم فقط — قادمة من زر "مراجعة الطلاب" في School Copilot (missing_fees)
   const [noFeeOnly, setNoFeeOnly] = useState(false)
-  const [pageMap, setPageMap] = useState<Record<string, number>>({})   // صفحة كل شعبة (مستقلّة لكل كرت)
-  const [trackerStudent, setTrackerStudent] = useState<Student | null>(null)   // لوحة التتبع الشهري المفتوحة
+  const [pageMap, setPageMap] = useState<Record<string, number>>({})
+  const [trackerStudent, setTrackerStudent] = useState<Student | null>(null)
 
-  // ─── تفعيل الفلتر تلقائياً عند القدوم من School Copilot (?filter=nofee) ───
   const searchParams = useSearchParams()
   useEffect(() => {
     if (searchParams.get('filter') === 'nofee') setNoFeeOnly(true)
   }, [searchParams])
 
-  // الطلاب بعد تطبيق فلتر "بلا رسوم" (قبل البحث النصي والتجميع بالشعب)
   const baseStudents = useMemo(
     () => (noFeeOnly ? students.filter((s) => (s.student_fees ?? []).length === 0) : students),
     [students, noFeeOnly]
   )
 
-  // تجميع الطلاب في شعب صفّية (مرّة واحدة، مخزّن)
   const groups = useMemo<ClassGroup[]>(() => {
     const map = new Map<string, ClassGroup>()
     for (const s of baseStudents) {
@@ -97,7 +94,6 @@ export default function StudentsByClass({
     )
   }, [baseStudents])
 
-  // بحث سريع بالاسم أو الرقم — يفتح الشعبة المطابقة
   const filtered = useMemo(() => {
     const q = query.trim()
     if (!q) return groups
@@ -116,7 +112,6 @@ export default function StudentsByClass({
 
   return (
     <div>
-      {/* شريط البحث + فلتر "بلا رسوم" */}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 18 }}>
         <input
           value={query} onChange={(e) => setQuery(e.target.value)}
@@ -149,13 +144,11 @@ export default function StudentsByClass({
         )}
       </div>
 
-      {/* شبكة كروت الشعب */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 14 }}>
         {filtered.map((g) => {
           const isOpen = openKey === g.key || !!query || noFeeOnly
           return (
             <div key={g.key} style={{ gridColumn: isOpen ? '1 / -1' : 'auto' }}>
-              {/* الكرت */}
               <button
                 onClick={() => { setOpenKey(isOpen && !query && !noFeeOnly ? null : g.key); setPageMap((m) => ({ ...m, [g.key]: 1 })) }}
                 aria-expanded={isOpen}
@@ -182,7 +175,6 @@ export default function StudentsByClass({
                 </div>
               </button>
 
-              {/* جدول طلاب الشعبة (يظهر عند الفتح) */}
               {isOpen && (() => {
                 const gPage = pageMap[g.key] ?? 1
                 const gTotalPages = Math.max(1, Math.ceil(g.students.length / PAGE_SIZE))
@@ -190,13 +182,13 @@ export default function StudentsByClass({
                 const gPageStudents = g.students.slice((gSafePage - 1) * PAGE_SIZE, gSafePage * PAGE_SIZE)
                 return (
                 <div style={{ background: '#fff', borderRadius: 14, marginTop: 10, overflow: 'auto', boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
-                  {/* شريط إحصائيات + تصدير */}
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderBottom: '1px solid #EEF2F1' }}>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <Stat label="الإجمالي" value={g.students.length} color="#0F2744" />
                       <Stat label="منتظم" value={g.students.filter((s) => s.status === 'active').length} color="#067647" />
                       <Stat label="منقول" value={g.students.filter((s) => s.status === 'transferred').length} color="#B54708" />
-                      <Stat label="متخرج" value={g.students.filter((s) => s.status !== 'active' && s.status !== 'transferred').length} color="#667085" />
+                      <Stat label="منسحب" value={g.students.filter((s) => s.status === 'withdrawn').length} color="#8A6D0F" />
+                      <Stat label="متخرج" value={g.students.filter((s) => s.status !== 'active' && s.status !== 'transferred' && s.status !== 'withdrawn').length} color="#667085" />
                     </div>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <button onClick={() => exportClassPDF(g, school)}
@@ -259,25 +251,32 @@ export default function StudentsByClass({
                             </button>
                           </td>
                           <td style={{ padding: 11 }}>
-                            <EditStudent student={{
-                              id: s.id,
-                              full_name: s.full_name,
-                              grade: s.grade,
-                              section: s.section,
-                              guardian_name: s.guardian_name,
-                              guardian_phone: s.guardian_phone ?? null,
-                              guardian_email: s.guardian_email ?? null,
-                              birth_date: s.birth_date ?? null,
-                              gender: s.gender ?? null,
-                              father_phone: s.father_phone ?? null,
-                              mother_phone: s.mother_phone ?? null,
-                              address: s.address ?? null,
-                              code: s.code ?? null,
-                              annual_fee: s.annual_fee ?? null,
-                              discount_pct: s.discount_pct ?? null,
-                              is_exempt: s.is_exempt ?? null,
-                              special_case_reason: s.special_case_reason ?? null,
-                            }} buses={buses} currentBusId={studentBusIdMap[s.id] ?? null} />
+                            <EditStudent
+                              student={{
+                                id: s.id,
+                                full_name: s.full_name,
+                                grade: s.grade,
+                                section: s.section,
+                                guardian_name: s.guardian_name,
+                                guardian_phone: s.guardian_phone ?? null,
+                                guardian_email: s.guardian_email ?? null,
+                                birth_date: s.birth_date ?? null,
+                                gender: s.gender ?? null,
+                                father_phone: s.father_phone ?? null,
+                                mother_phone: s.mother_phone ?? null,
+                                address: s.address ?? null,
+                                code: s.code ?? null,
+                                annual_fee: s.annual_fee ?? null,
+                                discount_pct: s.discount_pct ?? null,
+                                is_exempt: s.is_exempt ?? null,
+                                special_case_reason: s.special_case_reason ?? null,
+                                status: s.status ?? null,
+                              }}
+                              buses={buses}
+                              currentBusId={studentBusIdMap[s.id] ?? null}
+                              mealPlans={mealPlans}
+                              currentMealPlanId={studentMealPlanIdMap[s.id] ?? null}
+                            />
                           </td>
                         </tr>
                       ))}
@@ -336,7 +335,6 @@ export default function StudentsByClass({
   )
 }
 
-// بطاقة إحصائية صغيرة
 function Stat({ label, value, color }: { label: string; value: number; color: string }) {
   return (
     <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', background: '#F7FAF9', border: '1px solid #E6ECEA', borderRadius: 9, padding: '5px 12px', minWidth: 58 }}>
@@ -346,7 +344,6 @@ function Stat({ label, value, color }: { label: string; value: number; color: st
   )
 }
 
-// يحوّل صفّ طالب + خريطة الباص إلى الشكل اللي يحتاجه lib/print-student-card
 function toCardStudent(
   s: Student,
   busMap: Record<string, { label: string; supervisor: string | null }>
@@ -363,15 +360,13 @@ function toCardStudent(
   }
 }
 
-// تصدير قائمة الشعبة PDF — عبر HTML + خط Cairo (يدعم العربية تماماً)
-// نطبع من المتصفح بدل jsPDF لأن الأخيرة لا تدعم تشكيل الحروف العربية ولا RTL.
 function exportClassPDF(g: ClassGroup, school: { name: string; vat: string | null }) {
   const title = `قائمة الصف ${g.grade}${g.section !== '\u2014' ? ` - شعبة ${g.section}` : ''}`
   const now = new Date()
   const dateStr = now.toLocaleDateString('en-GB')
 
   const rows = g.students.map((s, i) => {
-    const st = s.status === 'active' ? 'منتظم' : s.status === 'transferred' ? 'منقول' : 'متخرج'
+    const st = s.status === 'active' ? 'منتظم' : s.status === 'transferred' ? 'منقول' : s.status === 'withdrawn' ? 'منسحب' : 'متخرج'
     return `<tr>
       <td style="text-align:center">${i + 1}</td>
       <td>${s.code ?? '\u2014'}</td>
@@ -419,7 +414,6 @@ function exportClassPDF(g: ClassGroup, school: { name: string; vat: string | nul
   win.document.write(html)
   win.document.close()
 
-  // انتظر تحميل خط Cairo قبل الطباعة (يمنع الأحرف المشوّهة)
   const doPrint = () => { try { win.focus(); win.print() } catch { /* أُغلقت */ } }
   const fonts = (win.document as Document & { fonts?: FontFaceSet }).fonts
   if (fonts && fonts.ready) {
