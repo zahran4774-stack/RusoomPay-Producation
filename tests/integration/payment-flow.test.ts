@@ -20,8 +20,10 @@ d('تدفّق الدفع الكامل (تكامل)', () => {
   beforeAll(async () => {
     admin = createClient(URL!, SERVICE!, { auth: { persistSession: false } })
     // تجهيز بيانات اختبار معزولة
+    // is_test:true, active:false — تحصين مضاعف: حتى لو فشل afterAll (إلغاء CI، انقطاع شبكة)
+    // تبقى هذه المدرسة مستثناة فوراً من أي إحصائية حقيقية، بدل أن تتراكم كبيانات نشطة.
     const { data: school } = await admin.from('schools')
-      .insert({ name: 'مدرسة اختبار التكامل', currency: 'OMR' }).select('id').single()
+      .insert({ name: 'مدرسة اختبار التكامل', currency: 'OMR', is_test: true, active: false }).select('id').single()
     schoolId = school!.id
     const { data: student } = await admin.from('students')
       .insert({ school_id: schoolId, name: 'طالب اختبار', grade: '1' }).select('id').single()
@@ -68,7 +70,7 @@ d('تدفّق الدفع الكامل (تكامل)', () => {
 
   it('4) عزل البيانات — مدرسة أخرى لا ترى هذه الرسوم', async () => {
     const { data: other } = await admin.from('schools')
-      .insert({ name: 'مدرسة أخرى', currency: 'OMR' }).select('id').single()
+      .insert({ name: 'مدرسة أخرى', currency: 'OMR', is_test: true, active: false }).select('id').single()
     const { data: fees } = await admin.from('student_fees')
       .select('id').eq('school_id', other!.id)
     expect((fees ?? []).find((f) => f.id === feeId)).toBeUndefined()
