@@ -1,6 +1,10 @@
 'use client'
 // app/(app)/students/StudentsByClass.tsx
 // كروت الشعب الصفّية — كل كرت يعرض الصف/الشعبة وعدد الطلاب، وبنقرة يتوسّع لعرض طلابها.
+// ⚠️ عمود "ولي الأمر" أُزيل من العرض والطباعة عمداً — اسم الطالب الرباعي يتضمّن
+// عادةً اسم الأب أصلاً، فتكراره كعمود منفصل زائد بصرياً في أغلب الحالات.
+// الحقل نفسه يبقى محفوظاً في قاعدة البيانات، يُستخدم فقط في التواصل الفعلي
+// (رسائل، فواتير) لا في جداول العرض العامة.
 import { useState, useMemo, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import CertificatesButton from './CertificatesButton'
@@ -206,12 +210,11 @@ export default function StudentsByClass({
                       </button>
                     </div>
                   </div>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, minWidth: 620 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, minWidth: 560 }}>
                     <thead>
                       <tr style={{ background: '#F4F8F7', color: '#0F2744', textAlign: 'right' }}>
                         <th style={{ padding: 11 }}>الرقم</th>
                         <th style={{ padding: 11 }}>الطالب</th>
-                        <th style={{ padding: 11 }}>ولي الأمر</th>
                         <th style={{ padding: 11 }}>الحالة</th>
                         <th style={{ padding: 11 }}>الدفعات</th>
                         <th style={{ padding: 11 }}>الشهادات</th>
@@ -227,7 +230,6 @@ export default function StudentsByClass({
                             {s.full_name}
                             <StudentBadges s={s} />
                           </td>
-                          <td style={{ padding: 11 }}>{s.guardian_name || '—'}</td>
                           <td style={{ padding: 11 }}>
                             <span style={{ color: statusColor(s.status), fontWeight: 600 }}>{statusLabel(s.status)}</span>
                           </td>
@@ -360,6 +362,7 @@ function toCardStudent(
   }
 }
 
+// تصدير قائمة الشعبة PDF — عمود "ولي الأمر" أُزيل هنا أيضاً (انظر تعليق الرأس)
 function exportClassPDF(g: ClassGroup, school: { name: string; vat: string | null }) {
   const title = `قائمة الصف ${g.grade}${g.section !== '\u2014' ? ` - شعبة ${g.section}` : ''}`
   const now = new Date()
@@ -371,7 +374,6 @@ function exportClassPDF(g: ClassGroup, school: { name: string; vat: string | nul
       <td style="text-align:center">${i + 1}</td>
       <td>${s.code ?? '\u2014'}</td>
       <td>${s.full_name}</td>
-      <td>${s.guardian_name || '\u2014'}</td>
       <td style="text-align:center">${st}</td>
     </tr>`
   }).join('')
@@ -403,7 +405,7 @@ function exportClassPDF(g: ClassGroup, school: { name: string; vat: string | nul
     </div>
     <div class="count">عدد الطلاب: ${g.students.length}</div>
     <table>
-      <thead><tr><th style="width:40px">#</th><th>الرقم</th><th>الطالب</th><th>ولي الأمر</th><th>الحالة</th></tr></thead>
+      <thead><tr><th style="width:40px">#</th><th>الرقم</th><th>الطالب</th><th>الحالة</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     <div class="foot">RusoomPay · ${now.getFullYear()}</div>
