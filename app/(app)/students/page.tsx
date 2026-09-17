@@ -110,7 +110,12 @@ export default async function StudentsPage() {
             { key: 'status', label: 'الحالة' },
           ]}
           rows={[...(students ?? [])]
-            .sort((a, b) => (a.grade + (a.section ?? '')).localeCompare(b.grade + (b.section ?? ''), 'ar'))
+  .sort((a, b) => {
+    const gradeDiff = gradeOrder(a.grade) - gradeOrder(b.grade)
+    if (gradeDiff !== 0) return gradeDiff
+    return (a.section ?? '').localeCompare(b.section ?? '', 'ar')
+  })
+
             .map((s) => ({
               code: s.code, name: s.full_name, grade: s.grade, section: s.section ?? '—',
               status: s.status === 'active' ? 'نشط' : s.status,
