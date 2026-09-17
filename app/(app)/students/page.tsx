@@ -1,6 +1,9 @@
 // صفحة سجل الطلاب — مكوّن خادم
 // لا نكتب where school_id — سياسات RLS تُطبّق العزل تلقائياً.
 // تحسين الأداء: الاستعلامات المستقلّة تُنفَذ متوازية (Promise.all).
+// ⚠️ عمود "ولي الأمر" أُزيل من تقرير الطباعة عمداً — اسم الطالب الرباعي يتضمّن
+// عادةً اسم الأب أصلاً، فتكراره كعمود منفصل زائد بصرياً. الحقل نفسه يبقى
+// محفوظاً في قاعدة البيانات ويُستخدم في التواصل الفعلي فقط.
 import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import { isStaff, isOwner, type Role } from '@/lib/roles'
@@ -104,14 +107,13 @@ export default async function StudentsPage() {
             { key: 'name', label: 'الطالب' },
             { key: 'grade', label: 'الصف' },
             { key: 'section', label: 'الشعبة' },
-            { key: 'guardian', label: 'ولي الأمر' },
             { key: 'status', label: 'الحالة' },
           ]}
           rows={[...(students ?? [])]
             .sort((a, b) => (a.grade + (a.section ?? '')).localeCompare(b.grade + (b.section ?? ''), 'ar'))
             .map((s) => ({
               code: s.code, name: s.full_name, grade: s.grade, section: s.section ?? '—',
-              guardian: s.guardian_name ?? '—', status: s.status === 'active' ? 'نشط' : s.status,
+              status: s.status === 'active' ? 'نشط' : s.status,
             }))}
           label="🖨 طباعة قائمة الطلاب"
         />
