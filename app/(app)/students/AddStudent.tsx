@@ -1,9 +1,6 @@
 'use client'
-// نموذج إضافة طالب — يشمل الإعفاء الكامل، الحالة الخاصة (تخفيض)، وخيار
-// دمج النقل والتغذية ضمن الرسوم الدراسية (إن فُعِّل هذا الإعداد من الإعدادات).
-// عند التفعيل: حقلا التغذية/النقل يعملان، وقيمتاهما تُدمَج تلقائياً في رسم
-// واحد موحّد (تُقرأ من قاعدة البيانات في add_student، لا تُدخَل يدوياً).
-// عند التعطيل: الحقلان مجمّدان تماماً — لا يمكن إدخال بيانات فيهما.
+// نموذج إضافة طالب — يشمل الإعفاء الكامل، الحالة الخاصة (تخفيض)، دمج النقل
+// والتغذية، ورسوم التسجيل الاختيارية (مبلغ ثابت بلا تخفيض، لمرة واحدة أو سنوياً).
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
@@ -12,7 +9,6 @@ import { GULF_COUNTRIES, DEFAULT_COUNTRY, cleanLocalNumber, isValidLocalNumber, 
 type Bus = { id: string; routes_label: string; fee: number }
 type MealPlan = { id: string; name: string; fee: number }
 
-// اقتراحات سبب الحالة الخاصة — نص حر مع قائمة اقتراحات، لا قيد مقفل
 const SPECIAL_CASE_SUGGESTIONS = ['ابن موظف', 'صدقة', 'مساعدة لوجه الله', 'أسرة محتاجة', 'أخرى']
 
 export default function AddStudent({ sectionOptions, buses = [] }: { sectionOptions: string[]; buses?: Bus[] }) {
@@ -37,17 +33,19 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
   const [wantsTransport, setWantsTransport] = useState(false)
   const [selectedBus, setSelectedBus] = useState('')
 
-  // دمج النقل والتغذية — إعداد على مستوى المدرسة، يُجلب مرة عند فتح النموذج
-  const [bundleEnabled, setBundleEnabled] = useState<boolean | null>(null) // null = لم يُحمَّل بعد
+  const [bundleEnabled, setBundleEnabled] = useState<boolean | null>(null)
   const [bundleMealPlanId, setBundleMealPlanId] = useState('')
   const [bundleBusId, setBundleBusId] = useState('')
 
-  // معفى بالكامل / حالة خاصة (تخفيض) — مستقلّان تماماً عن بعضهما
   const [isExempt, setIsExempt] = useState(false)
   const [hasSpecialCase, setHasSpecialCase] = useState(false)
   const [specialCaseReason, setSpecialCaseReason] = useState('')
 
-  // تسعير المراحل — من الإعدادات، لتعبئة الرسوم تلقائياً عند اختيار المرحلة
+  // رسوم التسجيل — اختيارية، مبلغ ثابت، لمرة واحدة أو سنوياً
+  const [hasRegistrationFee, setHasRegistrationFee] = useState(false)
+  const [registrationFee, setRegistrationFee] = useState('')
+  const [registrationRecurrence, setRegistrationRecurrence] = useState<'once' | 'yearly'>('once')
+
   const [gradeFees, setGradeFees] = useState<Record<string, number>>({})
   const [basePrice, setBasePrice] = useState<number | null>(null)
 
@@ -75,7 +73,6 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
     set('guardian_phone', cleanLocalNumber(raw).slice(0, country?.localLen ?? 9))
   }
 
-  // احتساب الرسوم من سعر المرحلة والتخفيض — يبقى الحقل قابلاً للتعديل اليدوي بعدها
   function applyGrade(grade: string) {
     set('grade', grade)
     const price = gradeFees[grade]
@@ -95,7 +92,6 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
     }
   }
 
-  // إلغاء الحالة الخاصة يمسح سببها ويُصفّر التخفيض المرتبط بها
   function toggleSpecialCase(checked: boolean) {
     setHasSpecialCase(checked)
     if (!checked) {
@@ -104,8 +100,14 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
     }
   }
 
-  // مجموع تقديري يُعرض للمستخدم فقط (الحساب الفعلي والدقيق يتم في add_student
-  // خادمياً من القيم الحقيقية المخزَّنة، هذا فقط لمعاينة سريعة قبل الحفظ)
+  function toggleRegistrationFee(checked: boolean) {
+    setHasRegistrationFee(checked)
+    if (!checked) {
+      setRegistrationFee('')
+      setRegistrationRecurrence('once')
+    }
+  }
+
   const bundleMealFee = bundleMealPlanId ? (mealPlans.find((p) => p.id === bundleMealPlanId)?.fee ?? 0) : 0
   const bundleBusFee = bundleBusId ? (buses.find((b) => b.id === bundleBusId)?.fee ?? 0) : 0
   const estimatedGrandTotal = (Number(f.annual_fee) || 0) + bundleMealFee + bundleBusFee
@@ -117,7 +119,6 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
     if (!f.section.trim()) { setErr('الشعبة مطلوبة'); return }
     if (!f.guardian_phone.trim()) { setErr('رقم ولي الأمر مطلوب'); return }
     if (!phoneValid) { setErr('رقم ولي الأمر غير مكتمل أو غير صالح لهذه الدولة'); return }
-    // الرسوم مطلوبة فقط إن لم يكن الطالب معفى بالكامل (وبلا دمج مضاف)
     if (!isExempt && (!f.annual_fee || Number(f.annual_fee) <= 0) && !bundleMealPlanId && !bundleBusId) {
       setErr('الرسوم السنوية مطلوبة ويجب أن تكون أكبر من صفر'); return
     }
@@ -126,6 +127,9 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
     }
     if (hasSpecialCase && Number(f.discount_pct) <= 0) {
       setErr('حدد نسبة التخفيض المرتبطة بالحالة الخاصة'); return
+    }
+    if (hasRegistrationFee && (!registrationFee || Number(registrationFee) <= 0)) {
+      setErr('أدخل مبلغ رسوم التسجيل أو ألغِ تفعيلها'); return
     }
     setSaving(true)
     const fullPhone = `+${countryCode}${f.guardian_phone}`
@@ -141,22 +145,18 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
       p_code: f.code || null,
       p_annual_fee: isExempt ? 0 : Number(f.annual_fee || 0),
       p_discount_pct: Number(f.discount_pct) || 0,
-      // ⚠️ إصلاح: كان هذا الحقل مفقوداً رغم أن النموذج يعرض قسم النقل المدرسي
-      // كاملاً — بدونه يبقى transport_type='none' للأبد مهما اختار المستخدم
-      // باصاً فعلياً (ولا توجد دالة تعديل تصلحه لاحقاً)، فتفوت جملة "شاملة
-      // النقل" في وصف الفاتورة التي تبنيها add_student() بالفعل.
       p_transport_type: (bundleEnabled && bundleBusId) || (!bundleEnabled && wantsTransport && selectedBus) ? 'school' : 'none',
       p_is_exempt: isExempt,
       p_special_case_reason: hasSpecialCase ? specialCaseReason.trim() : null,
-      // الدمج: تُقرأ القيم الحقيقية من قاعدة البيانات، لا نمرّر مبلغاً يدوياً
       p_bundle_meal_plan_id: bundleEnabled && bundleMealPlanId ? bundleMealPlanId : null,
       p_bundle_bus_id: bundleEnabled && bundleBusId ? bundleBusId : null,
+      p_registration_fee: hasRegistrationFee ? Number(registrationFee) : 0,
+      p_registration_recurrence: hasRegistrationFee ? registrationRecurrence : null,
     })
     setSaving(false)
     if (error) { setErr(error.message); return }
     setOk(true)
     if (newId && !bundleEnabled) {
-      // المسار القديم (غير المدمج) — كما كان، فواتير منفصلة للتغذية والنقل
       for (const [planId, amount] of Object.entries(selectedMeals)) {
         if (Number(amount) > 0) {
           await supabase.rpc('add_annual_meal_fee', {
@@ -176,6 +176,9 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
     setIsExempt(false)
     setHasSpecialCase(false)
     setSpecialCaseReason('')
+    setHasRegistrationFee(false)
+    setRegistrationFee('')
+    setRegistrationRecurrence('once')
     setF({ full_name: '', grade: '', section: '', guardian_name: '', guardian_phone: '', guardian_email: '', birth_date: '', gender: '', code: '', annual_fee: '', discount_pct: '0' })
     setBasePrice(null)
     setCountryCode(DEFAULT_COUNTRY)
@@ -296,7 +299,7 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
           )}
         </div>
 
-        {/* حالة خاصة — تخفيض بسبب موثّق، مستقلّة تماماً عن الإعفاء الكامل */}
+        {/* حالة خاصة */}
         {!isExempt && (
           <div style={{ flex: '1 1 100%' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid #E3E8EE', borderRadius: 10, background: hasSpecialCase ? '#FDF8ED' : '#fff' }}>
@@ -322,7 +325,56 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
           </div>
         )}
 
-        {/* ═══ باقات التغذية والنقل — سلوكهما يعتمد على إعداد الدمج ═══ */}
+        {/* رسوم التسجيل — اختيارية، مبلغ ثابت بلا تخفيض */}
+        {!isExempt && (
+          <div style={{ flex: '1 1 100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid #E3E8EE', borderRadius: 10, background: hasRegistrationFee ? '#EEF2F9' : '#fff' }}>
+              <input type="checkbox" checked={hasRegistrationFee} onChange={(e) => toggleRegistrationFee(e.target.checked)} style={{ width: 18, height: 18, cursor: 'pointer' }} />
+              <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: '#0F2744' }}>📝 رسوم التسجيل (اختياري)</span>
+            </div>
+            {hasRegistrationFee && (
+              <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+                <div style={{ flex: '1 1 160px' }}>
+                  <label style={label}>المبلغ (ر.ع) *</label>
+                  <input type="number" style={inputStyle} value={registrationFee} onChange={(e) => setRegistrationFee(e.target.value)} placeholder="0" dir="ltr" />
+                  <div style={{ color: '#8A94A6', fontSize: 11, marginTop: 4 }}>مبلغ ثابت — لا يخضع لنسبة التخفيض أعلاه.</div>
+                </div>
+                <div style={{ flex: '1 1 200px' }}>
+                  <label style={label}>التكرار</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button type="button" onClick={() => setRegistrationRecurrence('once')}
+                      style={{
+                        flex: 1, padding: '10px 10px', borderRadius: 9, cursor: 'pointer', textAlign: 'center',
+                        fontWeight: 700, fontSize: 13, fontFamily: 'inherit',
+                        border: `1.5px solid ${registrationRecurrence === 'once' ? '#163B68' : '#E3E8EE'}`,
+                        background: registrationRecurrence === 'once' ? '#F0F5FB' : '#fff',
+                        color: registrationRecurrence === 'once' ? '#163B68' : '#667',
+                      }}>
+                      لمرة واحدة
+                    </button>
+                    <button type="button" onClick={() => setRegistrationRecurrence('yearly')}
+                      style={{
+                        flex: 1, padding: '10px 10px', borderRadius: 9, cursor: 'pointer', textAlign: 'center',
+                        fontWeight: 700, fontSize: 13, fontFamily: 'inherit',
+                        border: `1.5px solid ${registrationRecurrence === 'yearly' ? '#163B68' : '#E3E8EE'}`,
+                        background: registrationRecurrence === 'yearly' ? '#F0F5FB' : '#fff',
+                        color: registrationRecurrence === 'yearly' ? '#163B68' : '#667',
+                      }}>
+                      سنوياً
+                    </button>
+                  </div>
+                  {registrationRecurrence === 'yearly' && (
+                    <div style={{ color: '#8A6D0F', fontSize: 11, marginTop: 4 }}>
+                      تُنشأ الآن فقط — تجديدها كل عام قرار يدوي لاحقاً.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* دمج النقل والتغذية */}
         {bundleEnabled === false && (
           <div style={{ flex: '1 1 100%', background: '#F7F9FC', border: '1px dashed #DCE3EC', borderRadius: 10, padding: '10px 14px', fontSize: 12.5, color: '#8A94A6' }}>
             🔒 التغذية والنقل مجمّدان — فعّلهما من «الإعدادات → دمج النقل والتغذية» لإدخال بياناتهما هنا،
@@ -358,7 +410,6 @@ export default function AddStudent({ sectionOptions, buses = [] }: { sectionOpti
           </div>
         )}
 
-        {/* المسار القديم (بلا دمج) — يبقى كما كان تماماً، معروض معطّلاً بصرياً فقط */}
         {bundleEnabled === false && mealPlans.length > 0 && (
           <div style={{ flex: '1 1 100%', opacity: 0.5, pointerEvents: 'none' }}>
             <label style={label}>باقات التغذية (سنوية)</label>
