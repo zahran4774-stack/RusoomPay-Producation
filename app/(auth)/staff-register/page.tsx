@@ -3,12 +3,49 @@
 // بلا اسم مدرسة وبلا منطق ولي أمر — الحساب يُنشأ في Supabase Auth مباشرة،
 // والربط بالدور والمدرسة يحدث تلقائياً عند أول دخول عبر مطابقة البريد مع
 // دعوة موجودة في staff_invites (أنشأها المالك/الإداري من StaffInvites).
-import { useState } from 'react'
+//
+// حماية من روابط التأكيد المُبطَلة: كل signUp/resend جديد لنفس البريد يُصدر رمزاً جديداً
+// ويُبطل السابق. لذلك: (1) نمنع إعادة التسجيل خلال 60 ثانية، (2) نتذكّر أن التسجيل تم
+// (localStorage) فلا يعيد المستخدم التسجيل عند تحديث الصفحة، (3) زر إعادة إرسال بمهلة،
+// (4) تنبيه صريح: استخدم أحدث رسالة فقط.
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
 import Logo from '@/app/Logo'
 import Captcha from '@/components/auth/Captcha'
+
+const PENDING_KEY = 'rp_staff_pending'
+const COOLDOWN_SECS = 60
+const PENDING_TTL_MS = 30 * 60 * 1000
+
+type Pending = { email: string; ts: number }
+
+function readPending(): Pending | null {
+  try {
+    const raw = window.localStorage.getItem(PENDING_KEY)
+    if (!raw) return null
+    const p = JSON.parse(raw) as Pending
+    if (!p?.email || !p?.ts || Date.now() - p.ts > PENDING_TTL_MS) return null
+    return p
+  } catch { return null }
+}
+function writePending(email: string) {
+  try { window.localStorage.setItem(PENDING_KEY, JSON.stringify({ email, ts: Date.now() })) } catch { /* ignore */ }
+}
+function clearPending() {
+  try { window.localStorage.removeItem(PENDING_KEY) } catch { /* ignore */ }
+}
+function remainingCooldown(ts: number) {
+  return Math.max(0, COOLDOWN_SECS - Math.floor((Date.now() - ts) / 1000))
+}
+// رابط التأكيد يجب أن يكون https دائماً (الموقع كان يُفتح أحياناً على http)
+function loginUrl() {
+  const o = window.location.origin
+  const isLocal = /localhost|127\.0\.0\.1/.test(o)
+  const origin = !isLocal && o.startsWith('http:') ? o.replace('http:', 'https:') : o
+  return `${origin}/login`
+}
 
 export default function StaffRegisterPage() {
   const router = useRouter()
@@ -16,11 +53,32 @@ export default function StaffRegisterPage() {
   const [f, setF] = useState({ full_name: '', email: '', password: '', confirm: '' })
   const [showPw, setShowPw] = useState(false)
   const [error, setError] = useState('')
+  const [info, setInfo] = useState('')
   const [loading, setLoading] = useState(false)
+  const [resending, setResending] = useState(false)
   const [sent, setSent] = useState(false)
+  const [cooldown, setCooldown] = useState(0)
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const [capKey, setCapKey] = useState(0)
+  const hasCaptcha = !!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
 
   const set = (k: string, v: string) => setF((p) => ({ ...p, [k]: v }))
+
+  // استعادة حالة "تم الإرسال" عند تحديث الصفحة — حتى لا يعيد المستخدم التسجيل ويُبطل رابطه
+  useEffect(() => {
+    const p = readPending()
+    if (p) {
+      setF((prev) => ({ ...prev, email: p.email }))
+      setCooldown(remainingCooldown(p.ts))
+      setSent(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (cooldown <= 0) return
+    const t = setTimeout(() => setCooldown((c) => c - 1), 1000)
+    return () => clearTimeout(t)
+  }, [cooldown])
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault()
@@ -28,18 +86,29 @@ export default function StaffRegisterPage() {
     if (!f.full_name.trim()) { setError('الاسم الكامل مطلوب'); return }
     if (f.password.length < 8) { setError('كلمة المرور 8 أحرف على الأقل'); return }
     if (f.password !== f.confirm) { setError('كلمتا المرور غير متطابقتين'); return }
-    if (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && !captchaToken) {
+    if (hasCaptcha && !captchaToken) {
       setError('يرجى إكمال التحقق الأمني (CAPTCHA)'); return
     }
+
+    const email = f.email.trim().toLowerCase()
+
+    // نفس البريد سُجّل قبل أقل من 60 ثانية → لا نعيد التسجيل (سيُبطل الرابط المُرسَل)
+    const pending = readPending()
+    if (pending && pending.email === email && remainingCooldown(pending.ts) > 0) {
+      setCooldown(remainingCooldown(pending.ts))
+      setSent(true)
+      return
+    }
+
     setLoading(true)
 
     // بلا metadata خاص بمدرسة — هذا حساب موظف عام، يُربط بمدرسته لاحقاً
     // عبر مطابقة بريده مع دعوة سابقة في staff_invites.
     const { data, error: signUpErr } = await supabase.auth.signUp({
-      email: f.email.trim().toLowerCase(),
+      email,
       password: f.password,
       options: {
-        emailRedirectTo: `${window.location.origin}/login`,
+        emailRedirectTo: loginUrl(),
         captchaToken: captchaToken || undefined,
         data: { full_name: f.full_name },
       },
@@ -50,8 +119,17 @@ export default function StaffRegisterPage() {
       return
     }
 
+    // البريد مسجّل ومؤكَّد مسبقاً: Supabase يرجع مستخدماً بلا identities ولا يُرسل أي رسالة
+    if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      setError('هذا البريد مسجّل بالفعل — سجّل الدخول من صفحة الدخول')
+      setLoading(false)
+      return
+    }
+
     if (data.user && !data.session) {
       // تأكيد البريد مفعّل — لا جلسة بعد
+      writePending(email)
+      setCooldown(COOLDOWN_SECS)
       setLoading(false)
       setSent(true)
       return
@@ -59,8 +137,33 @@ export default function StaffRegisterPage() {
 
     // تأكيد البريد معطّل (تطوير) — جلسة فورية، اذهب مباشرة لتسجيل الدخول
     // (الربط بالدور يتم تلقائياً عند أول تحميل للوحة بعد تسجيل الدخول)
+    clearPending()
     router.push('/login')
     router.refresh()
+  }
+
+  async function handleResend() {
+    if (cooldown > 0 || resending) return
+    if (hasCaptcha && !captchaToken) {
+      setError('يرجى إكمال التحقق الأمني (CAPTCHA) ثم أعد المحاولة'); return
+    }
+    setError(''); setInfo(''); setResending(true)
+    const email = f.email.trim().toLowerCase()
+    const { error: resendErr } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: { emailRedirectTo: loginUrl(), captchaToken: captchaToken || undefined },
+    })
+    setResending(false)
+    // الرمز الأمني صالح لاستخدام واحد — نُجدّد الودجت
+    setCaptchaToken(null); setCapKey((k) => k + 1)
+    if (resendErr) {
+      setError('تعذّر إعادة الإرسال الآن. انتظر دقيقة ثم حاول مجدداً، أو تواصل مع مدير مدرستك')
+      return
+    }
+    writePending(email)
+    setCooldown(COOLDOWN_SECS)
+    setInfo('أُعيد إرسال الرسالة. افتح الرسالة الجديدة فقط — الروابط السابقة لم تعد صالحة.')
   }
 
   const label: React.CSSProperties = { display: 'block', fontSize: 12.5, fontWeight: 700, color: '#0F2744', marginBottom: 7 }
@@ -75,10 +178,28 @@ export default function StaffRegisterPage() {
           <p style={{ color: '#556', fontSize: 14, lineHeight: 1.9 }}>
             أرسلنا رابط تأكيد إلى <b>{f.email}</b>. افتح الرابط لتفعيل حسابك، ثم سجّل الدخول — سيُربط حسابك تلقائياً بمدرستك ودورك.
           </p>
+          <div style={{ background: '#FFF8E6', border: '1px solid #F5E0A3', color: '#7A5B00', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, lineHeight: 1.9, marginTop: 14, textAlign: 'right' }}>
+            ⚠️ استخدم <b>أحدث رسالة</b> وصلتك فقط — كل رسالة جديدة تُبطل الرابط في الرسائل السابقة. لا تُعد التسجيل من جديد، استخدم زر إعادة الإرسال أدناه إن لزم.
+          </div>
           <p style={{ color: '#889', fontSize: 12, marginTop: 14 }}>
             لم يصلك البريد؟ تحقّق من مجلد الرسائل غير المرغوبة (Spam).
           </p>
-          <a href="/login" style={{ display: 'inline-block', marginTop: 18, background: '#163B68', color: '#fff', padding: '11px 24px', borderRadius: 11, textDecoration: 'none', fontWeight: 700 }}>
+
+          {hasCaptcha && cooldown <= 0 && (
+            <div style={{ margin: '12px 0 4px' }}>
+              <Captcha key={capKey} onVerify={setCaptchaToken} onExpire={() => setCaptchaToken(null)} />
+            </div>
+          )}
+
+          {info && <div style={{ background: '#ECFDF3', border: '1px solid #ABEFC6', color: '#067647', borderRadius: 10, padding: '10px 12px', fontSize: 13, fontWeight: 600, marginTop: 12, lineHeight: 1.7 }}>{info}</div>}
+          {error && <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', color: '#B42318', borderRadius: 10, padding: '10px 12px', fontSize: 13, fontWeight: 600, marginTop: 12, lineHeight: 1.7 }} role="alert">{error}</div>}
+
+          <button type="button" onClick={handleResend} disabled={cooldown > 0 || resending}
+            style={{ display: 'block', width: '100%', marginTop: 14, height: 44, borderRadius: 11, border: '1.5px solid #163B68', background: '#fff', color: '#163B68', fontWeight: 700, fontFamily: 'inherit', cursor: cooldown > 0 || resending ? 'default' : 'pointer', opacity: cooldown > 0 || resending ? 0.55 : 1 }}>
+            {resending ? 'جارٍ الإرسال…' : cooldown > 0 ? `إعادة إرسال الرسالة بعد ${cooldown} ثانية` : 'إعادة إرسال رسالة التأكيد'}
+          </button>
+
+          <a href="/login" style={{ display: 'inline-block', marginTop: 14, background: '#163B68', color: '#fff', padding: '11px 24px', borderRadius: 11, textDecoration: 'none', fontWeight: 700 }}>
             الذهاب لتسجيل الدخول
           </a>
         </div>
