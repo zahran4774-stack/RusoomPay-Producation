@@ -1,14 +1,18 @@
 'use client'
 // تتبّع تكلفة الوجبات — الموردون + المشتريات + تقرير التكلفة
-// كل عملية دفع (تسجيل شراء مدفوع، أو تعليم شراء كمدفوع لاحقاً) تسأل صراحة
-// عن مصدر الدفع (صندوق نقدي أم بنك) بدل افتراض البنك دائماً — يضمن أن ميزان
-// المراجعة يعكس حركة الأموال الفعلية بدقة.
-
-import { useState, useEffect, useCallback } from 'react'
+// كل بند شراء له زر "تعديل" منسدل بثلاثة خيارات:
+//   1) تعديل سعر الشراء والبيانات — قيد عكسي + قيد جديد بالسعر الصحيح
+//   2) الدفع — تأكيد السداد مع اختيار مصدر الدفع (صندوق/بنك)
+//   3) إلغاء الشراء — يبقى ظاهراً بعلامة "ملغى"، قيد عكسي يُصفّر أثره المالي والكمي
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase-client'
 
 type Supplier = { id: string; name: string; contact_name: string | null; phone: string | null; email: string | null; vat_number: string | null; active: boolean }
-type Purchase = { id: string; supplier_id: string | null; supplier_name: string | null; purchase_date: string; purchase_type: string; meals_count: number; unit_cost: number; total_cost: number; period: string | null; paid: boolean; notes: string | null; item_type: string | null }
+type Purchase = {
+  id: string; supplier_id: string | null; supplier_name: string | null; purchase_date: string
+  purchase_type: string; meals_count: number; unit_cost: number; total_cost: number
+  period: string | null; paid: boolean; notes: string | null; item_type: string | null; status: string
+}
 type Report = { meals_purchased: number; total_cost: number; avg_per_meal: number; meal_students: number; avg_per_student: number; suppliers: { supplier: string; meals: number; cost: number; avg_cost: number }[] }
 type PaymentSource = 'cash' | 'bank'
 
@@ -88,7 +92,6 @@ export default function MealCost({ sym = 'ر.ع' }: { sym?: string }) {
 
 function ReportView({ report, sym }: { report: Report | null; sym: string }) {
   if (!report) return <div style={{ color: '#8A94A6' }}>لا بيانات</div>
-
   const cards = [
     { label: 'إجمالي التكلفة', value: fmt3(report.total_cost), unit: sym, tone: 'act' },
     { label: 'وجبات مُشتراة', value: fmt0(report.meals_purchased), unit: '' },
@@ -96,7 +99,6 @@ function ReportView({ report, sym }: { report: Report | null; sym: string }) {
     { label: 'طلاب مشتركون', value: fmt0(report.meal_students), unit: '' },
     { label: 'متوسّط التكلفة للطالب', value: fmt3(report.avg_per_student), unit: sym },
   ]
-
   return (
     <div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 12, marginBottom: 20 }}>
@@ -109,7 +111,6 @@ function ReportView({ report, sym }: { report: Report | null; sym: string }) {
           </div>
         ))}
       </div>
-
       <h4 style={{ color: '#0F2744', margin: '0 0 10px' }}>التكلفة حسب المورّد</h4>
       <div style={{ background: '#fff', borderRadius: 12, overflow: 'auto', border: '1px solid #EDF1F5' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
@@ -136,6 +137,56 @@ function ReportView({ report, sym }: { report: Report | null; sym: string }) {
 
 const ITEM_TYPE_SUGGESTIONS = ['أرز', 'دجاج', 'لحوم', 'خضار وفواكه', 'ألبان', 'مخبوزات', 'مشروبات', 'أدوات مطبخ', 'أخرى']
 
+// القائمة المنسدلة لزر "تعديل" — تُغلق عند الضغط خارجها
+function ActionMenu({ purchase, onPay, onEditPrice, onCancel }: {
+  purchase: Purchase
+  onPay: () => void
+  onEditPrice: () => void
+  onCancel: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [])
+
+  if (purchase.status === 'cancelled') {
+    return <span style={{ fontSize: 12, color: '#8A94A6', fontWeight: 600 }}>لا إجراءات — ملغى</span>
+  }
+
+  const item: React.CSSProperties = {
+    display: 'block', width: '100%', textAlign: 'right', padding: '9px 14px', background: 'none',
+    border: 0, cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', color: '#0F2744',
+  }
+
+  return (
+    <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
+      <button onClick={() => setOpen((v) => !v)}
+        style={{ background: '#F2F5F8', color: '#0F2744', border: 0, borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontSize: 12.5, fontWeight: 700, fontFamily: 'inherit' }}>
+        ⚙ تعديل ▾
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', left: 0, top: '110%', zIndex: 40, minWidth: 210,
+          background: '#fff', border: '1px solid #E3E8EE', borderRadius: 11,
+          boxShadow: '0 10px 30px -10px rgba(15,39,68,.25)', overflow: 'hidden',
+        }}>
+          <button style={item} onClick={() => { setOpen(false); onEditPrice() }}>💲 تعديل سعر الشراء والبيانات</button>
+          {!purchase.paid && (
+            <button style={item} onClick={() => { setOpen(false); onPay() }}>✓ تسجيل الدفع</button>
+          )}
+          <button style={{ ...item, color: '#C0392B', borderTop: '1px solid #F2F5F8' }} onClick={() => { setOpen(false); onCancel() }}>✕ إلغاء الشراء</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purchases: Purchase[]; suppliers: Supplier[]; period: string; sym: string; onChange: () => void }) {
   const supabase = createClient()
   const [open, setOpen] = useState(false)
@@ -144,8 +195,20 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
+
+  // نافذة تأكيد الدفع لشراء موجود
   const [payingId, setPayingId] = useState<string | null>(null)
   const [payingSource, setPayingSource] = useState<PaymentSource>('bank')
+
+  // نافذة تعديل السعر والبيانات
+  const [editing, setEditing] = useState<Purchase | null>(null)
+  const [editMeals, setEditMeals] = useState('')
+  const [editUnit, setEditUnit] = useState('')
+  const [editSource, setEditSource] = useState<PaymentSource>('bank')
+  const [editErr, setEditErr] = useState('')
+
+  // نافذة تأكيد الإلغاء
+  const [cancelling, setCancelling] = useState<Purchase | null>(null)
 
   const set = (k: string, v: string | boolean) => setF((p) => ({ ...p, [k]: v }))
   const total = (Number(f.meals) || 0) * (Number(f.unit) || 0)
@@ -159,19 +222,13 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
       p_id: null, p_supplier: f.supplier || null, p_date: f.date,
       p_type: f.type, p_meals: Number(f.meals), p_unit_cost: Number(f.unit),
       p_period: period, p_paid: f.paid, p_notes: f.notes || null,
-      p_item_type: f.itemType || null,
-      p_payment_source: paymentSource,
+      p_item_type: f.itemType || null, p_payment_source: paymentSource,
     })
     setBusy(false)
     if (error) { setErr(error.message); return }
     setOpen(false)
     setF({ supplier: '', date: new Date().toISOString().slice(0, 10), type: 'daily', meals: '', unit: '', paid: false, notes: '', itemType: '' })
     setPaymentSource('bank')
-    onChange()
-  }
-
-  async function del(id: string) {
-    await supabase.rpc('delete_meal_purchase', { p_id: id })
     onChange()
   }
 
@@ -186,8 +243,42 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
     onChange()
   }
 
+  function openEdit(p: Purchase) {
+    setEditing(p)
+    setEditMeals(String(p.meals_count))
+    setEditUnit(String(p.unit_cost))
+    setEditSource('bank')
+    setEditErr('')
+  }
+
+  async function confirmEditPrice() {
+    if (!editing) return
+    setEditErr('')
+    if (!editMeals || Number(editMeals) <= 0) { setEditErr('عدد الوجبات مطلوب'); return }
+    if (!editUnit || Number(editUnit) <= 0) { setEditErr('تكلفة الوحدة مطلوبة'); return }
+    setBusyId(editing.id)
+    const { error } = await supabase.rpc('edit_meal_purchase_price', {
+      p_id: editing.id, p_meals: Number(editMeals), p_unit_cost: Number(editUnit), p_payment_source: editSource,
+    })
+    setBusyId(null)
+    if (error) { setEditErr(error.message); return }
+    setEditing(null)
+    onChange()
+  }
+
+  async function confirmCancel() {
+    if (!cancelling) return
+    setBusyId(cancelling.id)
+    const { error } = await supabase.rpc('cancel_meal_purchase', { p_id: cancelling.id })
+    setBusyId(null)
+    if (error) { alert(error.message); return }
+    setCancelling(null)
+    onChange()
+  }
+
   const input: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 9, border: '1px solid #E3E8EE', fontSize: 14, fontFamily: 'inherit' }
   const cell: React.CSSProperties = { flex: '1 1 150px' }
+  const editTotal = (Number(editMeals) || 0) * (Number(editUnit) || 0)
 
   return (
     <div>
@@ -206,25 +297,28 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
           </tr></thead>
           <tbody>
             {purchases.map((p) => (
-              <tr key={p.id} style={{ borderTop: '1px solid #F2F5F8' }}>
+              <tr key={p.id} style={{ borderBottom: '1px solid #EEF2F1', opacity: p.status === 'cancelled' ? 0.55 : 1 }}>
                 <td style={{ padding: 10, direction: 'ltr', textAlign: 'right' }}>{p.purchase_date}</td>
                 <td style={{ padding: 10 }}>{p.supplier_name || '—'}</td>
                 <td style={{ padding: 10 }}>{TYPES[p.purchase_type] || p.purchase_type}</td>
                 <td style={{ padding: 10 }}>{p.item_type || '—'}</td>
-                <td style={{ padding: 10 }}>{fmt0(p.meals_count)}</td>
+                <td style={{ padding: 10, textDecoration: p.status === 'cancelled' ? 'line-through' : 'none' }}>{fmt0(p.meals_count)}</td>
                 <td style={{ padding: 10 }}>{fmt3(p.unit_cost)}</td>
-                <td style={{ padding: 10, fontWeight: 700 }}>{fmt3(p.total_cost)} {sym}</td>
+                <td style={{ padding: 10, fontWeight: 700, textDecoration: p.status === 'cancelled' ? 'line-through' : 'none' }}>{fmt3(p.total_cost)} {sym}</td>
                 <td style={{ padding: 10 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: p.paid ? '#067647' : '#B54708' }}>{p.paid ? 'مدفوع' : 'غير مدفوع'}</span>
-                </td>
-                <td style={{ padding: 10, display: 'flex', gap: 8 }}>
-                  {!p.paid && (
-                    <button onClick={() => { setPayingId(p.id); setPayingSource('bank') }} disabled={busyId === p.id}
-                      style={{ background: '#EAF7EE', color: '#067647', border: 0, borderRadius: 8, padding: '6px 10px', cursor: busyId === p.id ? 'default' : 'pointer', fontSize: 12, fontWeight: 700 }}>
-                      {busyId === p.id ? '...' : '✓ تم الدفع'}
-                    </button>
+                  {p.status === 'cancelled' ? (
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#C0392B' }}>ملغى</span>
+                  ) : (
+                    <span style={{ fontSize: 12, fontWeight: 700, color: p.paid ? '#067647' : '#B54708' }}>{p.paid ? 'مدفوع' : 'غير مدفوع'}</span>
                   )}
-                  <button onClick={() => del(p.id)} style={{ background: 'none', border: 0, color: '#C0392B', cursor: 'pointer', fontSize: 13 }}>حذف</button>
+                </td>
+                <td style={{ padding: 10 }}>
+                  <ActionMenu
+                    purchase={p}
+                    onPay={() => { setPayingId(p.id); setPayingSource('bank') }}
+                    onEditPrice={() => openEdit(p)}
+                    onCancel={() => setCancelling(p)}
+                  />
                 </td>
               </tr>
             ))}
@@ -233,6 +327,7 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
         </table>
       </div>
 
+      {/* نافذة تأكيد الدفع */}
       {payingId && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(10,37,64,.45)', display: 'grid', placeItems: 'center', zIndex: 999, padding: 16 }} onClick={() => setPayingId(null)}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: 22, width: '100%', maxWidth: 360 }}>
@@ -246,6 +341,79 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
               <button onClick={() => setPayingId(null)}
                 style={{ background: '#F2F5F8', color: '#0F2744', border: 0, padding: '11px 16px', borderRadius: 10, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                 إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* نافذة تعديل السعر والبيانات */}
+      {editing && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(10,37,64,.45)', display: 'grid', placeItems: 'center', zIndex: 999, padding: 16 }} onClick={() => setEditing(null)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: 22, width: '100%', maxWidth: 400 }}>
+            <h4 style={{ margin: '0 0 4px', color: '#0F2744' }}>تعديل سعر الشراء</h4>
+            <p style={{ color: '#8A94A6', fontSize: 12.5, margin: '0 0 16px' }}>{editing.supplier_name || '—'} — {editing.purchase_date}</p>
+
+            <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#0F2744', display: 'block', marginBottom: 6 }}>عدد الوجبات</label>
+                <input type="number" style={input} value={editMeals} onChange={(e) => setEditMeals(e.target.value)} dir="ltr" />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#0F2744', display: 'block', marginBottom: 6 }}>تكلفة الوحدة ({sym})</label>
+                <input type="number" step="0.001" style={input} value={editUnit} onChange={(e) => setEditUnit(e.target.value)} dir="ltr" />
+              </div>
+            </div>
+
+            <div style={{ background: '#F7FAFC', border: '1px solid #EEF1F5', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 13, display: 'flex', justifyContent: 'space-between' }}>
+              <span>الإجمالي الجديد</span><b>{fmt3(editTotal)} {sym}</b>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <PaymentSourcePicker value={editSource} onChange={setEditSource} />
+            </div>
+
+            <div style={{ background: '#FDF8ED', border: '1px solid #F0E0C0', borderRadius: 9, padding: '9px 12px', fontSize: 11.5, color: '#8A6D0F', marginBottom: 14 }}>
+              💡 سيُسجَّل قيد عكسي يُلغي القيد السابق، وقيد جديد بالسعر الصحيح — للحفاظ على سجل تدقيق كامل.
+            </div>
+
+            {editErr && <div style={{ color: '#C0392B', fontSize: 13, fontWeight: 600, marginBottom: 12 }}>⚠ {editErr}</div>}
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={confirmEditPrice} disabled={busyId === editing.id}
+                style={{ flex: 1, background: '#163B68', color: '#fff', border: 0, padding: 11, borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                {busyId === editing.id ? 'جارٍ الحفظ…' : 'حفظ التعديل'}
+              </button>
+              <button onClick={() => setEditing(null)}
+                style={{ background: '#F2F5F8', color: '#0F2744', border: 0, padding: '11px 16px', borderRadius: 10, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* نافذة تأكيد إلغاء الشراء */}
+      {cancelling && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(10,37,64,.45)', display: 'grid', placeItems: 'center', zIndex: 999, padding: 16 }} onClick={() => setCancelling(null)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: 22, width: '100%', maxWidth: 380 }}>
+            <h4 style={{ margin: '0 0 10px', color: '#C0392B' }}>⚠ تأكيد إلغاء الشراء</h4>
+            <p style={{ color: '#556', fontSize: 13.5, lineHeight: 1.8, marginBottom: 16 }}>
+              سيبقى هذا السجل ظاهراً بعلامة «ملغى» للشفافية، وسيُصفَّر أثره المالي والكمّي بقيد عكسي.
+              هذا الإجراء لا يمكن التراجع عنه من هنا.
+            </p>
+            <div style={{ background: '#F7FAFC', border: '1px solid #EEF1F5', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 13 }}>
+              <div>{cancelling.supplier_name || '—'} — {cancelling.purchase_date}</div>
+              <div style={{ fontWeight: 700, marginTop: 4 }}>{fmt3(cancelling.total_cost)} {sym} · {fmt0(cancelling.meals_count)} وجبة</div>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={confirmCancel} disabled={busyId === cancelling.id}
+                style={{ flex: 1, background: '#C0392B', color: '#fff', border: 0, padding: 11, borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                {busyId === cancelling.id ? 'جارٍ الإلغاء…' : 'تأكيد الإلغاء'}
+              </button>
+              <button onClick={() => setCancelling(null)}
+                style={{ background: '#F2F5F8', color: '#0F2744', border: 0, padding: '11px 16px', borderRadius: 10, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                تراجع
               </button>
             </div>
           </div>
@@ -337,12 +505,10 @@ function SuppliersView({ suppliers, onChange }: { suppliers: Supplier[]; onChang
     setF({ id: s.id, name: s.name, contact: s.contact_name ?? '', phone: s.phone ?? '', email: s.email ?? '', vat: s.vat_number ?? '', active: s.active })
     setOpen(true)
   }
-
   function add() {
     setF({ id: '', name: '', contact: '', phone: '', email: '', vat: '', active: true })
     setOpen(true)
   }
-
   async function save() {
     setErr('')
     if (!f.name.trim()) { setErr('الاسم مطلوب'); return }
@@ -365,7 +531,6 @@ function SuppliersView({ suppliers, onChange }: { suppliers: Supplier[]; onChang
       <button onClick={add} style={{ background: '#163B68', color: '#fff', border: 0, padding: '11px 20px', borderRadius: 11, fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', marginBottom: 16 }}>
         ＋ إضافة مورّد
       </button>
-
       <div style={{ background: '#fff', borderRadius: 12, overflow: 'auto', border: '1px solid #EDF1F5' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
           <thead><tr style={{ background: '#F7FAFC', textAlign: 'right' }}>
