@@ -4,6 +4,7 @@
 // بدل جلبها هنا عبر useEffect — يمنع وميض إعادة التخطيط عند التحميل غير المتزامن.
 // لا منطق أعمال هنا سوى عرض البيانات وإرسال التذكير.
 // زر "إرسال تذكير ودّي" يستخدم قالب fee_reminder المعتمد من Twilio بدل النص الحر.
+// ⚠️ يمر عبر تأكيد صريح (نعم/لا) قبل الإرسال الفعلي — يمنع الإرسال بالخطأ.
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import { AlertTriangle } from 'lucide-react'
@@ -27,6 +28,7 @@ const PAGE_SIZE = 6
 export default function RiskIndicator({ currency, data }: { currency: string; data: RiskData }) {
   const supabase = createClient()
   const [page, setPage] = useState(1)
+  const [sendingId, setSendingId] = useState<string | null>(null)
   const sym = currency === 'OMR' ? 'ر.ع' : currency
   const fmt = (n: number) => new Intl.NumberFormat('en', { minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(n || 0)
 
@@ -39,6 +41,47 @@ export default function RiskIndicator({ currency, data }: { currency: string; da
   const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
   const pageItems = items.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+
+  // إرسال التذكير الودّي — يمر عبر تأكيد صريح قبل أي استدعاء فعلي للإرسال
+  async function sendReminder(r: RiskItem) {
+    if (!r.phone) { alert('لا يوجد رقم لولي الأمر'); return }
+    if (!confirm(`إرسال تذكير واتساب ودّي إلى ولي أمر ${r.student_name}؟`)) return
+
+    setSendingId(r.student_id)
+    try {
+      let school = 'مدرستكم'
+      const { data: sch } = await supabase.from('schools').select('name').limit(1).single()
+      if (sch?.name) school = sch.name
+
+      // تطبيع الرقم العُماني: نزيل المسافات والرموز، ونضمن رمز الدولة 968
+      let raw = (r.phone || '').replace(/[\s\-()]/g, '')
+      if (raw.startsWith('+')) raw = raw.slice(1)
+      if (raw.startsWith('00')) raw = raw.slice(2)
+      if (!raw.startsWith('968') && raw.length === 8) raw = '968' + raw
+      const to = `+${raw}`
+
+      const res = await fetch('/api/send-whatsapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to,
+          template: 'fee_reminder',
+          variables: {
+            '1': school,
+            '2': r.guardian || 'ولي الأمر',
+            '3': r.student_name,
+            '4': fmt(r.outstanding),
+          },
+        }),
+      })
+      const resData = await res.json()
+      alert(resData.success ? 'تم إرسال التذكير عبر واتساب ✅' : 'فشل الإرسال: ' + (resData.error || 'خطأ'))
+    } catch {
+      alert('خطأ في الإرسال')
+    } finally {
+      setSendingId(null)
+    }
+  }
 
   return (
     <section style={{ background: '#fff', border: '1px solid #E7EBF0', borderRadius: 16, padding: 22, marginTop: 18 }} dir="rtl">
@@ -80,41 +123,11 @@ export default function RiskIndicator({ currency, data }: { currency: string; da
                 <td style={td}>
                   {r.phone ? (
                     <button
-                      onClick={async () => {
-                        if (!r.phone) { alert('لا يوجد رقم لولي الأمر'); return }
-                        let school = 'مدرستكم'
-                        const { data: sch } = await supabase.from('schools').select('name').limit(1).single()
-                        if (sch?.name) school = sch.name
-                        // تطبيع الرقم العُماني: نزيل المسافات والرموز، ونضمن رمز الدولة 968
-                        let raw = (r.phone || '').replace(/[\s\-()]/g, '')
-                        if (raw.startsWith('+')) raw = raw.slice(1)
-                        if (raw.startsWith('00')) raw = raw.slice(2)
-                        if (!raw.startsWith('968') && raw.length === 8) raw = '968' + raw
-                        const to = `+${raw}`
-                        try {
-                          const res = await fetch('/api/send-whatsapp', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              to,
-                              template: 'fee_reminder',
-                              variables: {
-                                '1': school,
-                                '2': r.guardian || 'ولي الأمر',
-                                '3': r.student_name,
-                                '4': fmt(r.outstanding),
-                              },
-                            }),
-                          })
-                          const data = await res.json()
-                          alert(data.success ? 'تم إرسال التذكير عبر واتساب ✅' : 'فشل الإرسال: ' + (data.error || 'خطأ'))
-                        } catch {
-                          alert('خطأ في الإرسال')
-                        }
-                      }}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13, background: 'none', border: 'none', color: '#0F9D74', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+                      onClick={() => sendReminder(r)}
+                      disabled={sendingId === r.student_id}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13, background: 'none', border: 'none', color: '#0F9D74', fontWeight: 700, cursor: sendingId === r.student_id ? 'default' : 'pointer', fontFamily: 'inherit', opacity: sendingId === r.student_id ? 0.6 : 1 }}
                     >
-                      💬 إرسال تذكير ودّي
+                      {sendingId === r.student_id ? 'جارٍ الإرسال…' : '💬 إرسال تذكير ودّي'}
                     </button>
                   ) : (
                     <span style={{ fontSize: 12.5, color: '#667' }}>{r.action}</span>
