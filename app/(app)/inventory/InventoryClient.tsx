@@ -1,6 +1,7 @@
 'use client'
 // مكوّن المخزون — أصناف مصنَّفة (فئة + نوع فرعي) + شراء + بيع لطالب + صرف استهلاكي داخلي (غير مفوتر) + فلترة وتقرير + طباعة
 // عند الشراء: يسأل صراحة عن مصدر الدفع (صندوق أم بنك) بدل افتراض البنك دائماً.
+// تكلفة الوحدة تلقائية: الإجمالي ÷ الكمية — عند إضافة صنف، وعند الشراء (مع متوسط مرجّح للتكلفة الجديدة).
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import { printReport, type SchoolHeader } from '@/lib/print-report'
@@ -21,6 +22,10 @@ const input: React.CSSProperties = {
   width: '100%', padding: 11, borderRadius: 10, border: '1.5px solid #DDE3EC',
   fontFamily: 'inherit', fontSize: 14, background: '#fff',
 }
+// حقل محسوب تلقائياً (للقراءة فقط)
+const autoInput: React.CSSProperties = {
+  ...input, background: '#F0F7F5', border: '1.5px solid #CDE8E1', color: '#0D7D6B', fontWeight: 700,
+}
 const lbl: React.CSSProperties = { fontSize: 13, fontWeight: 600, color: '#445', display: 'block', marginBottom: 6 }
 const btnGold: React.CSSProperties = {
   padding: '11px 18px', borderRadius: 10, border: 'none', cursor: 'pointer',
@@ -36,6 +41,14 @@ const btnSm: React.CSSProperties = {
 }
 const fmt = (n: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 
+// تكلفة الوحدة: 3 خانات إن كانت دقيقة، وإلا 4 (مثال: 10 ÷ 3 = 3.3333) — التخزين الفعلي بـ 6 خانات
+const unitText = (n: number) => {
+  const v = n ?? 0
+  const exact3 = Math.abs(Math.round(v * 1000) / 1000 - v) < 1e-7
+  const d = exact3 ? 3 : 4
+  return v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
+}
+
 const DISPENSE_REASONS = ['قرطاسية صفوف', 'مواد نظافة', 'صيانة وأدوات', 'استخدام إداري', 'أخرى']
 
 export default function InventoryClient({ initialItems, students, school }: {
@@ -48,7 +61,8 @@ export default function InventoryClient({ initialItems, students, school }: {
 
   const [name, setName] = useState('')
   const [qty, setQty] = useState('')
-  const [cost, setCost] = useState('')
+  const [total, setTotal] = useState('')   // إجمالي المبلغ — اختياري: إن أُدخل تُحسب تكلفة الوحدة تلقائياً
+  const [cost, setCost] = useState('')     // تكلفة الوحدة اليدوية — تُستخدم فقط عند ترك الإجمالي فارغاً
   const [price, setPrice] = useState('')
   const [category, setCategory] = useState('كتب')
   const [subtype, setSubtype] = useState('')
@@ -63,12 +77,18 @@ export default function InventoryClient({ initialItems, students, school }: {
   const [moveItem, setMoveItem] = useState<Item | null>(null)
   const [moveMode, setMoveMode] = useState<'buy' | 'sell' | 'dispense'>('buy')
   const [moveQty, setMoveQty] = useState('1')
+  const [moveTotal, setMoveTotal] = useState('') // إجمالي المبلغ المدفوع عند الشراء (اختياري)
   const [moveStudent, setMoveStudent] = useState('')
   const [applyTax, setApplyTax] = useState(true)
   const [dispenseReason, setDispenseReason] = useState(DISPENSE_REASONS[0])
   const [customReason, setCustomReason] = useState('')
   // مصدر الدفع عند الشراء — يظهر فقط لـ moveMode === 'buy'
   const [paymentSource, setPaymentSource] = useState<PaymentSource>('bank')
+
+  // تكلفة الوحدة التلقائية في نموذج الإضافة
+  const addQty = parseInt(qty) || 0
+  const addTotal = parseFloat(total) || 0
+  const autoUnit = addTotal > 0 && addQty > 0 ? addTotal / addQty : null
 
   async function refresh(cat?: string) {
     const activeFilter = cat !== undefined ? cat : filterCategory
@@ -94,20 +114,24 @@ export default function InventoryClient({ initialItems, students, school }: {
     if (!name.trim()) { setMsg('اسم الصنف مطلوب'); return }
     const finalCategory = category === '__new__' ? customCategory.trim() : category
     if (!finalCategory) { setMsg('اختر أو اكتب فئة للصنف'); return }
+    if (total.trim() !== '' && addTotal <= 0) { setMsg('المبلغ الإجمالي غير صحيح'); return }
+    if (addTotal > 0 && addQty <= 0) { setMsg('أدخل الكمية لحساب تكلفة الوحدة من المبلغ الإجمالي'); return }
     setBusy(true); setMsg('')
     const { error } = await supabase.rpc('save_inventory_item', {
-      p_name: name.trim(), p_qty: parseInt(qty) || 0,
-      p_cost: parseFloat(cost) || 0, p_price: parseFloat(price) || 0, p_vat: 5,
+      p_name: name.trim(), p_qty: addQty,
+      p_cost: autoUnit ?? (parseFloat(cost) || 0),
+      p_price: parseFloat(price) || 0, p_vat: 5,
       p_category: finalCategory, p_subtype: subtype.trim() || null,
+      p_total: addTotal > 0 ? addTotal : null,
     })
     if (error) { setMsg('خطأ: ' + error.message); setBusy(false); return }
-    setName(''); setQty(''); setCost(''); setPrice(''); setSubtype(''); setCustomCategory('')
+    setName(''); setQty(''); setTotal(''); setCost(''); setPrice(''); setSubtype(''); setCustomCategory('')
     await refresh(); await loadCategories()
     setMsg('✓ تمت إضافة الصنف'); setBusy(false)
   }
 
   function openMove(item: Item, mode: 'buy' | 'sell' | 'dispense') {
-    setMoveItem(item); setMoveMode(mode); setMoveQty('1'); setMoveStudent(''); setApplyTax(true)
+    setMoveItem(item); setMoveMode(mode); setMoveQty('1'); setMoveTotal(''); setMoveStudent(''); setApplyTax(true)
     setDispenseReason(DISPENSE_REASONS[0]); setCustomReason(''); setPaymentSource('bank'); setMsg('')
   }
 
@@ -118,9 +142,14 @@ export default function InventoryClient({ initialItems, students, school }: {
     setBusy(true); setMsg('')
 
     if (moveMode === 'buy') {
-      const { error } = await supabase.rpc('inventory_purchase', { p_item: moveItem.id, p_qty: q, p_payment_source: paymentSource })
+      const t = parseFloat(moveTotal) || 0
+      if (moveTotal.trim() !== '' && t <= 0) { setMsg('المبلغ الإجمالي غير صحيح'); setBusy(false); return }
+      const { error } = await supabase.rpc('inventory_purchase', {
+        p_item: moveItem.id, p_qty: q, p_payment_source: paymentSource,
+        p_total: t > 0 ? t : null,
+      })
       if (error) { setMsg('خطأ: ' + error.message); setBusy(false); return }
-      setMsg(`✓ تم الشراء — مخزون مدين / ${paymentSource === 'cash' ? 'الصندوق' : 'البنك'} دائن`)
+      setMsg(`✓ تم الشراء — مخزون مدين / ${paymentSource === 'cash' ? 'الصندوق' : 'البنك'} دائن${t > 0 ? ` · تكلفة الوحدة ${unitText(t / q)}` : ''}`)
     } else if (moveMode === 'sell') {
       if (!moveStudent) { setMsg('اختر الطالب'); setBusy(false); return }
       const { error } = await supabase.rpc('inventory_sell', { p_item: moveItem.id, p_qty: q, p_student: moveStudent, p_apply_tax: applyTax })
@@ -196,7 +225,7 @@ export default function InventoryClient({ initialItems, students, school }: {
                 ],
                 rows: items.map((it) => ({
                   name: it.name, category: it.category + (it.subtype ? ` / ${it.subtype}` : ''),
-                  qty: it.qty, cost: fmt(it.cost), price: fmt(it.price), value: fmt(it.stock_value),
+                  qty: it.qty, cost: unitText(it.cost), price: fmt(it.price), value: fmt(it.stock_value),
                 })),
               })} style={btnSm}>🖨 طباعة</button>
             )}
@@ -224,7 +253,7 @@ export default function InventoryClient({ initialItems, students, school }: {
                     <td style={{ padding: '10px 12px' }}>
                       {it.qty} {it.qty < 10 && <span style={{ background: '#FCE9E6', color: '#C0392B', fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 99 }}>منخفض</span>}
                     </td>
-                    <td style={{ padding: '10px 12px' }}>{fmt(it.cost)}</td>
+                    <td style={{ padding: '10px 12px' }}>{unitText(it.cost)}</td>
                     <td style={{ padding: '10px 12px' }}>{fmt(it.price)}</td>
                     <td style={{ padding: '10px 12px' }}>{fmt(it.stock_value)}</td>
                     <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
@@ -261,29 +290,61 @@ export default function InventoryClient({ initialItems, students, school }: {
             </div>
           )}
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: 10, alignItems: 'end' }}>
-          <div><label style={lbl}>اسم الصنف</label><input style={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="كتاب الرياضيات" /></div>
-          <div><label style={lbl}>الكمية</label><input style={input} type="number" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="0" /></div>
-          <div><label style={lbl}>التكلفة</label><input style={input} type="number" step="0.001" value={cost} onChange={(e) => setCost(e.target.value)} placeholder="0.000" /></div>
-          <div><label style={lbl}>سعر البيع</label><input style={input} type="number" step="0.001" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0.000" /></div>
-          <button style={btnGold} onClick={addItem} disabled={busy}>＋ إضافة</button>
+
+        <div style={{ marginBottom: 12 }}>
+          <label style={lbl}>اسم الصنف</label>
+          <input style={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="كتاب الرياضيات" />
         </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 8 }}>
+          <div>
+            <label style={lbl}>الكمية</label>
+            <input style={input} type="number" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="0" />
+          </div>
+          <div>
+            <label style={lbl}>إجمالي المبلغ (اختياري)</label>
+            <input style={input} type="number" step="0.001" value={total} onChange={(e) => setTotal(e.target.value)} placeholder="0.000" />
+          </div>
+          <div>
+            {autoUnit !== null ? (
+              <>
+                <label style={{ ...lbl, color: '#0D7D6B' }}>تكلفة الوحدة (تلقائي)</label>
+                <input style={autoInput} value={unitText(autoUnit)} readOnly tabIndex={-1} />
+              </>
+            ) : (
+              <>
+                <label style={lbl}>تكلفة الوحدة</label>
+                <input style={input} type="number" step="0.001" value={cost} onChange={(e) => setCost(e.target.value)} placeholder="0.000" />
+              </>
+            )}
+          </div>
+          <div>
+            <label style={lbl}>سعر البيع</label>
+            <input style={input} type="number" step="0.001" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0.000" />
+          </div>
+        </div>
+        <p style={{ fontSize: 12, color: '#8A94A6', margin: '0 0 14px', lineHeight: 1.7 }}>
+          {autoUnit !== null
+            ? 'تكلفة الوحدة = إجمالي المبلغ ÷ الكمية — تُحسب تلقائياً. امسح الإجمالي لإدخال التكلفة يدوياً.'
+            : 'أدخل الكمية وإجمالي المبلغ لتُحسب تكلفة الوحدة تلقائياً، أو اترك الإجمالي فارغاً وأدخل التكلفة يدوياً.'}
+        </p>
+        <button style={btnGold} onClick={addItem} disabled={busy}>＋ إضافة</button>
       </div>
 
       {/* نافذة الحركة */}
       {moveItem && (
         <div onClick={() => setMoveItem(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(8,15,27,.55)', display: 'grid', placeItems: 'center', zIndex: 100, padding: 20 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 420, width: '100%' }} dir="rtl">
+          <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 420, width: '100%', maxHeight: '92vh', overflowY: 'auto' }} dir="rtl">
             <h3 style={{ margin: '0 0 6px', color: '#0F2744' }}>
               {moveMode === 'buy' ? 'شراء مخزون' : moveMode === 'sell' ? 'بيع لطالب' : 'صرف استهلاكي داخلي'}
             </h3>
             <p style={{ fontSize: 13, color: '#667', margin: '0 0 16px' }}>
               <b>{moveItem.name}</b> — الرصيد الحالي: <b>{moveItem.qty}</b> ·{' '}
               {moveMode === 'buy'
-                ? `تكلفة الوحدة ${fmt(moveItem.cost)}`
+                ? `تكلفة الوحدة الحالية ${unitText(moveItem.cost)}`
                 : moveMode === 'sell'
                   ? `سعر البيع ${fmt(moveItem.price)}${applyTax ? ` + ضريبة ${moveItem.vat_rate ?? 5}%` : ' (بدون ضريبة)'}`
-                  : `تكلفة الوحدة ${fmt(moveItem.cost)} — بلا فاتورة على أولياء الأمور`}
+                  : `تكلفة الوحدة ${unitText(moveItem.cost)} — بلا فاتورة على أولياء الأمور`}
             </p>
 
             {moveMode === 'dispense' && (
@@ -295,37 +356,70 @@ export default function InventoryClient({ initialItems, students, school }: {
             <label style={lbl}>الكمية</label>
             <input style={{ ...input, marginBottom: 14 }} type="number" value={moveQty} onChange={(e) => setMoveQty(e.target.value)} />
 
-            {moveMode === 'buy' && (
-              <>
-                <label style={lbl}>مصدر الدفع</label>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-                  <button type="button" onClick={() => setPaymentSource('cash')}
-                    style={{
-                      flex: 1, padding: '10px 12px', borderRadius: 10, fontFamily: 'inherit', fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
-                      border: paymentSource === 'cash' ? '2px solid #163B68' : '1px solid #E3E8EE',
-                      background: paymentSource === 'cash' ? '#EAF0FA' : '#fff',
-                      color: paymentSource === 'cash' ? '#163B68' : '#667',
-                    }}>
-                    💵 من الصندوق
-                  </button>
-                  <button type="button" onClick={() => setPaymentSource('bank')}
-                    style={{
-                      flex: 1, padding: '10px 12px', borderRadius: 10, fontFamily: 'inherit', fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
-                      border: paymentSource === 'bank' ? '2px solid #163B68' : '1px solid #E3E8EE',
-                      background: paymentSource === 'bank' ? '#EAF0FA' : '#fff',
-                      color: paymentSource === 'bank' ? '#163B68' : '#667',
-                    }}>
-                    🏦 من البنك
-                  </button>
-                </div>
-                <div style={{ background: '#F7FAFC', border: '1px solid #EEF1F5', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 13 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0F2744' }}>
-                    <span>إجمالي الشراء</span>
-                    <b>{fmt((parseInt(moveQty) || 0) * moveItem.cost)}</b>
+            {moveMode === 'buy' && (() => {
+              const q = parseInt(moveQty) || 0
+              const t = parseFloat(moveTotal) || 0
+              const purchaseUnit = t > 0 && q > 0 ? t / q : null
+              const oldQty = Math.max(moveItem.qty, 0)
+              const newAvg = purchaseUnit !== null ? (oldQty * moveItem.cost + t) / (oldQty + q) : null
+              return (
+                <>
+                  <label style={lbl}>إجمالي المبلغ المدفوع (اختياري)</label>
+                  <input style={{ ...input, marginBottom: 12 }} type="number" step="0.001" value={moveTotal}
+                    onChange={(e) => setMoveTotal(e.target.value)} placeholder="0.000" />
+
+                  <label style={{ ...lbl, color: purchaseUnit !== null ? '#0D7D6B' : '#445' }}>تكلفة الوحدة (تلقائي)</label>
+                  <input style={{ ...autoInput, marginBottom: 14, ...(purchaseUnit === null ? { background: '#F5F7FA', border: '1.5px solid #DDE3EC', color: '#8A94A6' } : null) }}
+                    value={purchaseUnit !== null ? unitText(purchaseUnit) : '—'} readOnly tabIndex={-1} />
+
+                  <label style={lbl}>مصدر الدفع</label>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                    <button type="button" onClick={() => setPaymentSource('cash')}
+                      style={{
+                        flex: 1, padding: '10px 12px', borderRadius: 10, fontFamily: 'inherit', fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
+                        border: paymentSource === 'cash' ? '2px solid #163B68' : '1px solid #E3E8EE',
+                        background: paymentSource === 'cash' ? '#EAF0FA' : '#fff',
+                        color: paymentSource === 'cash' ? '#163B68' : '#667',
+                      }}>
+                      💵 من الصندوق
+                    </button>
+                    <button type="button" onClick={() => setPaymentSource('bank')}
+                      style={{
+                        flex: 1, padding: '10px 12px', borderRadius: 10, fontFamily: 'inherit', fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
+                        border: paymentSource === 'bank' ? '2px solid #163B68' : '1px solid #E3E8EE',
+                        background: paymentSource === 'bank' ? '#EAF0FA' : '#fff',
+                        color: paymentSource === 'bank' ? '#163B68' : '#667',
+                      }}>
+                      🏦 من البنك
+                    </button>
                   </div>
-                </div>
-              </>
-            )}
+
+                  <div style={{ background: '#F7FAFC', border: '1px solid #EEF1F5', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 13 }}>
+                    <div style={{ display: 'grid', gap: 5, color: '#475569' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0F2744' }}>
+                        <span>إجمالي الشراء</span>
+                        <b>{fmt(purchaseUnit !== null ? t : q * moveItem.cost)}</b>
+                      </div>
+                      {newAvg !== null ? (
+                        <>
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span>متوسط تكلفة الوحدة بعد الشراء</span>
+                            <b style={{ color: '#0D7D6B' }}>{unitText(newAvg)}</b>
+                          </div>
+                          <div style={{ fontSize: 11.5, color: '#8A94A6', lineHeight: 1.7 }}>
+                            متوسط مرجّح: (قيمة الرصيد الحالي + المبلغ) ÷ (الكمية الحالية + المشتراة)، ويحلّ محلّ التكلفة الحالية ({unitText(moveItem.cost)}).
+                          </div>
+                        </>
+                      ) : (
+                        <div style={{ fontSize: 11.5, color: '#8A94A6', lineHeight: 1.7 }}>
+                          بلا إجمالي مدفوع: يُقيَّد الشراء بتكلفة الصنف الحالية. أدخل الإجمالي لحساب تكلفة الوحدة تلقائياً وتحديث متوسط التكلفة.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )
+            })()}
 
             {moveMode === 'sell' && (
               <>
