@@ -2,11 +2,13 @@
 // app/(app)/accounting/PeriodReports.tsx
 // التقارير المالية الفترّية — المحاسب يختار المدى، ويولّد: ميزان المراجعة،
 // قائمة الدخل، الميزانية، دفتر اليومية. التصدير عبر HTML بخط Cairo (عربية سليمة).
+// + تقرير تصنيف الموظفين (حسب المسمى الوظيفي ونوع الموظف): لقطة حالية بلا مدة.
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase-client'
+import { employeeTypeLabel } from '@/lib/employee-types'
 
 type School = { name: string; vat_number: string | null; currency: string }
-type ReportKind = 'trial' | 'income' | 'balance' | 'journal' | 'vat'
+type ReportKind = 'trial' | 'income' | 'balance' | 'journal' | 'vat' | 'employees'
 
 const KINDS: { key: ReportKind; label: string; hint: string }[] = [
   { key: 'trial', label: 'ميزان المراجعة', hint: 'مدين ودائن لكل حساب — أساس التدقيق' },
@@ -14,10 +16,36 @@ const KINDS: { key: ReportKind; label: string; hint: string }[] = [
   { key: 'balance', label: 'الميزانية العمومية', hint: 'الأصول والخصوم وحقوق الملكية' },
   { key: 'journal', label: 'دفتر اليومية', hint: 'كل القيود ضمن المدة — لكشوف المدقّقين' },
   { key: 'vat', label: 'التقرير الضريبي', hint: 'ضريبة القيمة المضافة حسب قانون الدولة' },
+  { key: 'employees', label: 'تصنيف الموظفين', hint: 'العدد والرواتب حسب المسمى الوظيفي والنوع' },
 ]
 
 const typeLabel = (t: string) =>
   ({ asset: 'أصول', liability: 'خصوم', equity: 'حقوق ملكية', revenue: 'إيرادات', expense: 'مصروفات' } as Record<string, string>)[t] || t
+
+// ═══ تصنيف الموظفين ═══
+type EmpRow = { dim: 'title' | 'type'; grp: string; headcount: number; total_basic: number; total_allowance: number; total_salary: number }
+const TYPE_ORDER = ['official', 'contract', 'driver', 'worker']
+
+function splitEmployees(rows: EmpRow[]) {
+  const byTitle = rows.filter((r) => r.dim === 'title')
+    .sort((a, b) => b.headcount - a.headcount || b.total_salary - a.total_salary)
+  const byType = rows.filter((r) => r.dim === 'type')
+    .sort((a, b) => TYPE_ORDER.indexOf(a.grp) - TYPE_ORDER.indexOf(b.grp))
+  return { byTitle, byType }
+}
+
+const sumEmp = (list: EmpRow[]) => list.reduce(
+  (s, r) => ({
+    headcount: s.headcount + r.headcount,
+    total_basic: s.total_basic + r.total_basic,
+    total_allowance: s.total_allowance + r.total_allowance,
+    total_salary: s.total_salary + r.total_salary,
+  }),
+  { headcount: 0, total_basic: 0, total_allowance: 0, total_salary: 0 },
+)
+
+// تهريب نصوص المستخدم (المسميات) قبل حقنها في نافذة الطباعة
+const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
 export default function PeriodReports({ school }: { school: School }) {
   const supabase = createClient()
@@ -52,6 +80,7 @@ export default function PeriodReports({ school }: { school: School }) {
       else if (kind === 'income') res = await supabase.rpc('income_statement_period', { p_from: from, p_to: to })
       else if (kind === 'balance') res = await supabase.rpc('balance_sheet_asof', { p_asof: to })
       else if (kind === 'vat') res = await supabase.rpc('vat_report_period', { p_from: from, p_to: to })
+      else if (kind === 'employees') res = await supabase.rpc('employees_classification')
       else res = await supabase.rpc('journal_period', { p_from: from, p_to: to })
       if (res.error) throw res.error
       setRows((res.data ?? []) as Record<string, unknown>[])
@@ -66,7 +95,9 @@ export default function PeriodReports({ school }: { school: School }) {
   function exportPDF() {
     if (!rows || rows.length === 0) return
     const kindLabel = KINDS.find((k) => k.key === kind)!.label
-    const period = kind === 'balance' ? `كما في ${to}` : `من ${from} إلى ${to}`
+    const period = kind === 'balance' ? `كما في ${to}`
+      : kind === 'employees' ? `الوضع الحالي — ${new Date().toISOString().slice(0, 10)}`
+      : `من ${from} إلى ${to}`
     const initial = (school.name || 'م').trim().charAt(0)
 
     // الشعار الفعلي إن وُجد، وإلا الحرف الأول كبديل
@@ -102,6 +133,18 @@ export default function PeriodReports({ school }: { school: School }) {
           `<tr><td>إجمالي الإيرادات (قبل الضريبة)</td><td class="n">${fmt(r.revenue_total)} ${sym}</td></tr>` +
           `<tr class="tot"><td>قيمة الضريبة المستحقّة</td><td class="n">${fmt(r.vat_amount)} ${sym}</td></tr>`
       }
+    } else if (kind === 'employees') {
+      const { byTitle, byType } = splitEmployees(rows as unknown as EmpRow[])
+      const line = (label: string, r: { headcount: number; total_basic: number; total_allowance: number; total_salary: number }) =>
+        `<tr><td>${esc(label)}</td><td class="n">${r.headcount}</td><td class="n">${fmt(r.total_basic)}</td><td class="n">${fmt(r.total_allowance)}</td><td class="n">${fmt(r.total_salary)}</td></tr>`
+      const totalLine = (r: { headcount: number; total_basic: number; total_allowance: number; total_salary: number }) =>
+        `<tr class="tot"><td>الإجمالي</td><td class="n">${r.headcount}</td><td class="n">${fmt(r.total_basic)}</td><td class="n">${fmt(r.total_allowance)}</td><td class="n">${fmt(r.total_salary)}</td></tr>`
+      thead = `<th>التصنيف</th><th>العدد</th><th>الأساسي (${sym})</th><th>البدلات (${sym})</th><th>إجمالي الراتب (${sym})</th>`
+      tbody =
+        `<tr class="sec"><td colspan="5">حسب المسمى الوظيفي</td></tr>` +
+        byTitle.map((r) => line(r.grp, r)).join('') + totalLine(sumEmp(byTitle)) +
+        `<tr class="sec"><td colspan="5">حسب نوع الموظف</td></tr>` +
+        byType.map((r) => line(employeeTypeLabel(r.grp), r)).join('') + totalLine(sumEmp(byType))
     } else {
       const valKey = kind === 'income' ? 'amount' : 'balance'
       thead = `<th>القسم</th><th>الحساب</th><th>القيمة (${sym})</th>`
@@ -140,6 +183,7 @@ td{padding:10px 13px;border-bottom:1px solid #EDF1F6;text-align:right;color:#263
 td.n{direction:ltr;text-align:left;font-variant-numeric:tabular-nums}
 tbody tr:nth-child(even) td{background:#FAFBFD}
 tr.tot td{font-weight:800;background:#F2F5F9;border-top:2px solid #0A1D33;border-bottom:none;color:#0A1D33}
+tr.sec td{font-weight:800;background:#E9EEF5;color:#0A1D33;border-bottom:1px solid #D5DDE8}
 
 /* ═══ التذييل ═══ */
 .f{margin-top:28px;padding-top:13px;border-top:1px solid #E6EBF1;display:flex;justify-content:space-between;align-items:center;font-size:.7rem;color:#9AA7B8;gap:12px}
@@ -221,21 +265,30 @@ tr.tot td{font-weight:800;background:#F2F5F9;border-top:2px solid #0A1D33;border
 
       {/* اختيار المدة */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 16 }}>
-        {kind !== 'balance' && (
+        {kind !== 'balance' && kind !== 'employees' && (
           <label style={{ fontSize: 13, fontWeight: 600 }}>من
             <input type="date" value={from} onChange={(e) => setFrom(e.target.value)}
               style={{ display: 'block', height: 42, padding: '0 10px', borderRadius: 9, border: '1.5px solid #E2E7EE', marginTop: 5, fontFamily: 'inherit' }} />
           </label>
         )}
-        <label style={{ fontSize: 13, fontWeight: 600 }}>{kind === 'balance' ? 'كما في تاريخ' : 'إلى'}
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)}
-            style={{ display: 'block', height: 42, padding: '0 10px', borderRadius: 9, border: '1.5px solid #E2E7EE', marginTop: 5, fontFamily: 'inherit' }} />
-        </label>
+        {kind !== 'employees' && (
+          <label style={{ fontSize: 13, fontWeight: 600 }}>{kind === 'balance' ? 'كما في تاريخ' : 'إلى'}
+            <input type="date" value={to} onChange={(e) => setTo(e.target.value)}
+              style={{ display: 'block', height: 42, padding: '0 10px', borderRadius: 9, border: '1.5px solid #E2E7EE', marginTop: 5, fontFamily: 'inherit' }} />
+          </label>
+        )}
         {/* اختصارات سريعة */}
-        <button onClick={() => { setFrom(`${year}-01-01`); setTo(`${year}-12-31`) }}
-          style={{ height: 42, padding: '0 14px', borderRadius: 9, border: '1px solid #CBD5D1', background: '#F7FAF9', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>
-          السنة الحالية
-        </button>
+        {kind !== 'employees' && (
+          <button onClick={() => { setFrom(`${year}-01-01`); setTo(`${year}-12-31`) }}
+            style={{ height: 42, padding: '0 14px', borderRadius: 9, border: '1px solid #CBD5D1', background: '#F7FAF9', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>
+            السنة الحالية
+          </button>
+        )}
+        {kind === 'employees' && (
+          <span style={{ fontSize: 13, color: '#667', alignSelf: 'center' }}>
+            يعرض الموظفين على رأس العمل حالياً — لا يحتاج مدة.
+          </span>
+        )}
         <button onClick={generate} disabled={busy}
           style={{ height: 42, padding: '0 22px', borderRadius: 9, border: 'none', background: '#1E5C4E', color: '#fff', fontWeight: 700, cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit' }}>
           {busy ? 'جارٍ…' : 'إنشاء التقرير'}
@@ -257,7 +310,9 @@ tr.tot td{font-weight:800;background:#F2F5F9;border-top:2px solid #0A1D33;border
             )}
           </div>
           {rows.length === 0 ? (
-            <div style={{ padding: 24, textAlign: 'center', color: '#999', background: '#F7FAF9', borderRadius: 10 }}>لا حركات في هذه المدة.</div>
+            <div style={{ padding: 24, textAlign: 'center', color: '#999', background: '#F7FAF9', borderRadius: 10 }}>
+              {kind === 'employees' ? 'لا يوجد موظفون على رأس العمل.' : 'لا حركات في هذه المدة.'}
+            </div>
           ) : (
             <div style={{ overflowX: 'auto', border: '1px solid #EEF2F1', borderRadius: 10 }}>
               <ReportTable kind={kind} rows={rows} fmt={fmt} sym={sym} />
@@ -326,6 +381,47 @@ function ReportTable({ kind, rows, fmt, sym }: { kind: ReportKind; rows: Record<
           </tr>
         </tbody>
       </table>
+    )
+  }
+  if (kind === 'employees') {
+    const { byTitle, byType } = splitEmployees(rows as unknown as EmpRow[])
+    const block = (title: string, list: EmpRow[], labelOf: (g: string) => string) => {
+      const t = sumEmp(list)
+      return (
+        <table key={title} style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560, marginBottom: 18 }}>
+          <thead>
+            <tr><th style={{ ...th, background: '#0F2744', color: '#fff' }} colSpan={5}>{title}</th></tr>
+            <tr>
+              <th style={th}>التصنيف</th><th style={th}>العدد</th>
+              <th style={th}>الأساسي ({sym})</th><th style={th}>البدلات ({sym})</th><th style={th}>إجمالي الراتب ({sym})</th>
+            </tr>
+          </thead>
+          <tbody>
+            {list.map((r, i) => (
+              <tr key={i}>
+                <td style={td}>{labelOf(r.grp)}</td>
+                <td style={num}>{r.headcount}</td>
+                <td style={num}>{fmt(r.total_basic)}</td>
+                <td style={num}>{fmt(r.total_allowance)}</td>
+                <td style={num}>{fmt(r.total_salary)}</td>
+              </tr>
+            ))}
+            <tr style={{ fontWeight: 700, background: '#F7FAF9' }}>
+              <td style={td}>الإجمالي</td>
+              <td style={num}>{t.headcount}</td>
+              <td style={num}>{fmt(t.total_basic)}</td>
+              <td style={num}>{fmt(t.total_allowance)}</td>
+              <td style={num}>{fmt(t.total_salary)}</td>
+            </tr>
+          </tbody>
+        </table>
+      )
+    }
+    return (
+      <>
+        {block('حسب المسمى الوظيفي', byTitle, (g) => g)}
+        {block('حسب نوع الموظف', byType, employeeTypeLabel)}
+      </>
     )
   }
   // income / balance
