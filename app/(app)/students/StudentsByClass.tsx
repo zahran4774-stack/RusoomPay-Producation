@@ -327,12 +327,14 @@ export default function StudentsByClass({
       )}
 
       {trackerStudent && (
-        <PaymentTracker
-          studentId={trackerStudent.id}
-          studentName={trackerStudent.full_name}
-          onClose={() => setTrackerStudent(null)}
-        />
-      )}
+  <PaymentTracker
+    studentId={trackerStudent.id}
+    studentName={trackerStudent.full_name}
+    studentCode={trackerStudent.code}
+    school={school}
+    onClose={() => setTrackerStudent(null)}
+  />
+)}
     </div>
   )
 }
