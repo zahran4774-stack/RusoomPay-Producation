@@ -1,23 +1,39 @@
 'use client'
 // app/(app)/students/PaymentTracker.tsx
-// لوحة تتبع الدفعات الشهرية لطالب واحد — عرض بصري لآخر 12 شهراً، يوضّح
-// أي الأشهر دفع فيها ولي الأمر (أخضر) وأيها لم يدفع (أحمر)، بناءً على
-// تواريخ الدفعات الفعلية (payments.paid_at) — بلا أي تغيير في نظام الفوترة.
+// لوحة تتبع الدفعات الشهرية لطالب واحد — عرض بصري للعام الدراسي الحالي بالكامل،
+// يوضّح أي الأشهر دُفع فيها (أخضر) وأيها لا (أحمر)، بناءً على تواريخ الدفعات
+// الفعلية (payments.paid_at) — بلا أي تغيير في نظام الفوترة.
+// + زر طباعة يُصدر سجلاً كاملاً بالتواريخ والمبالغ والمتبقي التراكمي لكل شهر.
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase-client'
+import { printPaymentTracker } from '@/lib/payment-tracker-print'
 
 type MonthRow = {
   month_label: string
   month_key: string
   paid_amount: number
   has_payment: boolean
+  cumulative_remaining: number
+  last_payment_date: string | null
+}
+
+type SchoolInfo = {
+  name: string
+  vat?: string | null
+  address?: string | null
+  phone?: string | null
+  logoUrl?: string | null
+  branch?: string | null
 }
 
 export default function PaymentTracker({
-  studentId, studentName, onClose,
+  studentId, studentName, studentCode, school, currency = 'OMR', onClose,
 }: {
   studentId: string
   studentName: string
+  studentCode?: string | null
+  school: SchoolInfo
+  currency?: string
   onClose: () => void
 }) {
   const supabase = createClient()
@@ -37,11 +53,22 @@ export default function PaymentTracker({
   const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
   const paidCount = months?.filter((m) => m.has_payment).length ?? 0
 
+  function handlePrint() {
+    if (!months) return
+    printPaymentTracker({
+      school,
+      studentName,
+      studentCode,
+      currency,
+      months,
+    })
+  }
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(10,37,64,.45)', display: 'grid', placeItems: 'center', zIndex: 999, padding: 16 }}
       onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()}
-        style={{ background: '#fff', borderRadius: 18, padding: 26, width: '100%', maxWidth: 520, boxShadow: '0 24px 60px -20px rgba(10,37,68,.4)' }} dir="rtl">
+        style={{ background: '#fff', borderRadius: 18, padding: 26, width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto' }} dir="rtl">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
           <h3 style={{ margin: 0, fontSize: 17, color: '#0F2744' }}>تتبع الدفعات الشهرية</h3>
           <button onClick={onClose} style={{ background: 'none', border: 0, fontSize: 22, cursor: 'pointer', color: '#667' }}>×</button>
@@ -55,13 +82,13 @@ export default function PaymentTracker({
         ) : (
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, fontSize: 13.5, color: '#445' }}>
-              <span>آخر 12 شهراً</span>
+              <span>العام الدراسي الحالي</span>
               <span style={{ fontWeight: 700, color: paidCount >= 6 ? '#1A7A45' : '#C0392B' }}>
-                {paidCount} / 12 شهراً مدفوعاً
+                {paidCount} / {months.length} شهراً مدفوعاً
               </span>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 16 }}>
               {months.map((m) => (
                 <div key={m.month_key}
                   title={m.has_payment ? `دُفع ${fmt(m.paid_amount)} ر.ع` : 'لم يُدفع شيء هذا الشهر'}
@@ -81,19 +108,22 @@ export default function PaymentTracker({
               ))}
             </div>
 
-            <p style={{ fontSize: 11.5, color: '#8A94A6', marginTop: 16, lineHeight: 1.7 }}>
+            <p style={{ fontSize: 11.5, color: '#8A94A6', marginBottom: 16, lineHeight: 1.7 }}>
               💡 يعتمد هذا التتبع على تواريخ الدفعات الفعلية المسجَّلة، لا على نظام أقساط شهري منفصل.
               شهر بلا أي دفعة يظهر بالأحمر، حتى لو كان الرسم السنوي مدفوعاً جزئياً في شهر آخر.
             </p>
+
+            <button onClick={handlePrint}
+              style={{ width: '100%', background: '#163B68', color: '#fff', border: 0, padding: 12, borderRadius: 11, fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', marginBottom: 10 }}>
+              🖨 طباعة سجل السنة كاملاً
+            </button>
           </>
         )}
 
-        <div style={{ marginTop: 18 }}>
-          <button onClick={onClose}
-            style={{ width: '100%', background: '#F2F5F8', color: '#0F2744', border: 0, padding: 12, borderRadius: 11, fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
-            إغلاق
-          </button>
-        </div>
+        <button onClick={onClose}
+          style={{ width: '100%', background: '#F2F5F8', color: '#0F2744', border: 0, padding: 12, borderRadius: 11, fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
+          إغلاق
+        </button>
       </div>
     </div>
   )
