@@ -39,7 +39,7 @@ const NAV: NavEntry[] = [
     children: [
       { type: 'link', href: '/cafeteria', icon: Apple, label: 'التغذية المدرسية', show: (r) => isStaff(r) },
       { type: 'link', href: '/transport', icon: Bus, label: 'النقل المدرسي', show: (r) => isStaff(r) },
-      { type: 'link', href: '/inventory', icon: Package, label: 'المخزون', show: (r) => isStaff(r) },
+      { type: 'link', href: '/inventory', icon: Package, label: 'المشتريات والمخزون', show: (r) => isStaff(r) },
     ],
   },
   {
