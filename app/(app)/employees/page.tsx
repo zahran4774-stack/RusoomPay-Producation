@@ -1,6 +1,7 @@
 // صفحة الموظفين والرواتب — مكوّن خادم
 // يجلب الموظفين وطلبات تعديل الرواتب، ويمرّرها لمكوّنات العميل التفاعلية
 // تحسين الأداء: الاستعلامات المستقلّة تُنفَّذ متوازية (Promise.all).
+// الموظفون على رأس العمل فقط في الجدول والملخّصات؛ منتهو الخدمة في قسم مطوي منفصل.
 import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import EmployeesTable from './EmployeesTable'
@@ -9,29 +10,36 @@ import OrgChart from './OrgChart'
 import FocusScroller from '../FocusScroller'
 import SalaryRequests from './SalaryRequests'
 import InsuranceSettings from './InsuranceSettings'
+import TerminatedEmployees from './TerminatedEmployees'
 import PrintButton from '../PrintButton'
 import ModuleTabs from '../ModuleTabs'
 import { employeesPayrollTabs } from '../module-tabs-config'
 import { isOwner, isStaff, type Role } from '@/lib/roles'
 import { payslip, type InsRates } from '@/lib/payroll'
+import { employeeTypeLabel } from '@/lib/employee-types'
 
 export default async function EmployeesPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // ═══ كل الاستعلامات المستقلّة معاً — بدل أربع رحلات متتابعة ═══
+  // ═══ كل الاستعلامات المستقلّة معاً — بدل رحلات متتابعة ═══
   const [
     { data: profile },
     { data: school },
     { data: employees },
+    { data: terminated },
     { data: requests },
   ] = await Promise.all([
     supabase.from('profiles').select('role').eq('id', user.id).single(),
     supabase.from('schools')
       .select('name, vat_number, country, ins_emp_rate, ins_er_rate, ins_cap, ins_expat_exempt, ins_configured')
       .single(),
-    supabase.from('employees').select('*').order('code'),
+    supabase.from('employees').select('*').is('deleted_at', null).order('code'),
+    supabase.from('employees')
+      .select('id, code, full_name, job_title, employee_type, termination_reason, deleted_at')
+      .not('deleted_at', 'is', null)
+      .order('deleted_at', { ascending: false }),
     supabase.from('salary_requests').select('*').eq('status', 'pending').order('created_at', { ascending: false }),
   ])
 
@@ -75,6 +83,7 @@ export default async function EmployeesPage() {
               { key: 'code', label: 'الرقم الوظيفي' },
               { key: 'name', label: 'الاسم' },
               { key: 'title', label: 'المسمى الوظيفي' },
+              { key: 'type', label: 'النوع' },
               { key: 'nationality', label: 'الجنسية' },
               { key: 'basic', label: 'الراتب الأساسي' },
               { key: 'allowance', label: 'البدلات' },
@@ -82,6 +91,7 @@ export default async function EmployeesPage() {
             ]}
             rows={(employees ?? []).map((e) => ({
               code: e.code, name: e.full_name, title: e.job_title ?? '—',
+              type: employeeTypeLabel(e.employee_type),
               nationality: e.nationality?.toUpperCase() === 'OM' ? 'مواطن' : 'وافد',
               basic: (e.basic ?? 0).toFixed(3), allowance: (e.allowance ?? 0).toFixed(3),
               iban: e.iban ?? '—',
@@ -139,8 +149,14 @@ export default async function EmployeesPage() {
       </div>
       <EmployeesTable employees={employees ?? []} role={role} rates={rates} />
 
+      {/* منتهو الخدمة — مطوي، مع إعادة التفعيل للمدير/الإداري */}
+      <TerminatedEmployees
+        rows={terminated ?? []}
+        canManage={role === 'owner' || role === 'admin'}
+      />
+
       {/* الهيكل التنظيمي (شجرة الموظفين) */}
-     <div style={{ marginTop: 18 }}>
+      <div style={{ marginTop: 18 }}>
         <OrgChart
           employees={(employees ?? []).map((e) => ({
             id: e.id, code: e.code, full_name: e.full_name,
