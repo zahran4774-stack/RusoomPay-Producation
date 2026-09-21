@@ -1,12 +1,14 @@
 'use client'
-// جدول الموظفين التفاعلي — إضافة/تعديل
+// جدول الموظفين التفاعلي — إضافة/تعديل/إنهاء خدمة
 // المحاسب: تعديل الراتب يصبح طلباً · المدير: تعديل مباشر عبر update_employee
 // البيانات البنكية (البنك، الآيبان، رقم الحساب) قابلة للتعديل مباشرة من الطرفين —
 // مع تحقّق من صيغة الآيبان العُماني (23 حرفاً، يبدأ بـ OM) قبل الحفظ.
+// إنهاء الخدمة (المدير/الإداري فقط): حذف ناعم عبر terminate_employee — السجل والتاريخ المالي محفوظان.
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
 import GrantAccess from './GrantAccess'
+import { EMPLOYEE_TYPES, TERMINATION_REASONS, employeeTypeLabel } from '@/lib/employee-types'
 
 type Emp = {
   id: string; code: string; full_name: string; job_title: string | null
@@ -16,6 +18,7 @@ type Emp = {
   email?: string | null
   department?: string | null
   org_level?: number | null
+  employee_type?: string | null
 }
 
 function payslip(basic: number, allow: number, nat: string, rates: InsRates) {
@@ -71,6 +74,7 @@ export default function EmployeesTable({ employees, role, rates }: { employees: 
           p_bank_account_no: form.bank_account_no,
           p_department: form.department,
           p_org_level: form.org_level,
+          p_employee_type: form.employee_type,
         })
         if (e1) { setErr(e1.message); return }
 
@@ -102,6 +106,7 @@ export default function EmployeesTable({ employees, role, rates }: { employees: 
           p_bank_account_no: form.bank_account_no,
           p_department: form.department,
           p_org_level: form.org_level,
+          p_employee_type: form.employee_type,
         })
         if (error) { setErr(error.message); return }
         setMsg('✓ تم تحديث بيانات الموظف')
@@ -115,6 +120,21 @@ export default function EmployeesTable({ employees, role, rates }: { employees: 
     }
   }
 
+  // إنهاء الخدمة — يُرجع رسالة الخطأ (أو null عند النجاح) لتظهر داخل النافذة نفسها
+  async function terminate(emp: Emp, reason: string | null): Promise<string | null> {
+    setMsg(''); setErr('')
+    try {
+      const { error } = await supabase.rpc('terminate_employee', { p_id: emp.id, p_reason: reason })
+      if (error) return error.message
+      setEditing(null)
+      setMsg(`✓ أُنهيت خدمة ${emp.full_name} — يمكن إعادة تفعيله من قسم «منتهو الخدمة» أسفل الجدول`)
+      router.refresh()
+      return null
+    } catch {
+      return 'تعذّر الاتصال — تحقّق من الإنترنت وحاول مجدداً'
+    }
+  }
+
   return (
     <div>
       {msg && <div style={{ background: '#E6F4EC', color: '#1A7A45', padding: 11, borderRadius: 9, marginBottom: 12, fontSize: 14 }}>{msg}</div>}
@@ -125,6 +145,7 @@ export default function EmployeesTable({ employees, role, rates }: { employees: 
           <thead>
             <tr style={{ background: '#0F2744', color: '#fff', textAlign: 'right' }}>
               <th style={{ padding: 12 }}>الرقم الوظيفي</th><th style={{ padding: 12 }}>الاسم</th>
+              <th style={{ padding: 12 }}>النوع</th>
               <th style={{ padding: 12 }}>الجنسية</th><th style={{ padding: 12 }}>الأساسي</th>
               <th style={{ padding: 12 }}>البدلات</th><th style={{ padding: 12 }}>اشتراك الموظف</th>
               <th style={{ padding: 12 }}>حصة صاحب العمل</th><th style={{ padding: 12 }}></th>
@@ -137,6 +158,7 @@ export default function EmployeesTable({ employees, role, rates }: { employees: 
                 <tr key={e.id} style={{ borderBottom: '1px solid #EEF2F1' }}>
                   <td style={{ padding: 12, fontWeight: 700 }}>{e.code}</td>
                   <td style={{ padding: 12 }}>{e.full_name}</td>
+                  <td style={{ padding: 12 }}>{employeeTypeLabel(e.employee_type)}</td>
                   <td style={{ padding: 12 }}>{e.nationality?.toUpperCase() === 'OM' ? 'عُماني' : 'وافد'}</td>
                   <td style={{ padding: 12 }}>{fmt(e.basic)}</td>
                   <td style={{ padding: 12 }}>{fmt(e.allowance)}</td>
@@ -157,29 +179,51 @@ export default function EmployeesTable({ employees, role, rates }: { employees: 
               )
             })}
             {employees.length === 0 && (
-              <tr><td colSpan={8} style={{ padding: 24, textAlign: 'center', color: '#999' }}>لا يوجد موظفون</td></tr>
+              <tr><td colSpan={9} style={{ padding: 24, textAlign: 'center', color: '#999' }}>لا يوجد موظفون</td></tr>
             )}
           </tbody>
         </table>
       </div>
 
-      {editing && <EditModal emp={editing} role={role} onSave={saveEdit} onClose={() => setEditing(null)} />}
+      {editing && (
+        <EditModal
+          emp={editing}
+          role={role}
+          onSave={saveEdit}
+          onTerminate={(reason) => terminate(editing, reason)}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </div>
   )
 }
 
-function EditModal({ emp, role, onSave, onClose }: { emp: Emp; role: string; onSave: (e: Emp) => Promise<void>; onClose: () => void }) {
+function EditModal({ emp, role, onSave, onTerminate, onClose }: {
+  emp: Emp; role: string
+  onSave: (e: Emp) => Promise<void>
+  onTerminate: (reason: string | null) => Promise<string | null>
+  onClose: () => void
+}) {
   const [form, setForm] = useState<Emp>({
     ...emp,
     nationality: emp.nationality?.toUpperCase() === 'OM' ? 'OM' : 'NON_OM',
     department: emp.department ?? 'teaching',
     org_level: emp.org_level ?? 3,
+    employee_type: emp.employee_type ?? 'official',
     bank_name: emp.bank_name ?? '',
     bank_account_no: emp.bank_account_no ?? '',
     iban: emp.iban ?? '',
   })
   const [saving, setSaving] = useState(false)
   const [ibanWarning, setIbanWarning] = useState<string | null>(null)
+
+  // إنهاء الخدمة
+  const [termReason, setTermReason] = useState('')
+  const [confirmTerm, setConfirmTerm] = useState(false)
+  const [termBusy, setTermBusy] = useState(false)
+  const [termErr, setTermErr] = useState<string | null>(null)
+  const canTerminate = role === 'owner' || role === 'admin'
+
   const set = (k: keyof Emp, v: string | number) => setForm({ ...form, [k]: v })
   const inp: React.CSSProperties = { width: '100%', padding: 10, margin: '5px 0 12px', borderRadius: 9, border: '1.5px solid #DDE3EC', fontFamily: 'inherit', fontSize: 14 }
   const lbl: React.CSSProperties = { fontSize: 13, fontWeight: 600 }
@@ -206,8 +250,17 @@ function EditModal({ emp, role, onSave, onClose }: { emp: Emp; role: string; onS
     setSaving(false)
   }
 
+  async function doTerminate() {
+    setTermBusy(true); setTermErr(null)
+    const e = await onTerminate(termReason || null)
+    // عند النجاح تُغلق النافذة من المكوّن الأب — لا حاجة لتحديث الحالة هنا
+    if (e) { setTermErr(e); setTermBusy(false); setConfirmTerm(false) }
+  }
+
+  const busy = saving || termBusy
+
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,39,68,.5)', display: 'grid', placeItems: 'center', padding: 16, zIndex: 100 }} dir="rtl" onClick={() => !saving && onClose()}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,39,68,.5)', display: 'grid', placeItems: 'center', padding: 16, zIndex: 100 }} dir="rtl" onClick={() => !busy && onClose()}>
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
@@ -233,6 +286,11 @@ function EditModal({ emp, role, onSave, onClose }: { emp: Emp; role: string; onS
 
           <label style={lbl}>المسمّى الوظيفي</label>
           <input value={form.job_title ?? ''} onChange={(e) => set('job_title', e.target.value)} style={inp} placeholder="معلّم رياضيات" />
+
+          <label style={lbl}>نوع الموظف</label>
+          <select value={form.employee_type ?? 'official'} onChange={(e) => set('employee_type', e.target.value)} style={inp}>
+            {EMPLOYEE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
 
           <div style={{ background: '#F7F9FC', borderRadius: 10, padding: '12px 12px 2px', margin: '0 0 12px' }}>
             <div style={{ fontSize: 12.5, fontWeight: 800, color: '#1B4F8A', marginBottom: 8 }}>الهيكل التنظيمي</div>
@@ -288,6 +346,44 @@ function EditModal({ emp, role, onSave, onClose }: { emp: Emp; role: string; onS
             <label style={lbl}>رقم الحساب (إن اختلف عن الآيبان)</label>
             <input value={form.bank_account_no ?? ''} onChange={(e) => set('bank_account_no', e.target.value)} style={{ ...inp, direction: 'ltr', textAlign: 'left' }} placeholder="اتركه فارغاً لاستخدام الآيبان" />
           </div>
+
+          {/* إنهاء الخدمة — المدير/الإداري فقط */}
+          {canTerminate && (
+            <div style={{ border: '1.5px solid #F1C9C4', background: '#FEF7F6', borderRadius: 10, padding: '12px 12px 12px', margin: '0 0 16px' }}>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: '#B42318', marginBottom: 8 }}>إنهاء الخدمة</div>
+
+              <label style={lbl}>السبب (اختياري)</label>
+              <select value={termReason} onChange={(e) => { setTermReason(e.target.value); setConfirmTerm(false) }} style={inp} disabled={termBusy}>
+                <option value="">— بدون سبب —</option>
+                {TERMINATION_REASONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+              </select>
+
+              {termErr && <div style={{ color: '#C0392B', fontSize: 12.5, margin: '-4px 0 10px', lineHeight: 1.6 }}>⚠ {termErr}</div>}
+
+              {!confirmTerm ? (
+                <button type="button" onClick={() => setConfirmTerm(true)} disabled={busy}
+                  style={{ background: '#fff', color: '#B42318', border: '1.5px solid #E4A59E', borderRadius: 9, padding: '9px 14px', cursor: 'pointer', fontWeight: 700, fontSize: 13, fontFamily: 'inherit' }}>
+                  إلغاء اسم الموظف (إنهاء الخدمة)
+                </button>
+              ) : (
+                <div>
+                  <div style={{ fontSize: 12.5, color: '#7A2B22', lineHeight: 1.7, marginBottom: 10 }}>
+                    سيُزال «{emp.full_name}» من قائمة الموظفين ومن دورات الرواتب القادمة. تبقى سجلاته ورواتبه السابقة محفوظة، ويمكن إعادة تفعيله لاحقاً. هل أنت متأكد؟
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button type="button" onClick={doTerminate} disabled={termBusy}
+                      style={{ background: '#B42318', color: '#fff', border: 'none', borderRadius: 9, padding: '9px 16px', cursor: termBusy ? 'default' : 'pointer', fontWeight: 700, fontSize: 13, fontFamily: 'inherit' }}>
+                      {termBusy ? 'جارٍ الإنهاء…' : 'تأكيد إنهاء الخدمة'}
+                    </button>
+                    <button type="button" onClick={() => setConfirmTerm(false)} disabled={termBusy}
+                      style={{ background: '#F0F3F8', color: '#0F2744', border: 'none', borderRadius: 9, padding: '9px 14px', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit' }}>
+                      تراجع
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* تذييل ثابت — الأزرار ظاهرة دائماً بدون الحاجة للتمرير */}
@@ -295,8 +391,8 @@ function EditModal({ emp, role, onSave, onClose }: { emp: Emp; role: string; onS
           display: 'flex', gap: 10, justifyContent: 'flex-end', padding: '14px 24px',
           borderTop: '1px solid #EEF1F5', flexShrink: 0, background: '#fff',
         }}>
-          <button onClick={onClose} disabled={saving} style={{ padding: '10px 18px', background: '#F0F3F8', border: 'none', borderRadius: 9, cursor: 'pointer', fontFamily: 'inherit' }}>إلغاء</button>
-          <button onClick={submit} disabled={saving} style={{ padding: '10px 18px', background: saving ? '#8AA' : '#163B68', color: '#fff', border: 'none', borderRadius: 9, cursor: saving ? 'default' : 'pointer', fontWeight: 700, fontFamily: 'inherit' }}>
+          <button onClick={onClose} disabled={busy} style={{ padding: '10px 18px', background: '#F0F3F8', border: 'none', borderRadius: 9, cursor: 'pointer', fontFamily: 'inherit' }}>إلغاء</button>
+          <button onClick={submit} disabled={busy} style={{ padding: '10px 18px', background: busy ? '#8AA' : '#163B68', color: '#fff', border: 'none', borderRadius: 9, cursor: busy ? 'default' : 'pointer', fontWeight: 700, fontFamily: 'inherit' }}>
             {saving ? 'جارٍ الحفظ…' : role === 'accountant' ? 'إرسال للاعتماد' : 'حفظ'}
           </button>
         </div>
