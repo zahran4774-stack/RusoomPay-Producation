@@ -17,6 +17,6 @@ export function schoolServicesTabs(role: Role): TabItem[] {
   return [
     { label: 'التغذية المدرسية', href: '/cafeteria' },
     { label: 'النقل المدرسي', href: '/transport' },
-    { label: 'المخزون', href: '/inventory' },
+    { label: 'المشتريات والمخزون', href: '/inventory' },
   ]
 }
