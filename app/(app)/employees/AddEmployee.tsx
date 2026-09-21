@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
+import { EMPLOYEE_TYPES } from '@/lib/employee-types'
 
 export default function AddEmployee() {
   const router = useRouter()
@@ -12,7 +13,7 @@ export default function AddEmployee() {
   const [ok, setOk] = useState(false)
 
   const [f, setF] = useState({
-    full_name: '', job_title: '', nationality: 'OM',
+    full_name: '', job_title: '', employee_type: 'official', nationality: 'OM',
     basic: '', allowance: '', iban: '', code: '', email: '',
     id_type: 'CIVIL', id_number: '', bank_name: '', bank_account_no: '',
     subject_to_pasi: true,
@@ -27,6 +28,7 @@ export default function AddEmployee() {
       const { error } = await supabase.rpc('add_employee', {
         p_full_name: f.full_name,
         p_job_title: f.job_title || null,
+        p_employee_type: f.employee_type,
         p_nationality: f.nationality || 'OM',
         p_basic: f.basic ? Number(f.basic) : 0,
         p_allowance: f.allowance ? Number(f.allowance) : 0,
@@ -43,7 +45,7 @@ export default function AddEmployee() {
       if (error) { setErr(error.message); return }
       setOk(true)
       setF({
-        full_name: '', job_title: '', nationality: 'OM', basic: '', allowance: '',
+        full_name: '', job_title: '', employee_type: 'official', nationality: 'OM', basic: '', allowance: '',
         iban: '', code: '', email: '', id_type: 'CIVIL', id_number: '',
         bank_name: '', bank_account_no: '', subject_to_pasi: true,
       })
@@ -85,6 +87,12 @@ export default function AddEmployee() {
         <div style={cell}>
           <label style={label}>المسمّى الوظيفي</label>
           <input style={input} value={f.job_title} onChange={(e) => set('job_title', e.target.value)} placeholder="معلّم رياضيات" />
+        </div>
+        <div style={cell}>
+          <label style={label}>نوع الموظف</label>
+          <select style={input} value={f.employee_type} onChange={(e) => set('employee_type', e.target.value)}>
+            {EMPLOYEE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
         </div>
         <div style={cell}>
           <label style={label}>البريد الإلكتروني (لمنح صلاحية دخول)</label>
