@@ -1,4 +1,4 @@
-// صفحة المخزون — مكوّن خادم
+// صفحة المشتريات والمخزون — مكوّن خادم
 // كتب وزي مدرسي: شراء (مخزون/بنك) وبيع لطالب (فاتورة + تكلفة مبيعات) بترحيل تلقائي
 import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
@@ -27,7 +27,7 @@ export default async function InventoryPage() {
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto' }} dir="rtl">
       <ModuleTabs items={schoolServicesTabs(role)} />
-      <h1 style={{ color: '#0F2744', marginBottom: 4 }}>المخزون</h1>
+      <h1 style={{ color: '#0F2744', marginBottom: 4 }}>المشتريات والمخزون</h1>
       <p style={{ color: '#667', fontSize: 14, marginBottom: 20 }}>
         كتب وزي مدرسي — الشراء والبيع بترحيل محاسبي تلقائي (مخزون · تكلفة مبيعات)
       </p>
