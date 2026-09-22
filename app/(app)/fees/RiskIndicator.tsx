@@ -4,7 +4,9 @@
 // بدل جلبها هنا عبر useEffect — يمنع وميض إعادة التخطيط عند التحميل غير المتزامن.
 // لا منطق أعمال هنا سوى عرض البيانات وإرسال التذكير.
 // زر "إرسال تذكير ودّي" يستخدم قالب fee_reminder المعتمد من Twilio بدل النص الحر.
-// ⚠️ يمر عبر تأكيد صريح (نعم/لا) قبل الإرسال الفعلي — يمنع الإرسال بالخطأ.
+// يمر عبر تأكيد صريح (نعم/لا) قبل الإرسال الفعلي — يمنع الإرسال بالخطأ.
+// ⚠️ عمود "المستحق" أُزيل من العرض — لا يضيف قيمة عملية للمستخدم هنا؛
+// المبلغ لا يزال محسوباً ومتاحاً داخل risk_scores لأغراض حساب الخطورة نفسها.
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import { AlertTriangle } from 'lucide-react'
@@ -32,8 +34,6 @@ export default function RiskIndicator({ currency, data }: { currency: string; da
   const sym = currency === 'OMR' ? 'ر.ع' : currency
   const fmt = (n: number) => new Intl.NumberFormat('en', { minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(n || 0)
 
-  // بلا useEffect وبلا حالة تحميل — البيانات وصلت جاهزة من الخادم مع الصفحة،
-  // فلا فرق ارتفاع بين أول رسم والنهائي، ولا وميض.
   if (data?.disabled) return null
   const items = data?.items ?? []
   if (items.length === 0) return null
@@ -42,7 +42,6 @@ export default function RiskIndicator({ currency, data }: { currency: string; da
   const safePage = Math.min(page, totalPages)
   const pageItems = items.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
-  // إرسال التذكير الودّي — يمر عبر تأكيد صريح قبل أي استدعاء فعلي للإرسال
   async function sendReminder(r: RiskItem) {
     if (!r.phone) { alert('لا يوجد رقم لولي الأمر'); return }
     if (!confirm(`إرسال تذكير واتساب ودّي إلى ولي أمر ${r.student_name}؟`)) return
@@ -53,7 +52,6 @@ export default function RiskIndicator({ currency, data }: { currency: string; da
       const { data: sch } = await supabase.from('schools').select('name').limit(1).single()
       if (sch?.name) school = sch.name
 
-      // تطبيع الرقم العُماني: نزيل المسافات والرموز، ونضمن رمز الدولة 968
       let raw = (r.phone || '').replace(/[\s\-()]/g, '')
       if (raw.startsWith('+')) raw = raw.slice(1)
       if (raw.startsWith('00')) raw = raw.slice(2)
@@ -94,11 +92,10 @@ export default function RiskIndicator({ currency, data }: { currency: string; da
       </p>
 
       <div style={{ overflowX: 'auto', border: '1px solid #EEF1F5', borderRadius: 12 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 620 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
           <thead>
             <tr style={{ background: '#F4F8F7', textAlign: 'right' }}>
               <th style={th}>الطالب / ولي الأمر</th>
-              <th style={th}>المستحق</th>
               <th style={th}>فواتير متأخرة</th>
               <th style={th}>أقدم تأخّر</th>
               <th style={th}>الخطورة</th>
@@ -112,7 +109,6 @@ export default function RiskIndicator({ currency, data }: { currency: string; da
                   <div style={{ fontWeight: 600, color: '#0F1B2D' }}>{r.student_name}</div>
                   <div style={{ fontSize: 12, color: '#8A94A6' }}>{r.guardian} · {r.student_code}</div>
                 </td>
-                <td style={{ ...td, direction: 'ltr', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmt(r.outstanding)} {sym}</td>
                 <td style={{ ...td, textAlign: 'center' }}>{r.overdue_count}</td>
                 <td style={{ ...td, textAlign: 'center' }}>{r.oldest_days} يوم</td>
                 <td style={td}>
