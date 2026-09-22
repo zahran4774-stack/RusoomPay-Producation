@@ -25,7 +25,7 @@ const COLORS: Record<string, { bg: string; text: string; dot: string }> = {
 }
 
 // معلومات تواصل الدعم — عدّلها لبيانات الدعم الفعلية لديك
-const SUPPORT_PHONE = '96812345678'
+const SUPPORT_PHONE = '96895476649'
 const SUPPORT_WHATSAPP_URL = `https://wa.me/${SUPPORT_PHONE}?text=${encodeURIComponent('مرحباً، أرغب بتجديد اشتراك مدرستي في RusoomPay.')}`
 
 export default function SubscriptionBadge({ info, collapsed = false }: { info: SubscriptionInfo; collapsed?: boolean }) {
