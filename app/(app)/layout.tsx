@@ -1,6 +1,9 @@
 // تخطيط الصفحات المُصادَقة — يلفّها بقشرة التطبيق (شريط جانبي + تخطيط)
 // مجموعة (app) لا تظهر في الرابط؛ المسارات تبقى /dashboard /students ...
 // يجلب هوية المدرسة (اللون والشعار والاسم) ويمرّرها للقشرة.
+// ⚠️ يجلب أيضاً my_subscription_status() ويمرّرها كـsubscriptionInfo — تُعرض
+// كشارة ملوّنة (نشط/قريب الانتهاء/منتهي) في AppShell. لا تُجلَب لمدير المنصة
+// أو ولي الأمر (لا شريط مدرسة لهما أصلاً).
 import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import type { Role } from '@/lib/roles'
@@ -31,6 +34,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // ═══ حالة الدخول للدعم الفني: مدير المنصة داخل مدرسة ═══
   // يُعرض بقشرة المدرسة الكاملة (كأنه المالك) + الشريط الأحمر فوق كل شيء
   if (isImpersonating) {
+    const { data: subscriptionInfo } = await supabase.rpc('my_subscription_status')
     const schoolName = school?.name
       ? school.name + (school.branch ? ` — ${school.branch}` : '')
       : 'المدرسة'
@@ -42,6 +46,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           brandColor={school?.color ?? null}
           schoolLogo={school?.logo_url ?? null}
           schoolName={schoolName}
+          subscriptionInfo={subscriptionInfo}
         >
           {children}
         </AppShell>
@@ -65,6 +70,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     return <main className="app-main" style={{ padding: 0 }}>{children}</main>
   }
 
+  const { data: subscriptionInfo } = await supabase.rpc('my_subscription_status')
+
   const schoolName = school?.name
     ? school.name + (school.branch ? ` — ${school.branch}` : '')
     : null
@@ -75,6 +82,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       brandColor={school?.color ?? null}
       schoolLogo={school?.logo_url ?? null}
       schoolName={schoolName}
+      subscriptionInfo={subscriptionInfo}
     >
       {children}
     </AppShell>
