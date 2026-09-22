@@ -1,6 +1,8 @@
 'use client'
 // قشرة التطبيق — لوحي+: شريط جانبي ثابت · جوال: درج منزلق مع همبرغر وخلفية معتمة
 // هوية المدرسة: لون brandColor يُحقن كمتغيّرات CSS فيلوّن الرابط النشط والشعار.
+// ⚠️ subscriptionInfo prop جديد: شارة باقة الاشتراك (نشط أخضر/قريب الانتهاء
+// برتقالي/منتهي أحمر مع زر تجديد) — تُعرض أسفل .school-identity مباشرة.
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
@@ -9,6 +11,7 @@ import type { Role } from '@/lib/roles'
 import { isStaff, canAccessFinance, isOwner } from '@/lib/roles'
 import { LogoMark } from '../Logo'
 import BranchSwitcher from './BranchSwitcher'
+import SubscriptionBadge, { type SubscriptionInfo } from './SubscriptionBadge'
 import {
   LayoutDashboard, GraduationCap, ReceiptText, Users, Apple, Bus,
   Package, BarChart3, ClipboardList, Gem, MessageCircle, Settings, Wallet,
@@ -74,12 +77,13 @@ function toRgb(hex: string): string | null {
 }
 
 export default function AppShell({
-  role, brandColor, schoolLogo, schoolName, children,
+  role, brandColor, schoolLogo, schoolName, subscriptionInfo, children,
 }: {
   role: Role
   brandColor: string | null
   schoolLogo: string | null
   schoolName: string | null
+  subscriptionInfo?: SubscriptionInfo
   children: React.ReactNode
 }) {
   const pathname = usePathname()
@@ -141,6 +145,12 @@ export default function AppShell({
                   </span>
                 )}
               {schoolName && <span className="school-name" title={schoolName}>{schoolName}</span>}
+            </div>
+          )}
+
+          {subscriptionInfo?.ok && (
+            <div style={{ padding: '0 16px 12px' }}>
+              <SubscriptionBadge info={subscriptionInfo} />
             </div>
           )}
 
