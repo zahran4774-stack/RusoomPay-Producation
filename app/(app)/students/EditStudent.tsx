@@ -1,11 +1,9 @@
 'use client'
 // تعديل بيانات الطالب — كل الحقول المتاحة في نموذج إضافة طالب، بما فيها
-// الرسوم السنوية والتخفيض٪ والرقم المدرسي، الإعفاء الكامل، الحالة الخاصة،
-// حالة الطالب (بما فيها "منسحب" الجديدة)، وإدارة كاملة للنقل والتغذية.
-// تعديل الرسوم هنا مرجعي فقط — لا يُعدّل فاتورة الرسوم القائمة تلقائياً
-// (تُدار من قسم الرسوم والفواتير).
-// "منسحب": حالة جديدة تبقي الطالب ظاهراً في السجل، بلا أي أثر مالي تلقائي —
-// الفواتير المعلّقة تبقى كما هي، والقرار المالي متروك للإدارة يدوياً.
+// الرسوم السنوية ومبلغ التخفيض والرقم المدرسي، الإعفاء الكامل، الحالة الخاصة،
+// حالة الطالب (بما فيها "منسحب")، وإدارة كاملة للنقل والتغذية.
+// تعديل الرسوم هنا مرجعي فقط — لا يُعدّل فاتورة الرسوم القائمة تلقائياً.
+// التخفيض بمبلغ معين — النسبة تُحسب وتُعرض تلقائياً.
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
@@ -48,6 +46,7 @@ export type StudentEditable = {
   code?: string | null
   annual_fee?: number | null
   discount_pct?: number | null
+  discount_amount?: number | null
   is_exempt?: boolean | null
   special_case_reason?: string | null
   status?: string | null
@@ -85,8 +84,9 @@ export default function EditStudent({
     address: student.address ?? '',
     code: student.code ?? '',
     annual_fee: student.annual_fee != null ? String(student.annual_fee) : '',
-    discount_pct: student.discount_pct != null ? String(student.discount_pct) : '0',
+    discount_amount: student.discount_amount != null ? String(student.discount_amount) : '',
   })
+
   const [status, setStatus] = useState(student.status ?? 'active')
   const [countryCode, setCountryCode] = useState(splitPhone(student.guardian_phone).code)
   const country = GULF_COUNTRIES.find((c) => c.code === countryCode)
@@ -96,6 +96,14 @@ export default function EditStudent({
     set('guardian_phone', cleanLocalNumber(raw).slice(0, country?.localLen ?? 9))
   }
 
+  // القيم المحسوبة تلقائياً
+  const annualFee = parseFloat(f.annual_fee) || 0
+  const discountAmt = parseFloat(f.discount_amount) || 0
+  const discountPct = annualFee > 0 && discountAmt > 0
+    ? Math.min((discountAmt / annualFee) * 100, 100)
+    : 0
+  const netFee = Math.max(annualFee - discountAmt, 0)
+
   const [isExempt, setIsExempt] = useState(student.is_exempt ?? false)
   const [hasSpecialCase, setHasSpecialCase] = useState(!!student.special_case_reason)
   const [specialCaseReason, setSpecialCaseReason] = useState(student.special_case_reason ?? '')
@@ -104,13 +112,12 @@ export default function EditStudent({
     setHasSpecialCase(checked)
     if (!checked) {
       setSpecialCaseReason('')
-      set('discount_pct', '0')
+      set('discount_amount', '')
     }
   }
 
   const [wantsTransport, setWantsTransport] = useState(!!currentBusId)
   const [selectedBus, setSelectedBus] = useState(currentBusId ?? '')
-
   const [wantsMeal, setWantsMeal] = useState(!!currentMealPlanId)
   const [selectedMealPlan, setSelectedMealPlan] = useState(currentMealPlanId ?? '')
 
@@ -124,14 +131,17 @@ export default function EditStudent({
     if (!f.section.trim()) { setErr('الشعبة مطلوبة'); return }
     if (!f.guardian_phone.trim()) { setErr('رقم ولي الأمر مطلوب'); return }
     if (!phoneValid) { setErr('رقم ولي الأمر غير مكتمل أو غير صالح لهذه الدولة'); return }
-    if (!isExempt && (!f.annual_fee || Number(f.annual_fee) <= 0)) {
+    if (!isExempt && (!f.annual_fee || annualFee <= 0)) {
       setErr('الرسوم السنوية مطلوبة ويجب أن تكون أكبر من صفر'); return
+    }
+    if (discountAmt > annualFee) {
+      setErr('مبلغ التخفيض لا يمكن أن يتجاوز الرسوم السنوية'); return
     }
     if (hasSpecialCase && !specialCaseReason.trim()) {
       setErr('حدد سبب الحالة الخاصة'); return
     }
-    if (hasSpecialCase && Number(f.discount_pct) <= 0) {
-      setErr('حدد نسبة التخفيض المرتبطة بالحالة الخاصة'); return
+    if (hasSpecialCase && discountAmt <= 0) {
+      setErr('حدد مبلغ التخفيض المرتبط بالحالة الخاصة'); return
     }
     setSaving(true)
     const fullPhone = `+${countryCode}${f.guardian_phone}`
@@ -146,8 +156,8 @@ export default function EditStudent({
       p_birth_date: f.birth_date || null,
       p_gender: f.gender || null,
       p_code: f.code || null,
-      p_annual_fee: isExempt ? 0 : Number(f.annual_fee),
-      p_discount_pct: Number(f.discount_pct) || 0,
+      p_annual_fee: isExempt ? 0 : annualFee,
+      p_discount_amount: discountAmt,
       p_is_exempt: isExempt,
       p_special_case_reason: hasSpecialCase ? specialCaseReason.trim() : null,
       p_status: status,
@@ -171,9 +181,7 @@ export default function EditStudent({
     }
 
     if (wantsMeal && selectedMealPlan && selectedMealPlan !== currentMealPlanId) {
-      if (currentMealPlanId) {
-        await supabase.rpc('unsubscribe_meal', { p_student: student.id })
-      }
+      if (currentMealPlanId) await supabase.rpc('unsubscribe_meal', { p_student: student.id })
       const { error: mealError } = await supabase.rpc('subscribe_meal', { p_student: student.id, p_plan: selectedMealPlan })
       if (mealError) { setSaving(false); setErr(mealError.message); return }
     } else if (!wantsMeal && currentMealPlanId) {
@@ -181,14 +189,14 @@ export default function EditStudent({
       if (mealError) { setSaving(false); setErr(mealError.message); return }
     }
 
-    setSaving(false)
-    setOk(true)
+    setSaving(false); setOk(true)
     router.refresh()
     setTimeout(() => { setOk(false); setOpen(false) }, 1000)
   }
 
   const label: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: '#0F2744', marginBottom: 5, display: 'block' }
   const input: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 9, border: '1px solid #E3E8EE', fontSize: 14, fontFamily: 'inherit' }
+  const autoInput: React.CSSProperties = { ...input, background: '#F0F7F5', border: '1.5px solid #CDE8E1', color: '#0D7D6B', fontWeight: 700 }
   const select: React.CSSProperties = { ...input, background: '#fff', cursor: 'pointer' }
   const fmt = (n: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
   const cell: React.CSSProperties = { flex: '1 1 190px' }
@@ -212,15 +220,10 @@ export default function EditStudent({
           <button onClick={() => setOpen(false)} style={{ background: 'none', border: 0, fontSize: 22, cursor: 'pointer', color: '#667' }}>×</button>
         </div>
 
-        <div style={{
-          background: '#FBF3D5', border: '1px solid #EAD9A0', borderRadius: 10,
-          padding: '12px 14px', marginBottom: 18, fontSize: 13, color: '#7A5C0A', lineHeight: 1.8,
-        }}>
+        <div style={{ background: '#FBF3D5', border: '1px solid #EAD9A0', borderRadius: 10, padding: '12px 14px', marginBottom: 18, fontSize: 13, color: '#7A5C0A', lineHeight: 1.8 }}>
           ⚠️ <b>تنبيه مهم:</b> حقل "الرسوم السنوية" أدناه للسجل المرجعي فقط، ولا يُنشئ أو يُعدّل أي فاتورة فعلية.
-          لإضافة رسم حقيقي يُحاسب عليه الطالب، اذهب إلى{' '}
-          <a href="/fees" style={{ color: '#7A5C0A', fontWeight: 700, textDecoration: 'underline' }}>
-            صفحة الرسوم والفواتير
-          </a>{' '}
+          لإضافة رسم حقيقي اذهب إلى{' '}
+          <a href="/fees" style={{ color: '#7A5C0A', fontWeight: 700, textDecoration: 'underline' }}>صفحة الرسوم والفواتير</a>{' '}
           واستخدم زر «إضافة رسم».
         </div>
 
@@ -241,7 +244,6 @@ export default function EditStudent({
             <label style={label}>الاسم الكامل *</label>
             <input style={input} value={f.full_name} onChange={(e) => set('full_name', e.target.value)} />
           </div>
-
           <div style={cell}>
             <label style={label}>الصف / المرحلة *</label>
             <select style={select} value={f.grade} onChange={(e) => set('grade', e.target.value)}>
@@ -249,7 +251,6 @@ export default function EditStudent({
               {gradeOptions.map((g) => <option key={g} value={g}>{g}</option>)}
             </select>
           </div>
-
           <div style={cell}>
             <label style={label}>الشعبة *</label>
             <select style={select} value={f.section} onChange={(e) => set('section', e.target.value)}>
@@ -257,12 +258,10 @@ export default function EditStudent({
               {sectionOptions.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
-
           <div style={cell}>
             <label style={label}>الرقم المدرسي</label>
             <input style={input} value={f.code} onChange={(e) => set('code', e.target.value)} />
           </div>
-
           <div style={cell}>
             <label style={label}>اسم ولي الأمر</label>
             <input style={input} value={f.guardian_name} onChange={(e) => set('guardian_name', e.target.value)} />
@@ -270,20 +269,12 @@ export default function EditStudent({
           <div style={cell}>
             <label style={label}>رقم ولي الأمر *</label>
             <div style={{ display: 'flex', gap: 8 }}>
-              <select
-                value={countryCode}
-                onChange={(e) => { setCountryCode(e.target.value); set('guardian_phone', '') }}
-                style={{ ...select, flex: '0 0 100px', padding: '0 6px' }}
-              >
-                {GULF_COUNTRIES.map((c) => (
-                  <option key={c.code} value={c.code}>{c.flag} +{c.code}</option>
-                ))}
+              <select value={countryCode} onChange={(e) => { setCountryCode(e.target.value); set('guardian_phone', '') }}
+                style={{ ...select, flex: '0 0 100px', padding: '0 6px' }}>
+                {GULF_COUNTRIES.map((c) => <option key={c.code} value={c.code}>{c.flag} +{c.code}</option>)}
               </select>
-              <input
-                style={{ ...input, direction: 'ltr', textAlign: 'right', borderColor: f.guardian_phone && !phoneValid ? '#E0A3A3' : '#E3E8EE' }}
-                value={f.guardian_phone} onChange={(e) => onPhoneChange(e.target.value)}
-                inputMode="numeric" dir="ltr"
-              />
+              <input style={{ ...input, direction: 'ltr', textAlign: 'right', borderColor: f.guardian_phone && !phoneValid ? '#E0A3A3' : '#E3E8EE' }}
+                value={f.guardian_phone} onChange={(e) => onPhoneChange(e.target.value)} inputMode="numeric" dir="ltr" />
             </div>
             {f.guardian_phone && !phoneValid && (
               <div style={{ color: '#C0392B', fontSize: 11, marginTop: 4 }}>رقم غير مكتمل أو غير صالح لهذه الدولة</div>
@@ -306,6 +297,7 @@ export default function EditStudent({
             </select>
           </div>
 
+          {/* معفى بالكامل */}
           <div style={{ flex: '1 1 100%' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid #E3E8EE', borderRadius: 10, background: isExempt ? '#F4F8F6' : '#fff' }}>
               <input type="checkbox" checked={isExempt} onChange={(e) => setIsExempt(e.target.checked)} style={{ width: 18, height: 18, cursor: 'pointer' }} />
@@ -313,18 +305,42 @@ export default function EditStudent({
             </div>
           </div>
 
+          {/* الرسوم ومبلغ التخفيض */}
           <div style={cell}>
             <label style={label}>الرسوم السنوية (ر.ع) {isExempt ? '' : '*'}</label>
-            <input type="number" style={{ ...input, opacity: isExempt ? 0.5 : 1 }} value={f.annual_fee} onChange={(e) => set('annual_fee', e.target.value)} dir="ltr" disabled={isExempt} />
+            <input type="number" step="0.001" style={{ ...input, opacity: isExempt ? 0.5 : 1 }}
+              value={f.annual_fee} onChange={(e) => set('annual_fee', e.target.value)}
+              placeholder="0.000" dir="ltr" disabled={isExempt} />
             <div style={{ fontSize: 10.5, color: '#B5720E', marginTop: 4 }}>
-              ⚠️ سجل مرجعي فقط — لا يُنشئ فاتورة. استخدم «الرسوم والفواتير» لإضافة رسم فعلي.
+              ⚠️ سجل مرجعي فقط — لا يُنشئ فاتورة.
             </div>
           </div>
+
           <div style={cell}>
-            <label style={label}>التخفيض ٪</label>
-            <input type="number" min={0} max={100} style={{ ...input, opacity: isExempt ? 0.5 : 1 }} value={f.discount_pct} onChange={(e) => set('discount_pct', e.target.value)} dir="ltr" disabled={isExempt} />
+            <label style={label}>مبلغ التخفيض (ر.ع)</label>
+            <input type="number" step="0.001" style={{ ...input, opacity: isExempt ? 0.5 : 1 }}
+              value={f.discount_amount} onChange={(e) => set('discount_amount', e.target.value)}
+              placeholder="0.000" dir="ltr" disabled={isExempt} />
           </div>
 
+          {/* نسبة التخفيض تلقائية */}
+          {discountPct > 0 && !isExempt && (
+            <div style={cell}>
+              <label style={{ ...label, color: '#0D7D6B' }}>نسبة التخفيض (تلقائي)</label>
+              <input style={autoInput} value={discountPct.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) + '%'} readOnly tabIndex={-1} dir="ltr" />
+            </div>
+          )}
+
+          {/* معاينة صافي الرسوم */}
+          {!isExempt && annualFee > 0 && discountAmt > 0 && (
+            <div style={{ flex: '1 1 100%', background: '#F4F8F6', border: '1px solid #BFE5D0', borderRadius: 10, padding: '10px 14px', fontSize: 13 }}>
+              <b style={{ color: '#0F2744' }}>صافي الرسوم (مرجعي):</b>{' '}
+              <span style={{ fontSize: 16, fontWeight: 800, color: '#0F9D74' }}>{fmt(netFee)} ر.ع</span>
+              <span style={{ color: '#667', fontSize: 12, marginRight: 8 }}>({fmt(annualFee)} − {fmt(discountAmt)})</span>
+            </div>
+          )}
+
+          {/* حالة خاصة */}
           {!isExempt && (
             <div style={{ flex: '1 1 100%' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid #E3E8EE', borderRadius: 10, background: hasSpecialCase ? '#FDF8ED' : '#fff' }}>
@@ -334,22 +350,21 @@ export default function EditStudent({
               {hasSpecialCase && (
                 <div style={{ marginTop: 8 }}>
                   <label style={label}>سبب الحالة الخاصة *</label>
-                  <input
-                    style={input} value={specialCaseReason}
+                  <input style={input} value={specialCaseReason}
                     onChange={(e) => setSpecialCaseReason(e.target.value)}
-                    placeholder="مثال: ابن موظف" list="special-case-suggestions-edit"
-                  />
+                    placeholder="مثال: ابن موظف" list="special-case-suggestions-edit" />
                   <datalist id="special-case-suggestions-edit">
                     {SPECIAL_CASE_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
                   </datalist>
                   <div style={{ color: '#8A6D0F', fontSize: 12, marginTop: 4 }}>
-                    استخدم حقل «التخفيض ٪» أعلاه لتحديد نسبة الخصم المرتبطة بهذه الحالة.
+                    أدخل مبلغ التخفيض في الحقل أعلاه — ستظهر النسبة تلقائياً.
                   </div>
                 </div>
               )}
             </div>
           )}
 
+          {/* معلومات الأسرة */}
           <div style={cell}>
             <label style={label}>هاتف الأب</label>
             <input style={{ ...input, direction: 'ltr', textAlign: 'right' }} value={f.father_phone} onChange={(e) => set('father_phone', e.target.value)} inputMode="tel" />
@@ -364,11 +379,14 @@ export default function EditStudent({
           </div>
         </div>
 
+        {/* النقل */}
         {buses.length > 0 && (
           <div style={{ marginTop: 13 }}>
             <label style={label}>النقل المدرسي</label>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: '1px solid #E3E8EE', borderRadius: 10, background: wantsTransport ? '#F4F8F6' : '#fff' }}>
-              <input type="checkbox" checked={wantsTransport} onChange={(e) => { setWantsTransport(e.target.checked); if (!e.target.checked) setSelectedBus('') }} style={{ width: 18, height: 18, cursor: 'pointer' }} />
+              <input type="checkbox" checked={wantsTransport}
+                onChange={(e) => { setWantsTransport(e.target.checked); if (!e.target.checked) setSelectedBus('') }}
+                style={{ width: 18, height: 18, cursor: 'pointer' }} />
               <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: '#0F2744' }}>اشتراك بالنقل المدرسي</span>
               {wantsTransport && (
                 <select style={{ ...select, width: 260 }} value={selectedBus} onChange={(e) => setSelectedBus(e.target.value)}>
@@ -377,17 +395,18 @@ export default function EditStudent({
                 </select>
               )}
             </div>
-            {wantsTransport && !selectedBus && (
-              <div style={{ color: '#8A6D1D', fontSize: 12, marginTop: 4 }}>اختر مساراً ليُربط الطالب بالباص عند الحفظ</div>
-            )}
+            {wantsTransport && !selectedBus && <div style={{ color: '#8A6D1D', fontSize: 12, marginTop: 4 }}>اختر مساراً ليُربط الطالب بالباص عند الحفظ</div>}
           </div>
         )}
 
+        {/* التغذية */}
         {mealPlans.length > 0 && (
           <div style={{ marginTop: 13 }}>
             <label style={label}>التغذية المدرسية</label>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: '1px solid #E3E8EE', borderRadius: 10, background: wantsMeal ? '#F4F8F6' : '#fff' }}>
-              <input type="checkbox" checked={wantsMeal} onChange={(e) => { setWantsMeal(e.target.checked); if (!e.target.checked) setSelectedMealPlan('') }} style={{ width: 18, height: 18, cursor: 'pointer' }} />
+              <input type="checkbox" checked={wantsMeal}
+                onChange={(e) => { setWantsMeal(e.target.checked); if (!e.target.checked) setSelectedMealPlan('') }}
+                style={{ width: 18, height: 18, cursor: 'pointer' }} />
               <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: '#0F2744' }}>اشتراك بالتغذية المدرسية</span>
               {wantsMeal && (
                 <select style={{ ...select, width: 260 }} value={selectedMealPlan} onChange={(e) => setSelectedMealPlan(e.target.value)}>
@@ -396,9 +415,7 @@ export default function EditStudent({
                 </select>
               )}
             </div>
-            {wantsMeal && !selectedMealPlan && (
-              <div style={{ color: '#8A6D1D', fontSize: 12, marginTop: 4 }}>اختر باقة ليُربط الطالب بها عند الحفظ</div>
-            )}
+            {wantsMeal && !selectedMealPlan && <div style={{ color: '#8A6D1D', fontSize: 12, marginTop: 4 }}>اختر باقة ليُربط الطالب بها عند الحفظ</div>}
           </div>
         )}
 
