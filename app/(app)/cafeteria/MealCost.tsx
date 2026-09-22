@@ -4,6 +4,8 @@
 //   1) تعديل سعر الشراء والبيانات — قيد عكسي + قيد جديد بالسعر الصحيح
 //   2) الدفع — تأكيد السداد مع اختيار مصدر الدفع (صندوق/بنك)
 //   3) إلغاء الشراء — يبقى ظاهراً بعلامة "ملغى"، قيد عكسي يُصفّر أثره المالي والكمي
+// تكلفة الوحدة تلقائية: عند تسجيل شراء أو تعديل سعر، إدخال «الإجمالي» يحسب تكلفة الوحدة (الإجمالي ÷ الوجبات)،
+// أو أدخل تكلفة الوحدة مباشرة وسيُحسب الإجمالي تلقائياً — نفس أسلوب قسم المخزون.
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase-client'
 
@@ -21,6 +23,14 @@ const fmt3 = (n: number) => (n || 0).toLocaleString('en-US', { minimumFractionDi
 const fmt0 = (n: number) => (n || 0).toLocaleString('en-US')
 const thisPeriod = () => new Date().toISOString().slice(0, 7)
 
+// تكلفة الوحدة: 3 خانات إن كانت دقيقة، وإلا 4 (مثال: 10 ÷ 3 = 3.3333) — التخزين الفعلي بـ 6 خانات
+const unitText = (n: number) => {
+  const v = n || 0
+  const exact3 = Math.abs(Math.round(v * 1000) / 1000 - v) < 1e-7
+  const d = exact3 ? 3 : 4
+  return v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
+}
+
 function PaymentSourcePicker({ value, onChange }: { value: PaymentSource; onChange: (v: PaymentSource) => void }) {
   const opt = (v: PaymentSource): React.CSSProperties => ({
     flex: 1, padding: '10px 12px', borderRadius: 9, cursor: 'pointer', textAlign: 'center',
@@ -37,6 +47,55 @@ function PaymentSourcePicker({ value, onChange }: { value: PaymentSource; onChan
         <div style={opt('bank')} onClick={() => onChange('bank')}>🏦 من البنك</div>
       </div>
     </div>
+  )
+}
+
+// حقل الكمية + الإجمالي + تكلفة الوحدة (تُحسب من الإجمالي إن أُدخل، وإلا تكلفة الوحدة يدوية)
+// state خارجي: meals, total, unit — unit يُقفل ويُحسب تلقائياً حين total > 0
+function CostFields({ sym, meals, onMeals, total, onTotal, unit, onUnit }: {
+  sym: string
+  meals: string; onMeals: (v: string) => void
+  total: string; onTotal: (v: string) => void
+  unit: string; onUnit: (v: string) => void
+}) {
+  const input: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 9, border: '1px solid #E3E8EE', fontSize: 14, fontFamily: 'inherit' }
+  const autoInput: React.CSSProperties = { ...input, background: '#F0F7F5', border: '1.5px solid #CDE8E1', color: '#0D7D6B', fontWeight: 700 }
+  const lbl: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: '#0F2744', display: 'block', marginBottom: 6 }
+  const cell: React.CSSProperties = { flex: '1 1 150px' }
+
+  const m = Number(meals) || 0
+  const t = Number(total) || 0
+  const autoUnit = t > 0 && m > 0 ? t / m : null
+
+  return (
+    <>
+      <div style={cell}>
+        <label style={lbl}>عدد الوجبات</label>
+        <input type="number" style={input} value={meals} onChange={(e) => onMeals(e.target.value)} dir="ltr" />
+      </div>
+      <div style={cell}>
+        <label style={lbl}>الإجمالي المدفوع (اختياري)</label>
+        <input type="number" step="0.001" style={input} value={total} onChange={(e) => onTotal(e.target.value)} dir="ltr" placeholder="0.000" />
+      </div>
+      <div style={cell}>
+        {autoUnit !== null ? (
+          <>
+            <label style={{ ...lbl, color: '#0D7D6B' }}>تكلفة الوحدة (تلقائي)</label>
+            <input style={autoInput} value={unitText(autoUnit)} readOnly tabIndex={-1} dir="ltr" />
+          </>
+        ) : (
+          <>
+            <label style={lbl}>تكلفة الوحدة ({sym})</label>
+            <input type="number" step="0.001" style={input} value={unit} onChange={(e) => onUnit(e.target.value)} dir="ltr" placeholder="0.000" />
+          </>
+        )}
+      </div>
+      <div style={{ flex: '1 1 100%', fontSize: 11.5, color: '#8A94A6', lineHeight: 1.7, marginTop: -4 }}>
+        {autoUnit !== null
+          ? 'تكلفة الوحدة = الإجمالي ÷ عدد الوجبات — تُحسب تلقائياً. امسح الإجمالي لإدخال التكلفة يدوياً.'
+          : 'أدخل الإجمالي المدفوع لتُحسب تكلفة الوحدة تلقائياً، أو أدخل تكلفة الوحدة مباشرة.'}
+      </div>
+    </>
   )
 }
 
@@ -190,7 +249,7 @@ function ActionMenu({ purchase, onPay, onEditPrice, onCancel }: {
 function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purchases: Purchase[]; suppliers: Supplier[]; period: string; sym: string; onChange: () => void }) {
   const supabase = createClient()
   const [open, setOpen] = useState(false)
-  const [f, setF] = useState({ supplier: '', date: new Date().toISOString().slice(0, 10), type: 'daily', meals: '', unit: '', paid: false, notes: '', itemType: '' })
+  const [f, setF] = useState({ supplier: '', date: new Date().toISOString().slice(0, 10), type: 'daily', meals: '', total: '', unit: '', paid: false, notes: '', itemType: '' })
   const [paymentSource, setPaymentSource] = useState<PaymentSource>('bank')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
@@ -203,6 +262,7 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
   // نافذة تعديل السعر والبيانات
   const [editing, setEditing] = useState<Purchase | null>(null)
   const [editMeals, setEditMeals] = useState('')
+  const [editTotalAmt, setEditTotalAmt] = useState('')
   const [editUnit, setEditUnit] = useState('')
   const [editSource, setEditSource] = useState<PaymentSource>('bank')
   const [editErr, setEditErr] = useState('')
@@ -211,23 +271,27 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
   const [cancelling, setCancelling] = useState<Purchase | null>(null)
 
   const set = (k: string, v: string | boolean) => setF((p) => ({ ...p, [k]: v }))
-  const total = (Number(f.meals) || 0) * (Number(f.unit) || 0)
+  const fMeals = Number(f.meals) || 0
+  const fTotal = Number(f.total) || 0
+  const fUnit = Number(f.unit) || 0
+  const previewTotal = fTotal > 0 ? fTotal : fMeals * fUnit
 
   async function save() {
     setErr('')
-    if (!f.meals || Number(f.meals) <= 0) { setErr('عدد الوجبات مطلوب'); return }
-    if (!f.unit || Number(f.unit) <= 0) { setErr('تكلفة الوحدة مطلوبة'); return }
+    if (!f.meals || fMeals <= 0) { setErr('عدد الوجبات مطلوب'); return }
+    if (fTotal <= 0 && fUnit <= 0) { setErr('أدخل الإجمالي المدفوع أو تكلفة الوحدة'); return }
     setBusy(true)
     const { error } = await supabase.rpc('save_meal_purchase', {
       p_id: null, p_supplier: f.supplier || null, p_date: f.date,
-      p_type: f.type, p_meals: Number(f.meals), p_unit_cost: Number(f.unit),
+      p_type: f.type, p_meals: fMeals, p_unit_cost: fUnit || null,
       p_period: period, p_paid: f.paid, p_notes: f.notes || null,
       p_item_type: f.itemType || null, p_payment_source: paymentSource,
+      p_total: fTotal > 0 ? fTotal : null,
     })
     setBusy(false)
     if (error) { setErr(error.message); return }
     setOpen(false)
-    setF({ supplier: '', date: new Date().toISOString().slice(0, 10), type: 'daily', meals: '', unit: '', paid: false, notes: '', itemType: '' })
+    setF({ supplier: '', date: new Date().toISOString().slice(0, 10), type: 'daily', meals: '', total: '', unit: '', paid: false, notes: '', itemType: '' })
     setPaymentSource('bank')
     onChange()
   }
@@ -246,6 +310,7 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
   function openEdit(p: Purchase) {
     setEditing(p)
     setEditMeals(String(p.meals_count))
+    setEditTotalAmt('')
     setEditUnit(String(p.unit_cost))
     setEditSource('bank')
     setEditErr('')
@@ -254,11 +319,15 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
   async function confirmEditPrice() {
     if (!editing) return
     setEditErr('')
-    if (!editMeals || Number(editMeals) <= 0) { setEditErr('عدد الوجبات مطلوب'); return }
-    if (!editUnit || Number(editUnit) <= 0) { setEditErr('تكلفة الوحدة مطلوبة'); return }
+    const em = Number(editMeals) || 0
+    const et = Number(editTotalAmt) || 0
+    const eu = Number(editUnit) || 0
+    if (!editMeals || em <= 0) { setEditErr('عدد الوجبات مطلوب'); return }
+    if (et <= 0 && eu <= 0) { setEditErr('أدخل الإجمالي المدفوع أو تكلفة الوحدة'); return }
     setBusyId(editing.id)
     const { error } = await supabase.rpc('edit_meal_purchase_price', {
-      p_id: editing.id, p_meals: Number(editMeals), p_unit_cost: Number(editUnit), p_payment_source: editSource,
+      p_id: editing.id, p_meals: em, p_unit_cost: eu || null, p_payment_source: editSource,
+      p_total: et > 0 ? et : null,
     })
     setBusyId(null)
     if (error) { setEditErr(error.message); return }
@@ -278,7 +347,10 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
 
   const input: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 9, border: '1px solid #E3E8EE', fontSize: 14, fontFamily: 'inherit' }
   const cell: React.CSSProperties = { flex: '1 1 150px' }
-  const editTotal = (Number(editMeals) || 0) * (Number(editUnit) || 0)
+  const em = Number(editMeals) || 0
+  const et = Number(editTotalAmt) || 0
+  const eu = Number(editUnit) || 0
+  const editPreviewTotal = et > 0 ? et : em * eu
 
   return (
     <div>
@@ -303,7 +375,7 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
                 <td style={{ padding: 10 }}>{TYPES[p.purchase_type] || p.purchase_type}</td>
                 <td style={{ padding: 10 }}>{p.item_type || '—'}</td>
                 <td style={{ padding: 10, textDecoration: p.status === 'cancelled' ? 'line-through' : 'none' }}>{fmt0(p.meals_count)}</td>
-                <td style={{ padding: 10 }}>{fmt3(p.unit_cost)}</td>
+                <td style={{ padding: 10 }}>{unitText(p.unit_cost)}</td>
                 <td style={{ padding: 10, fontWeight: 700, textDecoration: p.status === 'cancelled' ? 'line-through' : 'none' }}>{fmt3(p.total_cost)} {sym}</td>
                 <td style={{ padding: 10 }}>
                   {p.status === 'cancelled' ? (
@@ -350,23 +422,21 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
       {/* نافذة تعديل السعر والبيانات */}
       {editing && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(10,37,64,.45)', display: 'grid', placeItems: 'center', zIndex: 999, padding: 16 }} onClick={() => setEditing(null)}>
-          <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: 22, width: '100%', maxWidth: 400 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: 22, width: '100%', maxWidth: 420 }}>
             <h4 style={{ margin: '0 0 4px', color: '#0F2744' }}>تعديل سعر الشراء</h4>
             <p style={{ color: '#8A94A6', fontSize: 12.5, margin: '0 0 16px' }}>{editing.supplier_name || '—'} — {editing.purchase_date}</p>
 
-            <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-              <div style={{ flex: 1 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: '#0F2744', display: 'block', marginBottom: 6 }}>عدد الوجبات</label>
-                <input type="number" style={input} value={editMeals} onChange={(e) => setEditMeals(e.target.value)} dir="ltr" />
-              </div>
-              <div style={{ flex: 1 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: '#0F2744', display: 'block', marginBottom: 6 }}>تكلفة الوحدة ({sym})</label>
-                <input type="number" step="0.001" style={input} value={editUnit} onChange={(e) => setEditUnit(e.target.value)} dir="ltr" />
-              </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
+              <CostFields
+                sym={sym}
+                meals={editMeals} onMeals={setEditMeals}
+                total={editTotalAmt} onTotal={setEditTotalAmt}
+                unit={editUnit} onUnit={setEditUnit}
+              />
             </div>
 
             <div style={{ background: '#F7FAFC', border: '1px solid #EEF1F5', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 13, display: 'flex', justifyContent: 'space-between' }}>
-              <span>الإجمالي الجديد</span><b>{fmt3(editTotal)} {sym}</b>
+              <span>الإجمالي الجديد</span><b>{fmt3(editPreviewTotal)} {sym}</b>
             </div>
 
             <div style={{ marginBottom: 14 }}>
@@ -452,18 +522,19 @@ function PurchasesView({ purchases, suppliers, period, sym, onChange }: { purcha
                   {ITEM_TYPE_SUGGESTIONS.map((t) => <option key={t} value={t} />)}
                 </datalist>
               </div>
+
+              <CostFields
+                sym={sym}
+                meals={f.meals} onMeals={(v) => set('meals', v)}
+                total={f.total} onTotal={(v) => set('total', v)}
+                unit={f.unit} onUnit={(v) => set('unit', v)}
+              />
+
               <div style={cell}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: '#0F2744' }}>عدد الوجبات</label>
-                <input type="number" style={input} value={f.meals} onChange={(e) => set('meals', e.target.value)} dir="ltr" />
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#0F2744' }}>الإجمالي</label>
+                <input style={{ ...input, background: '#F7FAFC', fontWeight: 700 }} value={`${fmt3(previewTotal)} ${sym}`} readOnly dir="ltr" />
               </div>
-              <div style={cell}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: '#0F2744' }}>تكلفة الوحدة ({sym})</label>
-                <input type="number" step="0.001" style={input} value={f.unit} onChange={(e) => set('unit', e.target.value)} dir="ltr" />
-              </div>
-              <div style={cell}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: '#0F2744' }}>الإجمالي (تلقائي)</label>
-                <input style={{ ...input, background: '#F7FAFC', fontWeight: 700 }} value={`${fmt3(total)} ${sym}`} readOnly dir="ltr" />
-              </div>
+
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: '#0F2744', cursor: 'pointer' }}>
                 <input type="checkbox" checked={f.paid} onChange={(e) => set('paid', e.target.checked)} style={{ width: 17, height: 17 }} />
                 مدفوع الآن
