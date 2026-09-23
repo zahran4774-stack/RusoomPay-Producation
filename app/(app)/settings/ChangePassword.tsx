@@ -2,10 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/context/AuthContext';
 import { createClient } from '@/lib/supabase-client';
-import Button from '@/components/Button';
-import Input from '@/components/Input';
 import styles from './ChangePassword.module.css';
 
 interface PasswordRequirement {
@@ -16,7 +13,6 @@ interface PasswordRequirement {
 
 export default function ChangePassword() {
   const router = useRouter();
-  const { user } = useAuth();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -34,7 +30,6 @@ export default function ChangePassword() {
     { name: 'Special character (!@#$%)', regex: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/, met: false },
   ]);
 
-  // Update password requirements as user types
   useEffect(() => {
     const updated = passwordRequirements.map(req => ({
       ...req,
@@ -62,9 +57,15 @@ export default function ChangePassword() {
     try {
       const supabase = createClient();
 
-      // Verify current password by attempting to sign in with it
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.email) {
+        setError('Unable to verify account.');
+        setLoading(false);
+        return;
+      }
+
       const { error: authError } = await supabase.auth.signInWithPassword({
-        email: user?.email || '',
+        email: user.email,
         password: currentPassword,
       });
 
@@ -74,7 +75,6 @@ export default function ChangePassword() {
         return;
       }
 
-      // Update password
       const { error: updateError } = await supabase.auth.updateUser({
         password: newPassword,
       });
@@ -86,8 +86,6 @@ export default function ChangePassword() {
         setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
-        
-        // Redirect after 2 seconds
         setTimeout(() => router.push('/dashboard'), 2000);
       }
     } catch (err) {
@@ -104,7 +102,6 @@ export default function ChangePassword() {
         <h1 className={styles.title}>Change Password</h1>
 
         <form onSubmit={handleChangePassword} className={styles.form}>
-          {/* Current Password */}
           <div className={styles.formGroup}>
             <label htmlFor="currentPassword" className={styles.label}>
               Current Password
@@ -129,7 +126,6 @@ export default function ChangePassword() {
             </div>
           </div>
 
-          {/* New Password */}
           <div className={styles.formGroup}>
             <label htmlFor="newPassword" className={styles.label}>
               New Password
@@ -153,7 +149,6 @@ export default function ChangePassword() {
               </button>
             </div>
 
-            {/* Password Requirements Checklist */}
             <div className={styles.requirementsList}>
               <p className={styles.requirementsTitle}>Password Requirements:</p>
               {passwordRequirements.map((req, idx) => (
@@ -169,7 +164,6 @@ export default function ChangePassword() {
             </div>
           </div>
 
-          {/* Confirm Password */}
           <div className={styles.formGroup}>
             <label htmlFor="confirmPassword" className={styles.label}>
               Confirm Password
@@ -197,13 +191,9 @@ export default function ChangePassword() {
             )}
           </div>
 
-          {/* Error Message */}
           {error && <div className={styles.error}>{error}</div>}
-
-          {/* Success Message */}
           {success && <div className={styles.success}>{success}</div>}
 
-          {/* Submit Button */}
           <button
             type="submit"
             disabled={!isFormValid || loading}
