@@ -1,5 +1,11 @@
 'use client'
 // مركز تحكّم RusoomPay — واجهة enterprise احترافية
+// ⚠️ إصلاح: RevenueByPlan كانت تحسب مبلغاً خاصاً بها بمنطق قديم مُرمَّز يدوياً
+// (monthly/annual/lifetime فقط بأسعار ثابتة)، فلم تتعرّف على الباقات الفعلية
+// الحالية (starter/small/basic/advanced/enterprise) وظلّت تعرض صفراً دائماً.
+// الآن تستخدم s.amount الحقيقي القادم من control_center_subscriptions
+// (المرتبط بجدول plans، مصدر الحقيقة الوحيد للأسعار)، وتُصنَّف ديناميكياً
+// حسب أي رمز باقة موجود فعلاً في البيانات، بلا افتراض قائمة ثابتة مسبقاً.
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import SchoolManageModal from './SchoolManageModal'
@@ -12,7 +18,11 @@ import type { Sub, SchoolStat, AuditRow, FeedbackRow } from './types'
 type Nums = Record<string, number>
 type Pending = { id: string; plan: string; status: string; created_at: string; schools: { name: string } | { name: string }[] | null }
 
-const PLAN_AR: Record<string, string> = { monthly: 'شهري', annual: 'سنوي', lifetime: 'دائم', trial: 'تجريبي' }
+const PLAN_AR: Record<string, string> = {
+  starter: 'البداية', small: 'الصغيرة', basic: 'الأساسية',
+  advanced: 'المتقدّمة', enterprise: 'المؤسسية',
+  monthly: 'شهري', annual: 'سنوي', yearly: 'سنوي', lifetime: 'دائم', trial: 'تجريبي',
+}
 const STATUS_AR: Record<string, string> = { active: 'نشط', trial: 'تجريبي', pending: 'بانتظار', expired: 'منتهٍ', suspended: 'موقوف', cancelled: 'ملغى' }
 const STATUS_COLOR: Record<string, { bg: string; c: string }> = {
   active: { bg: '#E6F4EC', c: '#1A7A45' }, trial: { bg: '#E8EEF8', c: '#2E5EA8' },
@@ -336,22 +346,28 @@ function Kpi({ label, value, unit, icon, accent }: { label: string; value: strin
 
 function RevenueByPlan({ subs }: { subs: Sub[] }) {
   const active = subs.filter((s) => s.status === 'active')
-  const byPlan = { monthly: 0, annual: 0, lifetime: 0 }
+  const byPlan: Record<string, number> = {}
   active.forEach((s) => {
-    if (s.plan === 'monthly') byPlan.monthly += 84
-    else if (s.plan === 'annual') byPlan.annual += 72
-    else if (s.plan === 'lifetime') byPlan.lifetime += 350
+    const key = s.plan ?? 'غير محدد'
+    byPlan[key] = (byPlan[key] ?? 0) + (s.amount ?? 0)
   })
-  const max = Math.max(byPlan.monthly, byPlan.annual, byPlan.lifetime, 1)
-  const rows = [['شهري', byPlan.monthly, '#2E5EA8'], ['سنوي', byPlan.annual, '#1A7A45'], ['دائم', byPlan.lifetime, '#D4A017']] as const
+  const entries = Object.entries(byPlan).sort((a, b) => b[1] - a[1])
+  const max = Math.max(...entries.map(([, v]) => v), 1)
+  const colors = ['#1A7A45', '#2E5EA8', '#D4A017', '#7A2E8F', '#C0392B', '#0E5C5C']
+
+  if (entries.length === 0) {
+    return <div style={{ marginTop: 16, color: '#9AA7B8', fontSize: 13.5, textAlign: 'center', padding: 20 }}>لا اشتراكات نشطة بعد</div>
+  }
+
   return (
     <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
-      {rows.map(([label, val, color]) => {
+      {entries.map(([plan, val], i) => {
         const pct = Math.max((val / max) * 100, 2)
+        const color = colors[i % colors.length]
         const barStyle: React.CSSProperties = { width: pct + '%', height: '100%', background: color, borderRadius: 99, transition: 'width .5s' }
         return (
-          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ width: 48, fontSize: 13, color: '#667' }}>{label}</span>
+          <div key={plan} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ width: 70, fontSize: 13, color: '#667' }}>{PLAN_AR[plan] ?? plan}</span>
             <div style={{ flex: 1, background: '#EEF1F5', borderRadius: 99, height: 22, overflow: 'hidden' }}>
               <div style={barStyle} />
             </div>
