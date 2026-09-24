@@ -331,6 +331,15 @@ export default function LoginPage() {
           <div><b>دعم مخصص</b><span>جاهزون لمساعدتك</span></div>
         </div>
       </footer>
+    <
+            </footer>
+
+      {/* سطر الكيان القانوني — مطلوب لتوثيق اسم العرض في واتساب للأعمال (Meta Business Verification) */}
+      <p className="lp-legal">
+        RusoomPay is powered by Berouq Al Ain Trading · رسوم باي من إنتاج مؤسسة بروق العين التجارية
+      </p>
     </div>
   )
 }
+
+    
