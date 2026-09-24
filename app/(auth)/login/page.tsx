@@ -330,8 +330,7 @@ export default function LoginPage() {
           </span>
           <div><b>دعم مخصص</b><span>جاهزون لمساعدتك</span></div>
         </div>
-      </footer>
-    <
+    
             </footer>
 
       {/* سطر الكيان القانوني — مطلوب لتوثيق اسم العرض في واتساب للأعمال (Meta Business Verification) */}
