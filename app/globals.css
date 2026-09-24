@@ -712,3 +712,15 @@ html, body { height: 100%; }
   .lp-card, .lp-hero { animation: none; }
   .lp-btn, .lp-btn-ghost, .lp-feat, .lp-field input { transition: none; }
 }
+
+/* ═══ سطر الكيان القانوني (فوتر) — لتوثيق ربط اسم العرض بواتساب للأعمال ═══ */
+.lp-legal {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  text-align: center;
+  font-size: 11px;
+  color: #94A3B8;
+  padding: 10px 0 18px;
+  background: #F4F7FB;
+}
+
