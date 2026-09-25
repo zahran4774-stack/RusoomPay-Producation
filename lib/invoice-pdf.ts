@@ -1,5 +1,7 @@
 // lib/invoice-html.ts
-// مولّد فاتورة بـHTML + طباعة المتصفّح — يدعم العربية وخط Cairo بشكل كامل
+// مولّد فاتورة بـHTML + طباعة المتصفّح — يدعم العربية والإنجليزية.
+// اللغة هنا Presentation-only: لا تتغير بيانات الفاتورة أو الحسابات.
+import { ENGLISH_ENABLED, LANGUAGE_STORAGE_KEY, translateText, type Language } from './i18n'
 
 export type InvoiceData = {
   school: {
@@ -21,17 +23,56 @@ export type InvoiceData = {
   remaining?: number | null
 }
 
-const methodLabel = (m: string) => ({
-  bank: 'تحويل بنكي', cash: 'نقداً', card: 'بطاقة', cheque: 'شيك', online: 'دفع إلكتروني',
-}[m] ?? m)
+const methodLabel = (m: string, language: Language) => {
+  const labels: Record<string, string> = {
+    bank: language === 'en' ? 'Bank transfer' : 'تحويل بنكي',
+    cash: language === 'en' ? 'Cash' : 'نقداً',
+    card: language === 'en' ? 'Card' : 'بطاقة',
+    cheque: language === 'en' ? 'Cheque' : 'شيك',
+    online: language === 'en' ? 'Online payment' : 'دفع إلكتروني',
+  }
+  return labels[m] ?? (language === 'en' ? translateText(m, language) : m)
+}
 
 export function generateInvoice(d: InvoiceData) {
+  const language: Language =
+    ENGLISH_ENABLED && typeof window !== 'undefined' && window.localStorage.getItem(LANGUAGE_STORAGE_KEY) === 'en' ? 'en' : 'ar'
+  const isEn = language === 'en'
   const cur = d.currency ?? 'OMR'
-  const fmt = (n: number) => new Intl.NumberFormat('ar-OM', { minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(n)
+  const fmt = (n: number) => new Intl.NumberFormat(isEn ? 'en-OM' : 'ar-OM', { minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(n)
   const date = (() => {
-    try { return new Date(d.paidAt).toLocaleDateString('ar-OM', { year: 'numeric', month: 'long', day: 'numeric' }) }
+    try { return new Date(d.paidAt).toLocaleDateString(isEn ? 'en-GB' : 'ar-OM', { year: 'numeric', month: 'long', day: 'numeric' }) }
     catch { return d.paidAt }
   })()
+  const labels = isEn ? {
+    invoice: 'Invoice',
+    paid: 'Paid',
+    student: 'Student',
+    studentCode: 'Student ID',
+    paymentMethod: 'Payment method',
+    statement: 'Description',
+    amount: 'Amount',
+    paidAmount: 'Amount paid',
+    remaining: 'Remaining fees',
+    phone: 'Phone',
+    vat: 'VAT number',
+    footer: 'This is an electronic invoice issued by RusoomPay and does not require a signature',
+    thanks: 'Thank you for your trust',
+  } : {
+    invoice: 'فاتورة',
+    paid: 'مدفوعة',
+    student: 'الطالب',
+    studentCode: 'الرقم المدرسي',
+    paymentMethod: 'طريقة الدفع',
+    statement: 'البيان',
+    amount: 'المبلغ',
+    paidAmount: 'المبلغ المدفوع',
+    remaining: 'المتبقّي من الرسوم',
+    phone: 'هاتف',
+    vat: 'الرقم الضريبي',
+    footer: 'هذه فاتورة صادرة إلكترونياً من نظام RusoomPay ولا تحتاج توقيعاً',
+    thanks: 'شكراً لثقتكم',
+  }
 
   // شعار المدرسة الفعلي، وإلا أول حرف من اسمها كبديل
   const initial = (d.school.name || 'م').trim().charAt(0)
@@ -39,8 +80,8 @@ export function generateInvoice(d: InvoiceData) {
     ? `<img class="logo-img" src="${d.school.logoUrl}" alt="" />`
     : `<div class="logo">${initial}</div>`
 
-  const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
-<title>فاتورة ${d.invoiceNo}</title>
+  const html = `<!DOCTYPE html><html dir="${isEn ? "ltr" : "rtl"}" lang="${isEn ? "en" : "ar"}"><head><meta charset="utf-8">
+<title>${labels.invoice} ${d.invoiceNo}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=block" rel="stylesheet">
 <style>
@@ -56,10 +97,10 @@ export function generateInvoice(d: InvoiceData) {
   .school{font-size:1.32rem;font-weight:800;color:#0A1D33;line-height:1.3}
   .branch{font-size:.84rem;color:#5A6B7E;font-weight:500;margin-top:1px}
   .meta{font-size:.76rem;color:#8A94A6;margin-top:4px;line-height:1.75}
-  .inv-title{text-align:left;flex-shrink:0}
+  .inv-title{text-align:${isEn ? 'right' : 'left'};flex-shrink:0}
   .inv-title h1{font-size:1.55rem;color:#0A1D33;font-weight:800;letter-spacing:.5px}
   .inv-title .no{font-size:.8rem;color:#8A94A6;margin-top:6px;line-height:1.7}
-  .inv-badge{display:inline-block;margin-top:8px;background:#F2F5F9;border-right:3px solid #C9A227;padding:4px 12px;border-radius:7px;font-size:.75rem;color:#0A1D33;font-weight:700}
+  .inv-badge{display:inline-block;margin-top:8px;background:#F2F5F9;border-${isEn ? "left" : "right"}:3px solid #C9A227;padding:4px 12px;border-radius:7px;font-size:.75rem;color:#0A1D33;font-weight:700}
 
   /* ═══ البطاقات ═══ */
   .row{display:flex;gap:16px;margin-bottom:24px}
@@ -71,12 +112,12 @@ export function generateInvoice(d: InvoiceData) {
   /* ═══ الجدول ═══ */
   table{width:100%;border-collapse:separate;border-spacing:0;margin-bottom:20px;border:1px solid #E6EBF1;border-radius:10px;overflow:hidden}
   thead{background:#0A1D33;color:#fff}
-  th{padding:12px 15px;text-align:right;font-size:.82rem;font-weight:600;letter-spacing:.2px}
+  th{padding:12px 15px;text-align:${isEn ? 'left' : 'right'};font-size:.82rem;font-weight:600;letter-spacing:.2px}
   td{padding:14px 15px;font-size:.9rem;color:#26333F}
 
   /* ═══ الإجمالي ═══ */
   .total{background:#0A1D33;border-radius:12px;padding:18px 24px;display:flex;justify-content:space-between;align-items:center;color:#fff;position:relative;overflow:hidden}
-  .total::before{content:'';position:absolute;top:0;right:0;width:4px;height:100%;background:#C9A227}
+  .total::before{content:'';position:absolute;top:0;${isEn ? "left" : "right"}:0;width:4px;height:100%;background:#C9A227}
   .total .lbl{font-size:.92rem;font-weight:600;opacity:.9}
   .total .amt{font-size:1.5rem;font-weight:800;letter-spacing:.3px}
   .rem{margin-top:12px;padding:12px 18px;background:#FFF8EA;border:1px solid #EAD9A0;border-radius:10px;color:#8A6D0F;font-size:.86rem;font-weight:600}
@@ -96,33 +137,33 @@ export function generateInvoice(d: InvoiceData) {
         ${d.school.branch ? `<div class="branch">${d.school.branch}</div>` : ''}
         <div class="meta">
           ${d.school.address ? d.school.address + '<br>' : ''}
-          ${d.school.phone ? 'هاتف: ' + d.school.phone : ''}
-          ${d.school.vat ? ' · الرقم الضريبي: ' + d.school.vat : ''}
+          ${d.school.phone ? `${labels.phone}: ${d.school.phone}` : ''}
+          ${d.school.vat ? ` · ${labels.vat}: ${d.school.vat}` : ''}
         </div>
       </div>
     </div>
     <div class="inv-title">
-      <h1>فاتورة</h1>
+      <h1>${labels.invoice}</h1>
       <div class="no">رقم: ${d.invoiceNo}<br>${date}</div>
-      <div class="inv-badge">مدفوعة</div>
+      <div class="inv-badge">${labels.paid}</div>
     </div>
   </div>
 
   <div class="row">
     <div class="box">
-      <h3>الطالب</h3>
+      <h3>${labels.student}</h3>
       <div class="v">${d.studentName}</div>
-      ${d.studentCode ? `<div class="s">الرقم المدرسي: ${d.studentCode}</div>` : ''}
+      ${d.studentCode ? `<div class="s">${labels.studentCode}: ${d.studentCode}</div>` : ''}
     </div>
     <div class="box">
-      <h3>طريقة الدفع</h3>
-      <div class="v">${methodLabel(d.method)}</div>
+      <h3>${labels.paymentMethod}</h3>
+      <div class="v">${methodLabel(d.method, language)}</div>
       <div class="s">${date}</div>
     </div>
   </div>
 
   <table>
-    <thead><tr><th>البيان</th><th style="text-align:left">المبلغ (${cur})</th></tr></thead>
+    <thead><tr><th>${labels.statement}</th><th style="text-align:left">${labels.amount} (${cur})</th></tr></thead>
     <tbody>
       <tr>
         <td>${d.feeDescription}</td>
@@ -132,20 +173,20 @@ export function generateInvoice(d: InvoiceData) {
   </table>
 
   <div class="total">
-    <span class="lbl">المبلغ المدفوع</span>
+    <span class="lbl">${labels.paidAmount}</span>
     <span class="amt">${fmt(d.amount)} ${cur}</span>
   </div>
 
-  ${d.remaining && d.remaining > 0 ? `<div class="rem">المتبقّي من الرسوم: ${fmt(d.remaining)} ${cur}</div>` : ''}
+  ${d.remaining && d.remaining > 0 ? `<div class="rem">${labels.remaining}: ${fmt(d.remaining)} ${cur}</div>` : ''}
 
   <div class="foot">
-    <span class="foot-dot"></span>هذه فاتورة صادرة إلكترونياً من نظام <span class="foot-brand">RusoomPay</span> ولا تحتاج توقيعاً<br>
-    شكراً لثقتكم · ${d.school.name}
+    <span class="foot-dot"></span>${labels.footer}<br>
+    ${labels.thanks} · ${d.school.name}
   </div>
 </body></html>`
 
   const w = window.open('', '_blank')
-  if (!w) { alert('يرجى السماح بالنوافذ المنبثقة لطباعة الفاتورة'); return }
+  if (!w) { alert(isEn ? 'Please allow pop-ups to print the invoice' : 'يرجى السماح بالنوافذ المنبثقة لطباعة الفاتورة'); return }
   w.document.write(html)
   w.document.close()
 
