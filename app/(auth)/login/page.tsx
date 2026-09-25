@@ -1,4 +1,6 @@
 'use client'
+
+import LanguageSwitcher from '@/components/i18n/LanguageSwitcher'
 // صفحة تسجيل الدخول — مصادقة حقيقية عبر Supabase (لا تحقق في المتصفح)
 // المنطق (المصادقة، MFA، التوجيه، الاستعادة) محفوظ كما هو؛ التحسين بصري فقط.
 import { useState, useEffect } from 'react'
@@ -153,17 +155,9 @@ export default function LoginPage() {
       <div className="lp-bg" aria-hidden="true" />
       <div className="lp-wash" aria-hidden="true" />
 
-      {/* ═══ مبدّل اللغة (بصري فقط في هذه المرحلة) ═══ */}
-      <div className="lp-lang" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="16" height="16">
-          <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" fill="none" />
-          <path d="M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18"
-            stroke="currentColor" strokeWidth="1.8" fill="none" />
-        </svg>
-        <span>العربية</span>
-        <svg viewBox="0 0 24 24" width="14" height="14">
-          <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
-        </svg>
+      {/* مبدّل اللغة — يعمل فعلياً ويحفظ اختيار المستخدم */}
+      <div className="lp-lang">
+        <LanguageSwitcher />
       </div>
 
       {/* ═══ بطاقة الدخول — العمود الأول في RTL = اليمين ═══ */}
