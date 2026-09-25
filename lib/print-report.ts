@@ -3,6 +3,7 @@
 // تجلب بيانات المدرسة (الشعار، الفرع، الرقم الضريبي) تلقائياً — لا حاجة لتمريرها
 
 import { createClient } from './supabase-client'
+import { ENGLISH_ENABLED, LANGUAGE_STORAGE_KEY, translateText, type Language } from './i18n'
 
 export type SchoolHeader = {
   name: string
@@ -43,11 +44,17 @@ export async function printReport(opts: {
   rows: Record<string, string | number>[]
 }) {
   const { school, title, subtitle, columns, rows } = opts
+  const language: Language =
+    ENGLISH_ENABLED && typeof window !== 'undefined' && window.localStorage.getItem(LANGUAGE_STORAGE_KEY) === 'en' ? 'en' : 'ar'
+  const isEn = language === 'en'
+  const uiTitle = translateText(title, language)
+  const uiSubtitle = subtitle ? translateText(subtitle, language) : ''
+  const uiColumns = columns.map((c) => ({ ...c, label: translateText(c.label, language) }))
 
   // نافذة تُفتح فوراً (قبل أي await) — وإلا يحجبها المتصفّح كنافذة منبثقة
   const win = window.open('', '_blank', 'width=900,height=650')
-  if (!win) { alert('فعّل النوافذ المنبثقة للطباعة'); return }
-  win.document.write('<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"></head><body></body></html>')
+  if (!win) { alert(isEn ? 'Enable pop-ups to print' : 'فعّل النوافذ المنبثقة للطباعة'); return }
+  win.document.write(`<!DOCTYPE html><html dir="${isEn ? 'ltr' : 'rtl'}" lang="${isEn ? 'en' : 'ar'}"><head><meta charset="utf-8"></head><body></body></html>`)
 
   // بيانات الهوية: المُمرَّرة لها الأولوية، وإلا نجلبها من قاعدة البيانات
   const brand = await fetchBrand()
@@ -56,19 +63,19 @@ export async function printReport(opts: {
   const vat = school.vat ?? brand.vat
 
   const now = new Date()
-  const dateStr = now.toLocaleDateString('en-GB') + ' — ' + now.toLocaleTimeString('ar', { hour: '2-digit', minute: '2-digit' })
+  const dateStr = now.toLocaleDateString(isEn ? 'en-GB' : 'ar-OM') + ' — ' + now.toLocaleTimeString(isEn ? 'en-GB' : 'ar', { hour: '2-digit', minute: '2-digit' })
   const initial = (school.name || 'م').trim().charAt(0)
 
   const logoBlock = logoUrl
     ? `<img class="rep-logo-img" src="${logoUrl}" alt="" />`
     : `<div class="rep-logo">${initial}</div>`
 
-  const thead = columns.map((c) => `<th>${c.label}</th>`).join('')
+  const thead = uiColumns.map((c) => `<th>${c.label}</th>`).join('')
   const tbody = rows.map((r) =>
-    '<tr>' + columns.map((c) => `<td>${r[c.key] ?? '—'}</td>`).join('') + '</tr>'
+    '<tr>' + uiColumns.map((c) => `<td>${r[c.key] ?? '—'}</td>`).join('') + '</tr>'
   ).join('')
 
-  const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${title}</title>
+  const html = `<!DOCTYPE html><html dir="${isEn ? "ltr" : "rtl"}" lang="${isEn ? "en" : "ar"}"><head><meta charset="utf-8"><title>${uiTitle}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=block" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box;font-family:'Cairo',Tahoma,sans-serif}
@@ -117,18 +124,18 @@ tbody tr:nth-child(even) td{background:#FAFBFD}
     <div>
       <div class="rep-school">${school.name}</div>
       ${branch ? `<div class="rep-branch">${branch}</div>` : ''}
-      ${vat ? `<div class="rep-vat">الرقم الضريبي: ${vat}</div>` : ''}
+      ${vat ? `<div class="rep-vat">${isEn ? `VAT number: ${vat}` : `الرقم الضريبي: ${vat}`}</div>` : ''}
     </div>
   </div>
-  <div class="rep-meta"><div class="rep-title">${title}</div><div class="rep-date">${dateStr}</div></div>
+  <div class="rep-meta"><div class="rep-title">${uiTitle}</div><div class="rep-date">${dateStr}</div></div>
 </div>
 <div class="rep-context">
-  <div class="rep-sub">${subtitle ?? ''}</div>
-  <div class="rep-count">عدد السجلات: ${rows.length}</div>
+  <div class="rep-sub">${uiSubtitle}</div>
+  <div class="rep-count">${isEn ? `Records: ${rows.length}` : `عدد السجلات: ${rows.length}`}</div>
 </div>
 <table><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>
 <div class="rep-foot">
-  <span><span class="rep-foot-dot"></span><span class="rep-foot-brand">RusoomPay</span> — النظام المحاسبي للمدارس</span>
+  <span><span class="rep-foot-dot"></span><span class="rep-foot-brand">RusoomPay</span> — ${isEn ? `School accounting system` : `النظام المحاسبي للمدارس`}</span>
   <span>${now.getFullYear()} · ${school.name}</span>
 </div>
 </body></html>`
