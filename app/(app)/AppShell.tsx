@@ -12,6 +12,7 @@ import { isStaff, canAccessFinance, isOwner } from '@/lib/roles'
 import { LogoMark } from '../Logo'
 import BranchSwitcher from './BranchSwitcher'
 import SubscriptionBadge, { type SubscriptionInfo } from './SubscriptionBadge'
+import LanguageSwitcher from '@/components/i18n/LanguageSwitcher'
 import {
   LayoutDashboard, GraduationCap, ReceiptText, Users, Apple, Bus,
   Package, BarChart3, ClipboardList, Gem, MessageCircle, Settings, Wallet,
@@ -127,6 +128,7 @@ export default function AppShell({
           <span /><span /><span />
         </button>
         <div className="brand"><LogoMark size={26} /> <span>Rusoom<span style={{ color: 'var(--brand)' }}>Pay</span></span></div>
+        <LanguageSwitcher compact />
       </header>
 
       <div className={`drawer-overlay ${open ? 'open' : ''}`} onClick={() => setOpen(false)} aria-hidden="true" />
@@ -134,6 +136,7 @@ export default function AppShell({
       <aside className={`app-sidebar ${open ? 'open' : ''}`}>
         <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
           <div className="side-brand"><LogoMark size={32} /> <span>Rusoom<span style={{ color: 'var(--brand)' }}>Pay</span></span></div>
+          <div style={{ padding: '10px 16px', display: 'flex', justifyContent: 'flex-start' }}><LanguageSwitcher compact /></div>
 
           {(schoolLogo || schoolName) && (
             <div className="school-identity">
