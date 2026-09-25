@@ -327,14 +327,12 @@ export default function StudentsByClass({
       )}
 
       {trackerStudent && (
-  <PaymentTracker
-    studentId={trackerStudent.id}
-    studentName={trackerStudent.full_name}
-    studentCode={trackerStudent.code}
-    school={school}
-    onClose={() => setTrackerStudent(null)}
-  />
-)}
+        <PaymentTracker
+          studentId={trackerStudent.id}
+          studentName={trackerStudent.full_name}
+          onClose={() => setTrackerStudent(null)}
+        />
+      )}
     </div>
   )
 }
@@ -399,7 +397,13 @@ function exportClassPDF(g: ClassGroup, school: { name: string; vat: string | nul
       td{padding:8px 11px;border-bottom:1px solid #E6EBF1;text-align:right}
       tr:nth-child(even) td{background:#F7F9FC}
       .foot{margin-top:22px;padding-top:12px;border-top:1px solid #ccc;font-size:.72rem;color:#9AA7B8;text-align:center}
-      @media print{body{padding:0}}
+      @media print{
+        body{padding:0}
+        table{page-break-inside:auto}
+        tr{page-break-inside:avoid;page-break-after:auto}
+        thead{display:table-header-group}
+        .head{page-break-after:avoid}
+      }
     </style></head><body>
     <div class="head">
       <div><div class="school">${school.name}</div>${school.vat ? `<div class="vat">الرقم الضريبي: ${school.vat}</div>` : ''}</div>
