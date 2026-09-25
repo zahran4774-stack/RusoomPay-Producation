@@ -103,7 +103,16 @@ export function printMonthlyPaymentReport(d: MonthlyReportData) {
   .foot-brand{font-weight:700;color:#5A6B7E}
   .foot-dot{width:5px;height:5px;border-radius:50%;background:#C9A227;display:inline-block;margin-left:6px;vertical-align:middle}
 
-  @media print{body{padding:14px}@page{margin:10mm}thead{display:table-header-group}}
+  @media print{
+    body{padding:14px}
+    @page{margin:10mm}
+    table{page-break-inside:auto}
+    tr{page-break-inside:avoid;page-break-after:auto}
+    thead{display:table-header-group}
+    .head{page-break-after:avoid}
+    h2.sec{page-break-after:avoid}
+    .summary{page-break-inside:avoid}
+  }
 </style></head><body>
   <div class="head">
     <div class="brand">
