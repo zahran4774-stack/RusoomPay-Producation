@@ -5,6 +5,7 @@ import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
 import { generateInvoice } from '@/lib/invoice-pdf'
+import { printMonthlyPaymentReport } from '@/lib/monthly-payment-report-print'
 import CashPayment from './CashPayment'
 import RefundButton from './RefundButton'
 
@@ -45,6 +46,8 @@ export default function FeesManager({ students, school, currency }: { students: 
   const [remindingId, setRemindingId] = useState<string | null>(null)   // الطالب الجاري تذكيره (فردي)
   const [bulkBusy, setBulkBusy] = useState(false)
   const [toast, setToast] = useState<{ text: string; ok: boolean } | null>(null)
+  // حالة تجهيز تقرير الدفع الشهري (دفعوا/لم يدفعوا) قبل الطباعة
+  const [reportBusy, setReportBusy] = useState(false)
 
   const dec = CUR_DEC[currency] ?? 3
   const sym = CUR_SYM[currency] ?? 'ر.ع'
@@ -173,6 +176,30 @@ export default function FeesManager({ students, school, currency }: { students: 
     setToast({ text: parts.join(' · '), ok: sent > 0 })
   }
 
+  // ─── طباعة تقرير الدفع الشهري (دفعوا / لم يدفعوا) — الشهر الميلادي الحالي ───
+  async function printMonthlyReport() {
+    setReportBusy(true)
+    setToast(null)
+    try {
+      const { data, error } = await supabase.rpc('monthly_payment_report')
+      if (error || !data?.ok) {
+        setToast({ text: error?.message || 'تعذّر إنشاء التقرير', ok: false })
+        return
+      }
+      printMonthlyPaymentReport({
+        school: { name: schoolName, vat: school?.vat_number, address: school?.address, phone: school?.phone, logoUrl: school?.logo_url, branch: school?.branch },
+        monthLabel: data.month_label,
+        currency,
+        paid: data.paid ?? [],
+        unpaid: data.unpaid ?? [],
+      })
+    } catch {
+      setToast({ text: 'تعذّر إنشاء التقرير', ok: false })
+    } finally {
+      setReportBusy(false)
+    }
+  }
+
   const inp: React.CSSProperties = {
     padding: '10px 12px', borderRadius: 10, border: '1.5px solid #DDE3EC',
     fontSize: 14, fontFamily: 'inherit', background: '#fff',
@@ -206,6 +233,21 @@ export default function FeesManager({ students, school, currency }: { students: 
         <StatCard label="المحصّل" value={`${fmt(summary.paid)} ${sym}`} color="#1A7A45" bg="#EFF9F2" />
         <StatCard label="المتبقّي" value={`${fmt(summary.remain)} ${sym}`} color="#C0392B" bg="#FDEEED" />
         <StatCard label="طلاب عليهم متأخرات" value={`${summary.overdueStudents}`} color="#B54708" bg="#FFF6ED" />
+      </div>
+
+      {/* زر طباعة تقرير الدفع الشهري — دفعوا/لم يدفعوا هذا الشهر لكل المدرسة */}
+      <div style={{ marginBottom: 14 }}>
+        <button
+          onClick={printMonthlyReport}
+          disabled={reportBusy}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            background: '#163B68', color: '#fff', border: 0, borderRadius: 11,
+            padding: '11px 20px', fontSize: 14.5, fontWeight: 700, fontFamily: 'inherit',
+            cursor: reportBusy ? 'default' : 'pointer', opacity: reportBusy ? 0.7 : 1,
+          }}>
+          {reportBusy ? 'جارٍ التجهيز…' : '🖨 طباعة تقرير الدفع الشهري'}
+        </button>
       </div>
 
       {/* زر التذكير الجماعي */}
