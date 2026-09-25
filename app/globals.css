@@ -724,3 +724,39 @@ html, body { height: 100%; }
   background: #F4F7FB;
 }
 
+
+
+/* ═══════════════════════════════════════════════
+   RusoomPay bilingual UI — presentation layer only
+   Arabic remains RTL; English switches the document to LTR.
+   ═══════════════════════════════════════════════ */
+html[data-lang="en"] {
+  direction: ltr;
+  /* Parity with RTL: content hanging past the far edge (e.g. RTL list bullets
+     with global padding:0) is unreachable in Arabic; clip it in English too
+     so no stray horizontal scrollbar appears. clip keeps position:sticky working. */
+  overflow-x: clip;
+}
+html[data-lang="en"] body {
+  direction: ltr;
+  overflow-x: clip;
+}
+
+/* Login page originally contains deliberate local RTL rules.
+   Override only presentation direction when English is selected. */
+html[data-lang="en"] .lp-root { direction: ltr; }
+html[data-lang="en"] .lp-pane,
+html[data-lang="en"] .lp-hero,
+html[data-lang="en"] .lp-stats,
+html[data-lang="en"] .lp-lang { direction: ltr; }
+
+/* Login button arrow (←) points "forward" in RTL; mirror it for LTR. */
+html[data-lang="en"] .lp-arrow { display: inline-block; transform: scaleX(-1); }
+
+/* Keep the language control visually stable in both directions. */
+.lp-lang [role="group"] { direction: ltr; }
+
+/* Mobile top bar: keep the language switcher reachable without changing
+   the existing navigation structure. */
+.topbar .brand { flex: 1; }
+.topbar > [data-i18n-ignore="true"] { flex: 0 0 auto; margin-inline-start: 8px; }
