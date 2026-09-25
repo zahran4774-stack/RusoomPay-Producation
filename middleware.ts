@@ -13,7 +13,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 // المسارات العامة الوحيدة التي لا تتطلب تسجيل دخول
 const PUBLIC_PATHS = [
   '/', '/login', '/register', '/parent-register', '/staff-register', '/reset-password',
-  '/subscribe', '/privacy', '/terms', '/help', '/offline', '/payment-result',
+  '/subscribe', '/privacy', '/terms', '/help', '/offline', '/payment-result', '/about',
 ]
 
 function isPublicPath(pathname: string): boolean {
@@ -69,5 +69,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
+  // الملفات الثابتة (manifest, sw.js, الخطوط, الأيقونات) لا تمرّ عبر المصادقة
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|webmanifest|js|ttf|woff|woff2|txt|xml)$).*)'],
 }
