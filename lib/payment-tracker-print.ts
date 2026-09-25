@@ -101,7 +101,14 @@ export function printPaymentTracker(d: TrackerPrintData) {
   .foot-brand{font-weight:700;color:#5A6B7E}
   .foot-dot{width:5px;height:5px;border-radius:50%;background:#C9A227;display:inline-block;margin-left:6px;vertical-align:middle}
 
-  @media print{body{padding:16px}@page{margin:12mm}}
+  @media print{
+    body{padding:16px}
+    @page{margin:12mm}
+    table{page-break-inside:auto}
+    tr{page-break-inside:avoid;page-break-after:auto}
+    thead{display:table-header-group}
+    .head{page-break-after:avoid}
+  }
 </style></head><body>
   <div class="head">
     <div class="brand">
