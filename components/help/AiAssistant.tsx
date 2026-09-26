@@ -7,21 +7,77 @@
 // يعتمد على متغيّر الخط --font-cairo المعرّف في layout.
 // لا يعتمد أي مكتبة خارجية — أيقونات SVG مضمّنة.
 // يُخفى تلقائياً في صفحات المصادقة والسياسات — لا يظهر إلا بعد الدخول.
+//
+// ⚠️ ثنائية اللغة: هذا المكوّن يترجم نفسه بنفسه عبر useLanguage() + STR أدناه،
+// ولا يعتمد على مترجم DOM الخارجي (LanguageProvider's MutationObserver).
+// السبب: هذه اللوحة شديدة الديناميكية (رسائل تُضاف، مؤشر كتابة يتحرك، حقل
+// نص خاضع للتحكّم على كل ضغطة زر) — أي مطابقة/إعادة تصالح من React مع DOM
+// عدّله كود خارجي في هذه اللحظات تحديداً هو نمط خطأ معروف في React. العنصر
+// الجذر عليه data-i18n-ignore="true" فيتخطّاه المترجم الخارجي كلياً بلا شرط.
 // ============================================================================
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
+import { useLanguage } from '../i18n/LanguageProvider'
 
 type Msg = { role: 'user' | 'assistant'; content: string }
 
-const SUGGESTIONS = [
-  'أعطني نبذة عن برنامج RusoomPay',
-  'ما هي صلاحيات مستخدمي RusoomPay؟',
-  'كم طالب متأخر عن السداد؟',
-  'كيف أرسل تذكير دفع؟',
-  'كيف أصدّر تقريراً مالياً؟',
-  'اشرح لي نسبة التحصيل',
-]
+const STR = {
+  ar: {
+    assistantName: 'مساعد رسوم Pay',
+    knowsData: 'يعرف بيانات مدرستك',
+    newChat: 'محادثة جديدة',
+    startNewChat: 'بدء محادثة جديدة',
+    close: 'إغلاق',
+    openAssistant: 'افتح المساعد الذكي',
+    assistantLabel: 'المساعد الذكي',
+    placeholder: 'اكتب سؤالك…',
+    send: 'إرسال',
+    footer: 'مدعوم بالذكاء الاصطناعي · قد يخطئ، تحقّق من المعلومات المهمة',
+    welcome:
+      'مرحباً 👋 أنا مساعد رسوم Pay. أشرح لك أي صفحة في النظام، وأجيب عن أسئلتك حول بيانات مدرستك. اسألني ما تشاء.',
+    suggestions: [
+      'أعطني نبذة عن برنامج RusoomPay',
+      'ما هي صلاحيات مستخدمي RusoomPay؟',
+      'كم طالب متأخر عن السداد؟',
+      'كيف أرسل تذكير دفع؟',
+      'كيف أصدّر تقريراً مالياً؟',
+      'اشرح لي نسبة التحصيل',
+    ],
+    rateLimited: 'وصلت الحدّ المسموح مؤقتاً. حاول بعد قليل.',
+    timedOut: 'الطلب استغرق وقتاً طويلاً. حاول بسؤال أقصر.',
+    genericError: (status: number) => `حدث خطأ (${status}). حاول مرة أخرى.`,
+    noValidReply: 'لم يصل رد صالح. حاول مرة أخرى.',
+    connectionFailed: 'تعذّر الاتصال بالخادم. حاول مجدداً بعد لحظات.',
+  },
+  en: {
+    assistantName: 'RusoomPay Assistant',
+    knowsData: "Knows your school's data",
+    newChat: 'New chat',
+    startNewChat: 'Start a new chat',
+    close: 'Close',
+    openAssistant: 'Open AI Assistant',
+    assistantLabel: 'AI Assistant',
+    placeholder: 'Type your question…',
+    send: 'Send',
+    footer: 'Powered by AI · It may make mistakes, verify important information',
+    welcome:
+      "Hi 👋 I'm the RusoomPay Assistant. I can explain any page in the system and answer questions about your school's data. Ask me anything.",
+    suggestions: [
+      'Give me an overview of RusoomPay',
+      "What are RusoomPay users' permissions?",
+      'How many students are overdue on payment?',
+      'How do I send a payment reminder?',
+      'How do I export a financial report?',
+      'Explain the collection rate to me',
+    ],
+    rateLimited: "You've temporarily hit the limit. Try again shortly.",
+    timedOut: 'The request took too long. Try a shorter question.',
+    genericError: (status: number) => `An error occurred (${status}). Please try again.`,
+    noValidReply: 'No valid reply came back. Please try again.',
+    connectionFailed: 'Could not reach the server. Please try again shortly.',
+  },
+} as const
 
 // المسارات التي لا يظهر فيها المساعد (صفحات عامة/مصادقة/سياسات قبل الدخول)
 const HIDDEN_PATHS = [
@@ -31,6 +87,8 @@ const HIDDEN_PATHS = [
 
 export default function AiAssistant() {
   const pathname = usePathname()
+  const { language } = useLanguage()
+  const t = STR[language]
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<Msg[]>([])
   const [input, setInput] = useState('')
@@ -86,31 +144,25 @@ export default function AiAssistant() {
           const msg =
             data?.message ||
             (res.status === 429
-              ? 'وصلت الحدّ المسموح مؤقتاً. حاول بعد قليل.'
+              ? t.rateLimited
               : res.status === 504 || res.status === 502
-                ? 'الطلب استغرق وقتاً طويلاً. حاول بسؤال أقصر.'
-                : `حدث خطأ (${res.status}). حاول مرة أخرى.`)
+                ? t.timedOut
+                : t.genericError(res.status))
           setMessages((m) => [...m, { role: 'assistant', content: msg }])
         } else if (!data.reply) {
-          setMessages((m) => [
-            ...m,
-            { role: 'assistant', content: 'لم يصل رد صالح. حاول مرة أخرى.' },
-          ])
+          setMessages((m) => [...m, { role: 'assistant', content: t.noValidReply }])
         } else {
           if (data.conversationId) setConversationId(data.conversationId)
           setMessages((m) => [...m, { role: 'assistant', content: data.reply as string }])
         }
       } catch {
-        setMessages((m) => [
-          ...m,
-          { role: 'assistant', content: 'تعذّر الاتصال بالخادم. حاول مجدداً بعد لحظات.' },
-        ])
+        setMessages((m) => [...m, { role: 'assistant', content: t.connectionFailed }])
       } finally {
         setLoading(false)
         taRef.current?.focus()
       }
     },
-    [conversationId, loading],
+    [conversationId, loading, t],
   )
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -127,16 +179,16 @@ export default function AiAssistant() {
   if (hidden) return null
 
   return (
-    <>
+    <div data-i18n-ignore="true">
       {/* زر الفتح العائم */}
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          aria-label="افتح المساعد الذكي"
+          aria-label={t.openAssistant}
           style={S.fab}
         >
           <SparkIcon />
-          <span style={S.fabText}>المساعد الذكي</span>
+          <span style={S.fabText}>{t.assistantLabel}</span>
         </button>
       )}
 
@@ -151,7 +203,7 @@ export default function AiAssistant() {
       <aside
         role="dialog"
         aria-modal="true"
-        aria-label="المساعد الذكي"
+        aria-label={t.assistantLabel}
         style={{ ...S.panel, ...(open ? S.panelOpen : {}) }}
       >
         {/* الرأس */}
@@ -161,17 +213,17 @@ export default function AiAssistant() {
               <SparkIcon />
             </div>
             <div>
-              <div style={S.headTitle}>مساعد رسوم Pay</div>
-              <div style={S.headStatus}>يعرف بيانات مدرستك</div>
+              <div style={S.headTitle}>{t.assistantName}</div>
+              <div style={S.headStatus}>{t.knowsData}</div>
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             {messages.length > 0 && (
-              <button onClick={resetChat} aria-label="محادثة جديدة" title="بدء محادثة جديدة" style={S.xBtn}>
+              <button onClick={resetChat} aria-label={t.newChat} title={t.startNewChat} style={S.xBtn}>
                 ↺
               </button>
             )}
-            <button onClick={() => setOpen(false)} aria-label="إغلاق" style={S.xBtn}>
+            <button onClick={() => setOpen(false)} aria-label={t.close} style={S.xBtn}>
               ✕
             </button>
           </div>
@@ -181,12 +233,9 @@ export default function AiAssistant() {
         <div ref={bodyRef} style={S.body}>
           {messages.length === 0 && (
             <div style={S.welcome}>
-              <div style={{ ...S.msg, ...S.msgBot }}>
-                مرحباً 👋 أنا مساعد رسوم Pay. أشرح لك أي صفحة في النظام، وأجيب عن أسئلتك
-                حول بيانات مدرستك. اسألني ما تشاء.
-              </div>
+              <div style={{ ...S.msg, ...S.msgBot }}>{t.welcome}</div>
               <div style={S.chips}>
-                {SUGGESTIONS.map((s) => (
+                {t.suggestions.map((s) => (
                   <button key={s} onClick={() => send(s)} style={S.chip}>
                     {s}
                   </button>
@@ -221,7 +270,7 @@ export default function AiAssistant() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="اكتب سؤالك…"
+            placeholder={t.placeholder}
             rows={1}
             style={S.textarea}
             disabled={loading}
@@ -229,7 +278,7 @@ export default function AiAssistant() {
           <button
             onClick={() => send(input)}
             disabled={loading || !input.trim()}
-            aria-label="إرسال"
+            aria-label={t.send}
             style={{
               ...S.send,
               ...(loading || !input.trim() ? S.sendDisabled : {}),
@@ -238,11 +287,11 @@ export default function AiAssistant() {
             ↑
           </button>
         </div>
-        <div style={S.foot}>مدعوم بالذكاء الاصطناعي · قد يخطئ، تحقّق من المعلومات المهمة</div>
+        <div style={S.foot}>{t.footer}</div>
       </aside>
 
       <style>{keyframes}</style>
-    </>
+    </div>
   )
 }
 
@@ -322,7 +371,7 @@ const INK = '#0A1D33' // لون علامتك من layout
 
 const S: Record<string, React.CSSProperties> = {
   fab: {
-    position: 'fixed', insetInlineEnd: 20, bottom: 24, zIndex: 9998,
+    position: 'fixed', right: 20, bottom: 24, zIndex: 9998,
     display: 'flex', alignItems: 'center', gap: 8,
     background: BRAND, color: '#fff', border: 'none', borderRadius: 30,
     padding: '13px 20px', fontFamily: 'var(--font-cairo), sans-serif',
@@ -336,7 +385,7 @@ const S: Record<string, React.CSSProperties> = {
   },
   scrimOpen: { opacity: 1, pointerEvents: 'auto' },
   panel: {
-    position: 'fixed', top: 0, insetInlineStart: 0, height: '100%',
+    position: 'fixed', top: 0, right: 0, height: '100%',
     width: 440, maxWidth: '94vw', background: '#fff', zIndex: 9999,
     display: 'flex', flexDirection: 'column',
     boxShadow: '0 16px 56px rgba(10,29,51,.22)',
