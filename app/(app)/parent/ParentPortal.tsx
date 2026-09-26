@@ -22,6 +22,9 @@ const METHOD_LABEL: Record<string, string> = {
   thawani: 'دفع إلكتروني', bank: 'تحويل بنكي', applepay: 'Apple Pay', googlepay: 'Google Pay', onsite: 'نقداً عند المدرسة',
 }
 
+// الدفع الإلكتروني (ثواني) مجمّد مؤقتاً حتى اكتمال إجراءات التفعيل — غيّرها إلى false لإعادة تشغيله
+const THAWANI_FROZEN = true
+
 const CERT_KIND_LABEL: Record<string, string> = {
   enrollment: 'شهادة قيد', clearance: 'براءة ذمة مالية', fees_statement: 'إفادة رسوم',
 }
@@ -42,7 +45,8 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
   const [tab, setTab] = useState<'overview' | 'fees' | 'receipts' | 'certificates' | 'notifications'>('overview')
   const [selectedChild, setSelectedChild] = useState<string>('all') // 'all' أو student_name
   const [payFee, setPayFee] = useState<Fee | null>(null)
-  const [method, setMethod] = useState('thawani')
+  const [method, setMethod] = useState(THAWANI_FROZEN ? 'bank' : 'thawani')
+  const [thawaniNotice, setThawaniNotice] = useState(false)
   const [amount, setAmount] = useState('')
   const [receiptFile, setReceiptFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -55,6 +59,8 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
   // ينشئ جلسة دفع ثواني ويحوّل المستخدم لصفحة الدفع المستضافة —
   // لا نتعامل مع بيانات البطاقة إطلاقاً، ثواني تتولّاها بالكامل.
   async function payViaThawani() {
+    // حارس إضافي: لا يُنشأ أي جلسة دفع طالما ثواني مجمّد
+    if (THAWANI_FROZEN) { setThawaniNotice(true); return }
     if (!payFee) return
     const amt = parseFloat(amount) || 0
     if (amt <= 0 || amt > payFee.remaining + 0.0005) { setMsg('مبلغ غير صحيح'); return }
@@ -85,8 +91,8 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
     selectedChild === 'all' ? items : items.filter((i) => i.student_name === selectedChild)
 
   function openPay(fee: Fee) {
-    setPayFee(fee); setMethod('thawani'); setAmount(fee.remaining.toFixed(3))
-    setReceiptFile(null); setMsg('')
+    setPayFee(fee); setMethod(THAWANI_FROZEN ? 'bank' : 'thawani'); setAmount(fee.remaining.toFixed(3))
+    setReceiptFile(null); setMsg(''); setThawaniNotice(false)
   }
 
   async function submitPayment() {
@@ -432,16 +438,38 @@ export default function ParentPortal({ parentName, school, children_, fees, rece
 
             <label style={{ fontSize: 13, fontWeight: 600, color: '#445' }}>طريقة الدفع</label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7, marginBottom: 12 }}>
-              {(['thawani', 'bank'] as const).map((m) => (
-                <button key={m} onClick={() => setMethod(m)} style={{
-                  padding: 10, borderRadius: 9, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
-                  border: method === m ? '1.5px solid #1E5C4E' : '1.5px solid #DDE3EC',
-                  background: method === m ? '#EAF2F0' : '#fff', color: method === m ? '#1E5C4E' : '#445',
-                }}>{METHOD_LABEL[m]}</button>
-              ))}
+              {(['thawani', 'bank'] as const).map((m) => {
+                const frozen = m === 'thawani' && THAWANI_FROZEN
+                const active = !frozen && method === m
+                return (
+                  <button
+                    key={m}
+                    aria-disabled={frozen}
+                    onClick={() => {
+                      // ثواني مجمّد: نعرض رسالة فقط ولا نغيّر الطريقة المختارة
+                      if (frozen) { setThawaniNotice(true); return }
+                      setThawaniNotice(false); setMethod(m)
+                    }}
+                    style={{
+                      padding: 10, borderRadius: 9, cursor: frozen ? 'not-allowed' : 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
+                      border: active ? '1.5px solid #1E5C4E' : '1.5px solid #DDE3EC',
+                      background: frozen ? '#F4F6FA' : active ? '#EAF2F0' : '#fff',
+                      color: frozen ? '#9AA7B8' : active ? '#1E5C4E' : '#445',
+                    }}>
+                    {METHOD_LABEL[m]}
+                    {frozen && <span style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#8A6D0F', marginTop: 2 }}>قريباً</span>}
+                  </button>
+                )
+              })}
             </div>
 
-            {method === 'thawani' && (
+            {thawaniNotice && (
+              <div role="status" style={{ background: '#FBF3D5', border: '1px solid #F0DFA0', color: '#8A6D0F', borderRadius: 10, padding: '10px 12px', marginBottom: 10, fontSize: 13, fontWeight: 700, textAlign: 'center' }}>
+                ⏳ التفعيل في قيد الإجراءات
+              </div>
+            )}
+
+            {method === 'thawani' && !THAWANI_FROZEN && (
               <div style={{ background: '#F4F8F7', borderRadius: 10, padding: 16, marginBottom: 10, textAlign: 'center', fontSize: 13, color: '#445', lineHeight: 1.8 }}>
                 🔒 ستنتقل لصفحة الدفع الآمنة من ثواني لإدخال بيانات بطاقتك. لا نطّلع على بيانات بطاقتك أبداً.
               </div>
