@@ -304,6 +304,30 @@ const exact: Record<string, string> = {
   'إيرادات': 'Revenue',
   'مصروفات': 'Expenses',
   'سبب': 'Reason',
+
+  // --- مساعد رسوم Pay (AiAssistant.tsx) ---
+  'المساعد الذكي': 'AI Assistant',
+  'افتح المساعد الذكي': 'Open AI Assistant',
+  'مساعد رسوم Pay': 'RusoomPay Assistant',
+  'يعرف بيانات مدرستك': "Knows your school's data",
+  'محادثة جديدة': 'New chat',
+  'بدء محادثة جديدة': 'Start a new chat',
+  'اكتب سؤالك…': 'Type your question…',
+  'إرسال': 'Send',
+  'مدعوم بالذكاء الاصطناعي · قد يخطئ، تحقّق من المعلومات المهمة':
+    'Powered by AI · It may make mistakes, verify important information',
+  'مرحباً 👋 أنا مساعد رسوم Pay. أشرح لك أي صفحة في النظام، وأجيب عن أسئلتك حول بيانات مدرستك. اسألني ما تشاء.':
+    "Hi 👋 I'm the RusoomPay Assistant. I can explain any page in the system and answer questions about your school's data. Ask me anything.",
+  'أعطني نبذة عن برنامج RusoomPay': 'Give me an overview of RusoomPay',
+  'ما هي صلاحيات مستخدمي RusoomPay؟': "What are RusoomPay users' permissions?",
+  'كم طالب متأخر عن السداد؟': 'How many students are overdue on payment?',
+  'كيف أرسل تذكير دفع؟': 'How do I send a payment reminder?',
+  'كيف أصدّر تقريراً مالياً؟': 'How do I export a financial report?',
+  'اشرح لي نسبة التحصيل': 'Explain the collection rate to me',
+  'وصلت الحدّ المسموح مؤقتاً. حاول بعد قليل.': "You've temporarily hit the limit. Try again shortly.",
+  'الطلب استغرق وقتاً طويلاً. حاول بسؤال أقصر.': 'The request took too long. Try a shorter question.',
+  'لم يصل رد صالح. حاول مرة أخرى.': "No valid reply came back. Please try again.",
+  'تعذّر الاتصال بالخادم. حاول مجدداً بعد لحظات.': 'Could not reach the server. Please try again shortly.',
 }
 
 // A conservative word-level fallback is used only for UI-looking strings that contain
