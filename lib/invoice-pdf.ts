@@ -46,6 +46,7 @@ export function generateInvoice(d: InvoiceData) {
   })()
   const labels = isEn ? {
     invoice: 'Invoice',
+    invoiceNumber: 'No.',
     paid: 'Paid',
     student: 'Student',
     studentCode: 'Student ID',
@@ -60,6 +61,7 @@ export function generateInvoice(d: InvoiceData) {
     thanks: 'Thank you for your trust',
   } : {
     invoice: 'فاتورة',
+    invoiceNumber: 'رقم',
     paid: 'مدفوعة',
     student: 'الطالب',
     studentCode: 'الرقم المدرسي',
@@ -144,7 +146,7 @@ export function generateInvoice(d: InvoiceData) {
     </div>
     <div class="inv-title">
       <h1>${labels.invoice}</h1>
-      <div class="no">رقم: ${d.invoiceNo}<br>${date}</div>
+      <div class="no">${labels.invoiceNumber}: ${d.invoiceNo}<br>${date}</div>
       <div class="inv-badge">${labels.paid}</div>
     </div>
   </div>
