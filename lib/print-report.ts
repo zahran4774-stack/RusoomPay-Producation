@@ -71,8 +71,13 @@ export async function printReport(opts: {
     : `<div class="rep-logo">${initial}</div>`
 
   const thead = uiColumns.map((c) => `<th>${c.label}</th>`).join('')
+  // ⚠️ القيم أيضاً تُترجَم (لا فقط رؤوس الأعمدة): translateText تعتمد "الكل أو لا
+  // شيء" على عبارة كاملة مطابقة تماماً — فاسم طالب أو نص حر لا يطابق أي شيء
+  // بالقاموس ويمرّ دون تغيير، بينما كلمة حالة ثابتة زي "نشط" تُترجَم بأمان.
+  const cellText = (v: string | number | undefined) =>
+    typeof v === 'string' ? translateText(v, language) : v
   const tbody = rows.map((r) =>
-    '<tr>' + uiColumns.map((c) => `<td>${r[c.key] ?? '—'}</td>`).join('') + '</tr>'
+    '<tr>' + uiColumns.map((c) => `<td>${cellText(r[c.key]) ?? '—'}</td>`).join('') + '</tr>'
   ).join('')
 
   const html = `<!DOCTYPE html><html dir="${isEn ? "ltr" : "rtl"}" lang="${isEn ? "en" : "ar"}"><head><meta charset="utf-8"><title>${uiTitle}</title>
