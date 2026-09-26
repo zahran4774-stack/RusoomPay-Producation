@@ -10,6 +10,7 @@ import {
   CheckCircle2, XCircle, CircleDot, type LucideIcon,
 } from 'lucide-react'
 import CopilotWithActions from './CopilotWithActions'
+import { useLanguage } from '@/components/i18n/LanguageProvider'
 
 type Data = Record<string, number>
 
@@ -27,16 +28,20 @@ export default function DashboardClient({
   smartRecs: any[]
   impact: { actions_this_month?: number; collected_this_month?: number } | null
 }) {
+  const { language } = useLanguage()
   const fmt = (n: number) => (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
   const int = (n: number) => (n ?? 0).toLocaleString('en-US')
   const collection = data.collection_rate ?? 100
 
   // التنبيهات التشغيلية (تحتاج إجراءً الآن) — دائماً أول ما يُرى، فوق التبويبات
-  const alerts: { icon: LucideIcon; text: string; href: string; tone: 'amber' | 'red' }[] = []
+  // ⚠️ count و label منفصلان عمداً (لا نص واحد مدموج بالرقم): القيمة الرقمية
+  // تتغيّر باستمرار فلا يمكن أبداً أن تطابق قاموس ترجمة ثابت لو دُمجت بالنص.
+  // بفصلهما إلى عقدتَي DOM مستقلّتين، يبقى الرقم كما هو ويُترجَم النص الثابت وحده.
+  const alerts: { icon: LucideIcon; count: number; label: string; href: string; tone: 'amber' | 'red' }[] = []
   if (role === 'owner' && (data.pending_salary ?? 0) > 0)
-    alerts.push({ icon: Bell, text: `${data.pending_salary} طلب تعديل راتب بانتظار اعتمادك`, href: '/employees', tone: 'amber' })
+    alerts.push({ icon: Bell, count: data.pending_salary, label: 'طلب تعديل راتب بانتظار اعتمادك', href: '/employees', tone: 'amber' })
   if (isStaff && (data.overdue_count ?? 0) > 0)
-    alerts.push({ icon: TriangleAlert, text: `${data.overdue_count} فاتورة متأخّرة عن موعد السداد`, href: '/fees', tone: 'red' })
+    alerts.push({ icon: TriangleAlert, count: data.overdue_count, label: 'فاتورة متأخّرة عن موعد السداد', href: '/fees', tone: 'red' })
 
   const hasCopilot = isStaff && copilot && copilot.ok !== false
   const hasAnalytics = canFinance && !!analytics?.months && analytics.months.length > 0
@@ -106,7 +111,7 @@ export default function DashboardClient({
                 }}
               >
                 <AlertIcon className="ep-alert-ico" size={20} strokeWidth={2} color={a.tone === 'red' ? '#A5331F' : '#7A5C0A'} />
-                <span style={{ flex: 1, color: a.tone === 'red' ? '#A5331F' : '#7A5C0A', fontWeight: 600, fontSize: 14.5 }}>{a.text}</span>
+                <span style={{ flex: 1, color: a.tone === 'red' ? '#A5331F' : '#7A5C0A', fontWeight: 600, fontSize: 14.5 }}>{a.count} {a.label}</span>
                 <span style={{ color: '#8A94A6', fontSize: 18 }}>‹</span>
               </Link>
             )
@@ -196,10 +201,13 @@ export default function DashboardClient({
                   }}>
                     <EvIcon size={15} strokeWidth={2.2} color={ev.color} />
                   </span>
-                  <span style={{ flex: 1, fontSize: 14, color: '#1A2530', paddingTop: 6, lineHeight: 1.5 }}>
+                  {/* ⚠️ r.action / r.details: نصّ فعلي مولَّد ومخزَّن من الخادم وقت وقوع
+                      الحدث — ليس نصّ واجهة ثابتاً. لا يمكن لأي قاموس ترجمة جهة العميل
+                      ترجمته؛ يبقى عربياً حتى لو أُضيف نظام ترجمة خلفي/قاعدة بيانات لاحقاً. */}
+                  <span style={{ flex: 1, fontSize: 14, color: '#1A2530', paddingTop: 6, lineHeight: 1.5 }} data-i18n-ignore="true">
                     {r.action}{r.details ? <span style={{ color: '#8A94A6' }}> · {r.details}</span> : null}
                   </span>
-                  <span style={{ fontSize: 12, color: '#9AA7B8', paddingTop: 8, flex: '0 0 auto' }}>{relTime(r.created_at)}</span>
+                  <span style={{ fontSize: 12, color: '#9AA7B8', paddingTop: 8, flex: '0 0 auto' }}>{relTime(r.created_at, language)}</span>
                 </div>
               )
             })}
@@ -298,6 +306,8 @@ function CollectionChart({ months, thisYear, lastYear, sym }: {
 }
 
 // ═══ تصنيف العمليات: أيقونة + لون حسب النوع (بدل الإيموجي) ═══
+// ⚠️ يعتمد على مطابقة كلمات عربية داخل r.action القادم من الخادم — يبقى كما هو
+// بصرف النظر عن اللغة، لأن r.action نفسه نصّ عربي مخزَّن لا يُترجَم (انظر أعلاه).
 function eventMeta(action: string): { icon: LucideIcon; color: string; bg: string; border: string } {
   if (action.includes('دفعة') || action.includes('دفع'))
     return { icon: Banknote, color: '#1A7A45', bg: '#EAF7F0', border: '#BFE5D0' }        // مالي وارد — أخضر
@@ -316,10 +326,18 @@ function eventMeta(action: string): { icon: LucideIcon; color: string; bg: strin
   return { icon: CircleDot, color: '#8A94A6', bg: '#F5F7FA', border: '#E3E8EE' }         // افتراضي — محايد
 }
 
-// وقت نسبي بالعربية
-function relTime(iso: string): string {
+// وقت نسبي — مُحسوب محلياً من الطابع الزمني، لذا يُترجَم بأمان عبر معامل اللغة
+// (على عكس r.action، هذا النص لا يأتي من قاعدة البيانات).
+function relTime(iso: string, language: 'ar' | 'en'): string {
   const diff = Date.now() - new Date(iso).getTime()
   const m = Math.floor(diff / 60000), h = Math.floor(diff / 3600000), d = Math.floor(diff / 86400000)
+  if (language === 'en') {
+    if (m < 1) return 'Now'
+    if (m < 60) return `${m}m ago`
+    if (h < 24) return `${h}h ago`
+    if (d < 30) return `${d}d ago`
+    return new Date(iso).toISOString().slice(0, 10)
+  }
   if (m < 1) return 'الآن'
   if (m < 60) return `قبل ${m} د`
   if (h < 24) return `قبل ${h} س`
