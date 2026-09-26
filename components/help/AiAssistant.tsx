@@ -221,7 +221,7 @@ export default function AiAssistant() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="اكتب سؤالك بالعربي…"
+            placeholder="اكتب سؤالك…"
             rows={1}
             style={S.textarea}
             disabled={loading}
