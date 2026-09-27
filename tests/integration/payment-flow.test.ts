@@ -26,6 +26,7 @@ d('تدفّق الدفع الكامل (تكامل)', () => {
     // تجهيز بيانات اختبار معزولة
     // is_test:true, active:false — تحصين مضاعف: حتى لو فشل afterAll
     // تبقى هذه المدرسة مستثناة فوراً من أي إحصائية حقيقية.
+
     const { data: school, error: schoolError } = await admin
       .from('schools')
       .insert({
@@ -38,7 +39,10 @@ d('تدفّق الدفع الكامل (تكامل)', () => {
       .single()
 
     expect(schoolError).toBeNull()
-    expect(school).toBeTruthy()
+
+    if (!school) {
+      throw new Error('Failed to create integration test school')
+    }
 
     schoolId = school.id
 
@@ -53,7 +57,10 @@ d('تدفّق الدفع الكامل (تكامل)', () => {
       .single()
 
     expect(studentError).toBeNull()
-    expect(student).toBeTruthy()
+
+    if (!student) {
+      throw new Error('Failed to create integration test student')
+    }
 
     studentId = student.id
 
@@ -71,7 +78,10 @@ d('تدفّق الدفع الكامل (تكامل)', () => {
       .single()
 
     expect(feeInsertError).toBeNull()
-    expect(fee).toBeTruthy()
+
+    if (!fee) {
+      throw new Error('Failed to create integration test fee')
+    }
 
     feeId = fee.id
   })
@@ -79,7 +89,10 @@ d('تدفّق الدفع الكامل (تكامل)', () => {
   afterAll(async () => {
     // تنظيف بيانات الاختبار
     if (schoolId) {
-      await admin.from('schools').delete().eq('id', schoolId)
+      await admin
+        .from('schools')
+        .delete()
+        .eq('id', schoolId)
     }
   })
 
@@ -101,7 +114,11 @@ d('تدفّق الدفع الكامل (تكامل)', () => {
       .single()
 
     expect(pendingError).toBeNull()
-    expect(pending).toBeTruthy()
+
+    if (!pending) {
+      throw new Error('Failed to retrieve pending payment')
+    }
+
     expect(pending.txn_state ?? 'pending').toBe('pending')
   })
 
@@ -122,25 +139,31 @@ d('تدفّق الدفع الكامل (تكامل)', () => {
       .single()
 
     expect(feeError).toBeNull()
-    expect(fee).toBeTruthy()
+
+    if (!fee) {
+      throw new Error('Failed to retrieve updated student fee')
+    }
+
     expect(Number(fee.paid)).toBe(400)
   })
 
   it('3) القيد المزدوج متوازن (مدين = دائن)', async () => {
     const { data: lines, error } = await admin
       .from('journal_lines')
-      .select('debit, credit, journal_entries!inner(school_id)')
+      .select(
+        'debit, credit, journal_entries!inner(school_id)',
+      )
       .eq('journal_entries.school_id', schoolId)
 
     expect(error).toBeNull()
 
     const totalD = (lines ?? []).reduce(
-      (s, l) => s + Number(l.debit),
+      (sum, line) => sum + Number(line.debit),
       0,
     )
 
     const totalC = (lines ?? []).reduce(
-      (s, l) => s + Number(l.credit),
+      (sum, line) => sum + Number(line.credit),
       0,
     )
 
@@ -160,7 +183,10 @@ d('تدفّق الدفع الكامل (تكامل)', () => {
       .single()
 
     expect(otherError).toBeNull()
-    expect(other).toBeTruthy()
+
+    if (!other) {
+      throw new Error('Failed to create second integration test school')
+    }
 
     const { data: fees, error: feesError } = await admin
       .from('student_fees')
@@ -168,8 +194,14 @@ d('تدفّق الدفع الكامل (تكامل)', () => {
       .eq('school_id', other.id)
 
     expect(feesError).toBeNull()
-    expect((fees ?? []).find((f) => f.id === feeId)).toBeUndefined()
 
-    await admin.from('schools').delete().eq('id', other.id)
+    expect(
+      (fees ?? []).find((fee) => fee.id === feeId),
+    ).toBeUndefined()
+
+    await admin
+      .from('schools')
+      .delete()
+      .eq('id', other.id)
   })
 })
