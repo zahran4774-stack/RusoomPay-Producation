@@ -2,13 +2,23 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { notifyOwnerNewSubscriber } from "@/lib/whatsapp";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function getSupabaseAdmin() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error(
+      "Supabase environment variables are not configured"
+    );
+  }
+
+  return createClient(supabaseUrl, serviceRoleKey);
+}
 
 export async function POST(req: NextRequest) {
   try {
+    const supabase = getSupabaseAdmin();
+
     const body = await req.json();
     const { schoolName, contactName, phone, email, city, plan } = body;
 
@@ -44,13 +54,27 @@ export async function POST(req: NextRequest) {
     }
 
     // إرسال إشعار واتساب لصاحب المنصة — بشكل غير متزامن حتى لا يؤخر الرد
-    notifyOwnerNewSubscriber({ schoolName, contactName, phone, email, city, plan }).catch(
-      (err) => console.error("[register] notify error:", err)
+    notifyOwnerNewSubscriber({
+      schoolName,
+      contactName,
+      phone,
+      email,
+      city,
+      plan,
+    }).catch((err) =>
+      console.error("[register] notify error:", err)
     );
 
-    return NextResponse.json({ ok: true, id: school.id }, { status: 201 });
+    return NextResponse.json(
+      { ok: true, id: school.id },
+      { status: 201 }
+    );
   } catch (err) {
     console.error("[register] unexpected error:", err);
-    return NextResponse.json({ error: "خطأ غير متوقع" }, { status: 500 });
+
+    return NextResponse.json(
+      { error: "خطأ غير متوقع" },
+      { status: 500 }
+    );
   }
 }
