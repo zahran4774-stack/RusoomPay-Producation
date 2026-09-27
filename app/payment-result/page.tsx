@@ -15,12 +15,22 @@ import { toE164 } from "@/lib/phone";
 import { sendWhatsAppTemplate } from "@/lib/whatsapp";
 import Link from "next/link";
 
-const supabaseAdmin = createAdminClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function getSupabaseAdmin() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const fmt = (n: number) => Number(n).toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error("Supabase environment variables are not configured");
+  }
+
+  return createAdminClient(supabaseUrl, serviceRoleKey);
+}
+
+const fmt = (n: number) =>
+  Number(n).toLocaleString("en-US", {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
+  });
 
 type Receipt = {
   studentName: string;
@@ -30,13 +40,18 @@ type Receipt = {
 };
 
 async function fetchReceipt(pendingId: string): Promise<Receipt | null> {
+  const supabaseAdmin = getSupabaseAdmin();
+
   const { data } = await supabaseAdmin
     .from("pending_payments")
-    .select("amount, resolved_at, student_fees ( description, students ( full_name ) )")
+    .select(
+      "amount, resolved_at, student_fees ( description, students ( full_name ) )"
+    )
     .eq("id", pendingId)
     .single();
 
   if (!data) return null;
+
   return {
     // @ts-expect-error - shape depends on join
     studentName: data.student_fees?.students?.full_name || "",
@@ -63,7 +78,10 @@ async function sendWhatsAppConfirmation(confirmResult: {
     const amount = confirmResult.amount;
 
     if (!phone || !amount) {
-      console.error("whatsapp confirmation skipped: missing phone or amount", { phone, amount });
+      console.error(
+        "whatsapp confirmation skipped: missing phone or amount",
+        { phone, amount }
+      );
       return;
     }
 
@@ -93,6 +111,7 @@ async function sendWhatsAppConfirmation(confirmResult: {
             "6": fmt(remaining),
           }
     );
+
     if (!result.ok) {
       console.error("send-whatsapp failed:", result.error, { to });
     }
@@ -102,6 +121,8 @@ async function sendWhatsAppConfirmation(confirmResult: {
 }
 
 async function resolvePayment(pendingId: string) {
+  const supabaseAdmin = getSupabaseAdmin();
+
   const { data: pending } = await supabaseAdmin
     .from("pending_payments")
     .select("id, provider_ref, txn_state, status, method, amount")
@@ -121,47 +142,71 @@ async function resolvePayment(pendingId: string) {
   }
 
   let session;
+
   try {
     session = await retrieveSession(pending.provider_ref);
   } catch {
     return { ok: false, reason: "تعذر التحقق من حالة الدفع" };
   }
 
-  if (session.clientReferenceId && session.clientReferenceId !== pending.id) {
+  if (
+    session.clientReferenceId &&
+    session.clientReferenceId !== pending.id
+  ) {
     await supabaseAdmin.rpc("mark_gateway_payment_failed", {
       p_id: pending.id,
       p_reason: "client_reference_id_mismatch",
     });
+
     return { ok: false, reason: "بيانات الجلسة غير متطابقة" };
   }
 
   if (session.paymentStatus === "paid") {
     const expectedBaisa = Math.round(Number(pending.amount) * 1000);
-    if (session.totalAmountBaisa !== null && session.totalAmountBaisa !== expectedBaisa) {
+
+    if (
+      session.totalAmountBaisa !== null &&
+      session.totalAmountBaisa !== expectedBaisa
+    ) {
       await supabaseAdmin.rpc("mark_gateway_payment_failed", {
         p_id: pending.id,
         p_reason: `amount_mismatch_expected_${expectedBaisa}_got_${session.totalAmountBaisa}`,
       });
-      return { ok: false, reason: "المبلغ المدفوع لا يطابق المبلغ المطلوب" };
+
+      return {
+        ok: false,
+        reason: "المبلغ المدفوع لا يطابق المبلغ المطلوب",
+      };
     }
 
-    const { data: confirmResult, error } = await supabaseAdmin.rpc("confirm_gateway_payment", {
-      p_id: pending.id,
-      p_provider_ref: pending.provider_ref,
-    });
-    if (error) return { ok: false, reason: error.message };
+    const { data: confirmResult, error } = await supabaseAdmin.rpc(
+      "confirm_gateway_payment",
+      {
+        p_id: pending.id,
+        p_provider_ref: pending.provider_ref,
+      }
+    );
+
+    if (error) {
+      return { ok: false, reason: error.message };
+    }
 
     // لو الويب هوك سبق واعتمد الدفعة، لا نُرسل واتساب مكرر
     if (!confirmResult?.already_confirmed) {
       await sendWhatsAppConfirmation(confirmResult);
     }
-    return { ok: true, alreadyConfirmed: Boolean(confirmResult?.already_confirmed) };
+
+    return {
+      ok: true,
+      alreadyConfirmed: Boolean(confirmResult?.already_confirmed),
+    };
   }
 
   await supabaseAdmin.rpc("mark_gateway_payment_failed", {
     p_id: pending.id,
     p_reason: `thawani_status_${session.paymentStatus}`,
   });
+
   return { ok: false, reason: "لم تكتمل عملية الدفع" };
 }
 
@@ -172,7 +217,11 @@ export default async function PaymentResultPage({
 }) {
   const { status, pending: pendingId } = await searchParams;
 
-  let result: { ok: boolean; reason?: string; alreadyConfirmed?: boolean } = {
+  let result: {
+    ok: boolean;
+    reason?: string;
+    alreadyConfirmed?: boolean;
+  } = {
     ok: false,
     reason: "بيانات ناقصة",
   };
@@ -180,11 +229,16 @@ export default async function PaymentResultPage({
   if (pendingId && status !== "cancel") {
     result = await resolvePayment(pendingId);
   } else if (status === "cancel") {
-    result = { ok: false, reason: "تم إلغاء عملية الدفع" };
+    result = {
+      ok: false,
+      reason: "تم إلغاء عملية الدفع",
+    };
   }
 
   const success = result.ok;
-  const receipt = success && pendingId ? await fetchReceipt(pendingId) : null;
+
+  const receipt =
+    success && pendingId ? await fetchReceipt(pendingId) : null;
 
   return (
     <div
@@ -208,11 +262,28 @@ export default async function PaymentResultPage({
           boxShadow: "0 2px 12px rgba(0,0,0,.08)",
         }}
       >
-        <div style={{ fontSize: 48, marginBottom: 12 }}>{success ? "✅" : "⚠️"}</div>
-        <h2 style={{ color: "#0A1D33", margin: "0 0 8px", fontFamily: "Cairo" }}>
+        <div style={{ fontSize: 48, marginBottom: 12 }}>
+          {success ? "✅" : "⚠️"}
+        </div>
+
+        <h2
+          style={{
+            color: "#0A1D33",
+            margin: "0 0 8px",
+            fontFamily: "Cairo",
+          }}
+        >
           {success ? "تم الدفع بنجاح" : "تعذّر إتمام الدفع"}
         </h2>
-        <p style={{ color: "#667", fontSize: 14, lineHeight: 1.8, margin: "0 0 20px" }}>
+
+        <p
+          style={{
+            color: "#667",
+            fontSize: 14,
+            lineHeight: 1.8,
+            margin: "0 0 20px",
+          }}
+        >
           {success
             ? "تم تأكيد دفعتك وتحديث الفاتورة تلقائياً."
             : result.reason || "حدث خطأ أثناء معالجة الدفعة."}
@@ -237,14 +308,18 @@ export default async function PaymentResultPage({
                 <b>الطالب:</b> {receipt.studentName}
               </div>
             )}
+
             <div>
               <b>البند:</b> {receipt.description}
             </div>
+
             <div>
               <b>المبلغ:</b> {fmt(receipt.amount)} ر.ع
             </div>
+
             <div>
-              <b>التاريخ:</b> {new Date(receipt.paidAt).toLocaleDateString("en-GB")}
+              <b>التاريخ:</b>{" "}
+              {new Date(receipt.paidAt).toLocaleDateString("en-GB")}
             </div>
           </div>
         )}
