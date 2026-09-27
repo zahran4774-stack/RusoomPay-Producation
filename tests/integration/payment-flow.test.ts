@@ -25,9 +25,8 @@ d('تدفّق الدفع الكامل (تكامل)', () => {
 
     // تجهيز بيانات اختبار معزولة
     // is_test:true, active:false — تحصين مضاعف: حتى لو فشل afterAll
-    // (إلغاء CI، انقطاع شبكة) تبقى هذه المدرسة مستثناة فوراً من أي إحصائية حقيقية،
-    // بدل أن تتراكم كبيانات نشطة.
-    const { data: school } = await admin
+    // تبقى هذه المدرسة مستثناة فوراً من أي إحصائية حقيقية.
+    const { data: school, error: schoolError } = await admin
       .from('schools')
       .insert({
         name: 'مدرسة اختبار التكامل',
@@ -38,9 +37,12 @@ d('تدفّق الدفع الكامل (تكامل)', () => {
       .select('id')
       .single()
 
-    schoolId = school!.id
+    expect(schoolError).toBeNull()
+    expect(school).toBeTruthy()
 
-    const { data: student } = await admin
+    schoolId = school.id
+
+    const { data: student, error: studentError } = await admin
       .from('students')
       .insert({
         school_id: schoolId,
@@ -50,9 +52,12 @@ d('تدفّق الدفع الكامل (تكامل)', () => {
       .select('id')
       .single()
 
-    studentId = student!.id
+    expect(studentError).toBeNull()
+    expect(student).toBeTruthy()
 
-    const { data: fee } = await admin
+    studentId = student.id
+
+    const { data: fee, error: feeInsertError } = await admin
       .from('student_fees')
       .insert({
         school_id: schoolId,
@@ -65,7 +70,10 @@ d('تدفّق الدفع الكامل (تكامل)', () => {
       .select('id')
       .single()
 
-    feeId = fee!.id
+    expect(feeInsertError).toBeNull()
+    expect(fee).toBeTruthy()
+
+    feeId = fee.id
   })
 
   afterAll(async () => {
@@ -86,12 +94,14 @@ d('تدفّق الدفع الكامل (تكامل)', () => {
     expect(error).toBeNull()
     expect(data).toBeTruthy()
 
-    const { data: pending } = await admin
+    const { data: pending, error: pendingError } = await admin
       .from('pending_payments')
       .select('*')
       .eq('id', data)
       .single()
 
+    expect(pendingError).toBeNull()
+    expect(pending).toBeTruthy()
     expect(pending.txn_state ?? 'pending').toBe('pending')
   })
 
@@ -117,10 +127,12 @@ d('تدفّق الدفع الكامل (تكامل)', () => {
   })
 
   it('3) القيد المزدوج متوازن (مدين = دائن)', async () => {
-    const { data: lines } = await admin
+    const { data: lines, error } = await admin
       .from('journal_lines')
       .select('debit, credit, journal_entries!inner(school_id)')
       .eq('journal_entries.school_id', schoolId)
+
+    expect(error).toBeNull()
 
     const totalD = (lines ?? []).reduce(
       (s, l) => s + Number(l.debit),
@@ -136,7 +148,7 @@ d('تدفّق الدفع الكامل (تكامل)', () => {
   })
 
   it('4) عزل البيانات — مدرسة أخرى لا ترى هذه الرسوم', async () => {
-    const { data: other } = await admin
+    const { data: other, error: otherError } = await admin
       .from('schools')
       .insert({
         name: 'مدرسة أخرى',
@@ -147,13 +159,17 @@ d('تدفّق الدفع الكامل (تكامل)', () => {
       .select('id')
       .single()
 
-    const { data: fees } = await admin
+    expect(otherError).toBeNull()
+    expect(other).toBeTruthy()
+
+    const { data: fees, error: feesError } = await admin
       .from('student_fees')
       .select('id')
-      .eq('school_id', other!.id)
+      .eq('school_id', other.id)
 
+    expect(feesError).toBeNull()
     expect((fees ?? []).find((f) => f.id === feeId)).toBeUndefined()
 
-    await admin.from('schools').delete().eq('id', other!.id)
+    await admin.from('schools').delete().eq('id', other.id)
   })
 })
