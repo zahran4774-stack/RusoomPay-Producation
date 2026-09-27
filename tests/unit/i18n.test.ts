@@ -29,9 +29,15 @@ describe('i18n — translateText (safe mode)', () => {
 
 describe('i18n — context-sensitive guards', () => {
   it('no word-order errors from joining dictionary units', () => {
-    expect(translateText('رسوم النقل المدرسي', 'en')).toBe('رسوم النقل المدرسي')
-    expect(translateText('اسم الموظف مطلوب', 'en')).toBe('اسم الموظف مطلوب')
-  })
+  const transport = translateText('رسوم النقل المدرسي', 'en')
+  const employee = translateText('اسم الموظف مطلوب', 'en')
+
+  expect(transport).toBe('School Transport Fees')
+  expect(transport).not.toMatch(/[\u0600-\u06FF]/)
+
+  expect(employee).not.toMatch(/[\u0600-\u06FF]/)
+  expect(employee).toMatch(/[A-Za-z]/)
+})
   it('particles only translate when standalone', () => {
     expect(translateText('من', 'en')).toBe('From')
     expect(translateText('من 100', 'en')).toBe('من 100')
