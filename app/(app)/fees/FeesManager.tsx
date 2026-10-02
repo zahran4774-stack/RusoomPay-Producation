@@ -673,14 +673,83 @@ function AddFeeModal({ student, onClose }: { student: Student; onClose: () => vo
   )
 }
 
+type EditablePayment = {
+  ok: boolean
+  payment_id?: string
+  amount?: number
+  method?: string
+  paid_at?: string
+  editable?: boolean
+  hours_left?: number
+}
+
+const METHOD_OPTIONS: { value: string; label: string }[] = [
+  { value: 'cash', label: 'نقداً' }, { value: 'onsite', label: 'نقداً (في المدرسة)' },
+  { value: 'bank', label: 'تحويل بنكي' }, { value: 'card', label: 'بطاقة' },
+  { value: 'check', label: 'شيك' }, { value: 'thawani', label: 'دفع إلكتروني' },
+]
+
 function InvoiceModal({ student, fee, school, sym, fmt, onClose }: {
   student: Student; fee: Fee; school: School; sym: string; fmt: (n: number) => string; onClose: () => void
 }) {
+  const supabase = createClient()
   const due = fee.total - fee.paid
   const ref = `INV-${student.code}-${new Date().toISOString().slice(0, 10)}`
   const scName = (school?.name ?? 'المدرسة') + (school?.branch ? ` — ${school.branch}` : '')
   const status = due <= 0.0005 ? 'مسدّدة بالكامل' : fee.paid > 0 ? 'مسدّدة جزئياً' : 'غير مسدّدة'
   const [pdfBusy, setPdfBusy] = useState(false)
+
+  // ─── تصحيح/حذف آخر دفعة — يظهر فقط إن كانت خلال آخر 24 ساعة ───
+  const [editablePay, setEditablePay] = useState<EditablePayment | null>(null)
+  const [showCorrect, setShowCorrect] = useState(false)
+  const [corrAmount, setCorrAmount] = useState('')
+  const [corrDate, setCorrDate] = useState('')
+  const [corrMethod, setCorrMethod] = useState('bank')
+  const [corrBusy, setCorrBusy] = useState(false)
+  const [corrErr, setCorrErr] = useState('')
+  const [corrMsg, setCorrMsg] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  useEffect(() => {
+    supabase.rpc('latest_editable_payment', { p_fee_id: fee.id }).then(({ data }) => {
+      if (data?.ok) {
+        setEditablePay(data)
+        setCorrAmount(String(data.amount ?? ''))
+        setCorrDate(data.paid_at ?? '')
+        setCorrMethod(data.method ?? 'bank')
+      }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fee.id])
+
+  async function submitCorrection() {
+    if (!editablePay?.payment_id) return
+    setCorrErr(''); setCorrMsg('')
+    const amt = parseFloat(corrAmount)
+    if (!amt || amt <= 0) { setCorrErr('أدخل مبلغاً صحيحاً'); return }
+    if (!corrDate) { setCorrErr('أدخل التاريخ'); return }
+    setCorrBusy(true)
+    const { error } = await supabase.rpc('edit_payment_within_window', {
+      p_payment_id: editablePay.payment_id, p_new_amount: amt, p_new_paid_at: corrDate, p_new_method: corrMethod,
+    })
+    setCorrBusy(false)
+    if (error) { setCorrErr(error.message); return }
+    setCorrMsg('✓ تم تصحيح الدفعة بنجاح')
+    setShowCorrect(false)
+    setTimeout(() => window.location.reload(), 1200)
+  }
+
+  async function submitDelete() {
+    if (!editablePay?.payment_id) return
+    setCorrErr('')
+    setCorrBusy(true)
+    const { error } = await supabase.rpc('delete_payment_within_window', { p_payment_id: editablePay.payment_id })
+    setCorrBusy(false)
+    if (error) { setCorrErr(error.message); return }
+    setCorrMsg('✓ تم حذف الدفعة بنجاح')
+    setConfirmDelete(false)
+    setTimeout(() => window.location.reload(), 1200)
+  }
 
   async function downloadPDF() {
     setPdfBusy(true)
@@ -786,6 +855,84 @@ function InvoiceModal({ student, fee, school, sym, fmt, onClose }: {
             فاتورة رسمية صادرة عن {scName} — {ref}
           </div>
         </div>
+
+        {/* قسم تصحيح/حذف آخر دفعة — يظهر فقط خلال 24 ساعة من تسجيلها */}
+        {editablePay?.ok && editablePay.editable && (
+          <div className="inv-no-print" style={{ padding: '14px 20px', borderTop: '1px solid #EEF2F1', background: '#FFFBF0' }}>
+            {corrMsg && <div style={{ color: '#1A7A45', fontWeight: 700, fontSize: 13, marginBottom: 10 }}>{corrMsg}</div>}
+            {!showCorrect && !confirmDelete && (
+              <>
+                <div style={{ fontSize: 12.5, color: '#8A6D0F', marginBottom: 10 }}>
+                  ⏱ يمكن تصحيح آخر دفعة أو حذفها — متبقٍ {editablePay.hours_left} ساعة تقريباً
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button onClick={() => setShowCorrect(true)}
+                    style={{ background: '#EEF2F9', color: '#163B68', border: '1px solid #D8E2EF', borderRadius: 9, padding: '8px 16px', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    ✏️ تصحيح الدفعة
+                  </button>
+                  <button onClick={() => setConfirmDelete(true)}
+                    style={{ background: '#FBEAE8', color: '#8A2B2B', border: '1px solid #F0C9C4', borderRadius: 9, padding: '8px 16px', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    🗑️ حذف الدفعة
+                  </button>
+                </div>
+              </>
+            )}
+
+            {showCorrect && (
+              <div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                  <div style={{ flex: '1 1 110px' }}>
+                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#0F2744' }}>المبلغ</label>
+                    <input type="number" step="0.001" value={corrAmount} onChange={(e) => setCorrAmount(e.target.value)}
+                      style={{ width: '100%', padding: 8, borderRadius: 8, border: '1.5px solid #DDE3EC', fontFamily: 'inherit', fontSize: 13 }} dir="ltr" />
+                  </div>
+                  <div style={{ flex: '1 1 130px' }}>
+                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#0F2744' }}>التاريخ</label>
+                    <input type="date" value={corrDate} onChange={(e) => setCorrDate(e.target.value)}
+                      style={{ width: '100%', padding: 8, borderRadius: 8, border: '1.5px solid #DDE3EC', fontFamily: 'inherit', fontSize: 13 }} dir="ltr" />
+                  </div>
+                  <div style={{ flex: '1 1 130px' }}>
+                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#0F2744' }}>طريقة الدفع</label>
+                    <select value={corrMethod} onChange={(e) => setCorrMethod(e.target.value)}
+                      style={{ width: '100%', padding: 8, borderRadius: 8, border: '1.5px solid #DDE3EC', fontFamily: 'inherit', fontSize: 13 }}>
+                      {METHOD_OPTIONS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+                {corrErr && <div style={{ color: '#C0392B', fontSize: 12.5, fontWeight: 600, marginBottom: 8 }}>⚠ {corrErr}</div>}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={submitCorrection} disabled={corrBusy}
+                    style={{ background: '#163B68', color: '#fff', border: 0, borderRadius: 9, padding: '8px 16px', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    {corrBusy ? 'جارٍ الحفظ…' : '💾 حفظ التصحيح'}
+                  </button>
+                  <button onClick={() => { setShowCorrect(false); setCorrErr('') }}
+                    style={{ background: '#F2F5F8', color: '#0F2744', border: 0, borderRadius: 9, padding: '8px 16px', fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    إلغاء
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {confirmDelete && (
+              <div>
+                <p style={{ color: '#8A2B2B', fontSize: 13, fontWeight: 600, marginBottom: 10 }}>
+                  ⚠ سيُحذف سجل هذه الدفعة ({fmt(editablePay.amount ?? 0)} {sym}) بقيد عكسي محاسبي. هذا الإجراء لا يمكن التراجع عنه من هنا.
+                </p>
+                {corrErr && <div style={{ color: '#C0392B', fontSize: 12.5, fontWeight: 600, marginBottom: 8 }}>⚠ {corrErr}</div>}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={submitDelete} disabled={corrBusy}
+                    style={{ background: '#C0392B', color: '#fff', border: 0, borderRadius: 9, padding: '8px 16px', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    {corrBusy ? 'جارٍ الحذف…' : 'تأكيد الحذف'}
+                  </button>
+                  <button onClick={() => { setConfirmDelete(false); setCorrErr('') }}
+                    style={{ background: '#F2F5F8', color: '#0F2744', border: 0, borderRadius: 9, padding: '8px 16px', fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    تراجع
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="inv-no-print" style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', padding: '14px 20px', borderTop: '1px solid #EEF2F1' }}>
           <button onClick={onClose} style={{ padding: '10px 18px', background: '#F0F3F8', border: 'none', borderRadius: 9, cursor: 'pointer' }}>إغلاق</button>
