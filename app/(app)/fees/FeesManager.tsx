@@ -53,6 +53,10 @@ export default function FeesManager({ students, school, currency }: { students: 
   const [toast, setToast] = useState<{ text: string; ok: boolean } | null>(null)
   // حالة تجهيز تقرير الدفع الشهري (دفعوا/لم يدفعوا) قبل الطباعة
   const [reportBusy, setReportBusy] = useState(false)
+  // البحث المباشر عن فاتورة برقمها التسلسلي (INV-2026-0001)
+  const [invoiceSearch, setInvoiceSearch] = useState('')
+  const [invoiceSearchBusy, setInvoiceSearchBusy] = useState(false)
+  const [invoiceSearchErr, setInvoiceSearchErr] = useState('')
 
   // ─── تفعيل الفلتر المطلوب تلقائياً عند القدوم من School Copilot ───
   // ?status=overdue → نفس فلتر "المتأخرات فقط" (send_overdue_reminders)
@@ -225,6 +229,36 @@ export default function FeesManager({ students, school, currency }: { students: 
     }
   }
 
+  // ─── البحث المباشر عن فاتورة برقمها التسلسلي — يفتح InvoiceModal مباشرة ───
+  async function searchByInvoiceNumber() {
+    const q = invoiceSearch.trim()
+    if (!q) return
+    setInvoiceSearchBusy(true)
+    setInvoiceSearchErr('')
+    try {
+      const { data, error } = await supabase.rpc('find_payment_by_invoice_number', { p_invoice_number: q })
+      if (error || !data?.ok) {
+        setInvoiceSearchErr('لم يُعثر على فاتورة بهذا الرقم')
+        return
+      }
+      // بناء كائني student/fee المتوافقين مع InvoiceModal من نتيجة البحث المسطّحة
+      const fakeStudent: Student = {
+        id: data.student_id, code: data.student_code, full_name: data.student_name,
+        grade: data.grade, section: data.section, student_fees: [],
+      }
+      const fakeFee: Fee = {
+        id: data.fee_id, description: data.description,
+        total: data.total, paid: data.paid, due_date: data.due_date,
+      }
+      setInvoice({ student: fakeStudent, fee: fakeFee })
+      setInvoiceSearch('')
+    } catch {
+      setInvoiceSearchErr('تعذّر الاتصال — حاول مجدداً')
+    } finally {
+      setInvoiceSearchBusy(false)
+    }
+  }
+
   const inp: React.CSSProperties = {
     padding: '10px 12px', borderRadius: 10, border: '1.5px solid #DDE3EC',
     fontSize: 14, fontFamily: 'inherit', background: '#fff',
@@ -273,6 +307,33 @@ export default function FeesManager({ students, school, currency }: { students: 
           }}>
           {reportBusy ? 'جارٍ التجهيز…' : '🖨 طباعة تقرير الدفع الشهري'}
         </button>
+      </div>
+
+      {/* البحث المباشر عن فاتورة برقمها التسلسلي */}
+      <div style={{ background: '#fff', borderRadius: 14, padding: 14, marginBottom: 14, boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input
+            value={invoiceSearch}
+            onChange={(e) => { setInvoiceSearch(e.target.value); setInvoiceSearchErr('') }}
+            onKeyDown={(e) => { if (e.key === 'Enter') searchByInvoiceNumber() }}
+            placeholder="🧾 ابحث برقم الفاتورة (مثال: INV-2026-0001)"
+            style={{ ...inp, flex: '1 1 260px' }}
+            dir="ltr"
+          />
+          <button
+            onClick={searchByInvoiceNumber}
+            disabled={invoiceSearchBusy || !invoiceSearch.trim()}
+            style={{
+              ...inp, cursor: invoiceSearchBusy ? 'default' : 'pointer', fontWeight: 700,
+              background: '#163B68', color: '#fff', border: 0,
+              opacity: invoiceSearchBusy || !invoiceSearch.trim() ? 0.6 : 1,
+            }}>
+            {invoiceSearchBusy ? 'جارٍ البحث…' : 'بحث'}
+          </button>
+        </div>
+        {invoiceSearchErr && (
+          <div style={{ color: '#C0392B', fontSize: 13, fontWeight: 600, marginTop: 8 }}>⚠ {invoiceSearchErr}</div>
+        )}
       </div>
 
       {/* زر التذكير الجماعي */}
