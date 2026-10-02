@@ -2,6 +2,8 @@
 // يجلب الموظفين وطلبات تعديل الرواتب، ويمرّرها لمكوّنات العميل التفاعلية
 // تحسين الأداء: الاستعلامات المستقلّة تُنفَّذ متوازية (Promise.all).
 // الموظفون على رأس العمل فقط في الجدول والملخّصات؛ منتهو الخدمة في قسم مطوي منفصل.
+// ⚠️ زر جديد "🔑 إدارة الصلاحيات" (للمالك فقط) — مستقل تماماً عن EmployeesTable،
+// يفتح نافذة لمنح/سحب صلاحيات دقيقة (قيود، تقارير، اعتمادات) لكل إداري/محاسب.
 import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import EmployeesTable from './EmployeesTable'
@@ -11,6 +13,7 @@ import FocusScroller from '../FocusScroller'
 import SalaryRequests from './SalaryRequests'
 import InsuranceSettings from './InsuranceSettings'
 import TerminatedEmployees from './TerminatedEmployees'
+import StaffPermissionsManager from './StaffPermissionsManager'
 import PrintButton from '../PrintButton'
 import ModuleTabs from '../ModuleTabs'
 import { employeesPayrollTabs } from '../module-tabs-config'
@@ -76,6 +79,7 @@ export default async function EmployeesPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {isOwner(role as Role) && <StaffPermissionsManager />}
           <PrintButton
             school={{ name: school?.name ?? 'مدرسة', vat: school?.vat_number }}
             title="قائمة الموظفين"
