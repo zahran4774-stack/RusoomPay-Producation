@@ -3,6 +3,9 @@
 import LanguageSwitcher from '@/components/i18n/LanguageSwitcher'
 // صفحة تسجيل الدخول — مصادقة حقيقية عبر Supabase (لا تحقق في المتصفح)
 // المنطق (المصادقة، MFA، التوجيه، الاستعادة) محفوظ كما هو؛ التحسين بصري فقط.
+// ⚠️ تعديل: autoComplete على الفورم وحقلي البريد/كلمة المرور لتقليل احتمال
+// ظهور نافذة "حفظ كلمة المرور؟" من المتصفح — لا ضمان كامل عبر كل المتصفحات،
+// فالقرار النهائي محجوز للمتصفح نفسه حمايةً للمستخدم.
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
@@ -184,19 +187,19 @@ export default function LoginPage() {
               </button>
             </form>
           ) : (
-            <form onSubmit={handleLogin} className="lp-form" aria-label="تسجيل الدخول">
+            <form onSubmit={handleLogin} className="lp-form" aria-label="تسجيل الدخول" autoComplete="off">
               <label htmlFor="lp-email" className="lp-label">البريد الإلكتروني</label>
               <div className="lp-field">
                 <svg className="lp-ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 6l10 7L22 6" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round"/><rect x="2" y="4" width="20" height="16" rx="2" stroke="currentColor" strokeWidth="2" fill="none"/></svg>
                 <input id="lp-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                  required autoComplete="email" placeholder="name@school.com" aria-label="البريد الإلكتروني" />
+                  required autoComplete="off" placeholder="name@school.com" aria-label="البريد الإلكتروني" />
               </div>
 
               <label htmlFor="lp-pw" className="lp-label">كلمة المرور</label>
               <div className="lp-field">
                 <svg className="lp-ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2" stroke="currentColor" strokeWidth="2" fill="none"/><path d="M8 11V8a4 4 0 018 0v3" stroke="currentColor" strokeWidth="2" fill="none"/></svg>
                 <input id="lp-pw" type={showPw ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
-                  required autoComplete="current-password" placeholder="••••••••" aria-label="كلمة المرور" />
+                  required autoComplete="new-password" placeholder="••••••••" aria-label="كلمة المرور" />
                 <button type="button" className="lp-eye" onClick={() => setShowPw((s) => !s)}
                   aria-label={showPw ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}>
                   {showPw
@@ -314,7 +317,7 @@ export default function LoginPage() {
         </div>
         <div className="lp-stat">
           <span className="lp-stat-ic blue">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2" stroke="currentColor" strokeWidth="1.8" fill="none"/><path d="M8 11V8a4 4 0 018 0v3" stroke="currentColor" strokeWidth="1.8" fill="none"/></svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2" stroke="currentColor" strokeWidth="1.8" fill="none"/><path d="M8 11V7a4 4 0 018 0v4" stroke="currentColor" strokeWidth="1.8" fill="none"/></svg>
           </span>
           <div><b>تشفير متقدم</b><span>لحماية البيانات</span></div>
         </div>
@@ -324,8 +327,7 @@ export default function LoginPage() {
           </span>
           <div><b>دعم مخصص</b><span>جاهزون لمساعدتك</span></div>
         </div>
-    
-            </footer>
+      </footer>
 
       {/* سطر الكيان القانوني — مطلوب لتوثيق اسم العرض في واتساب للأعمال (Meta Business Verification) */}
       <p className="lp-legal">
@@ -334,5 +336,3 @@ export default function LoginPage() {
     </div>
   )
 }
-
-    
