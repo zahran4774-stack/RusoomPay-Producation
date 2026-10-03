@@ -1,6 +1,8 @@
 'use client'
 // مكوّن النقل المدرسي — باصات (مسارات متعددة + مشرفة) + اشتراكات
-// رسوم النقل تدرج ضمن الرسوم الدراسية السنوية عند تسجيل الطالب — لا فوترة شهرية منفصلة
+// ⚠️ إصلاح: أُزيل الشريط الثابت "رسم النقل يُدرج ضمن الرسوم السنوية دائماً" — كان يظهر
+// حتى لو كان دمج النقل والتغذية معطّلاً. حالة الدمج الفعلية تُعرض الآن من
+// BundleStatusNotice (مكوّن خادم يقرأ الإعداد الحي) أعلى الصفحة.
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import { printReport, type SchoolHeader } from '@/lib/print-report'
@@ -165,15 +167,6 @@ export default function TransportClient({ initialBuses, initialSubscribers, stud
 
       <div style={{ marginBottom: 16 }}>
         <BusRoster schoolName={school?.name} />
-      </div>
-
-      <div style={{ background: '#EEF3F9', border: '1px solid #DDE5EF', borderRadius: 12,
-                    padding: '12px 14px', marginBottom: 16, fontSize: 13, color: '#37506F' }}>
-        <b style={{ color: '#0F2744' }}>آلية تحصيل رسوم النقل</b>
-        <div style={{ marginTop: 4 }}>
-          رسم النقل يُدرج ضمن إجمالي الرسوم الدراسية السنوية عند تسجيل الطالب — يُحدَّد نوع النقل من شاشة الطلاب.
-          لا توجد فوترة شهرية منفصلة للنقل.
-        </div>
       </div>
 
       <div style={card}>
