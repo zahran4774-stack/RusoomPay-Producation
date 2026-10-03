@@ -128,6 +128,17 @@ export default function AppShell({
           <span /><span /><span />
         </button>
         <div className="brand"><LogoMark size={26} /> <span>Rusoom<span style={{ color: 'var(--brand)' }}>Pay</span></span></div>
+        <button
+          onClick={handleLogout}
+          aria-label="تسجيل الخروج"
+          style={{
+            marginInlineStart: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6,
+            background: 'rgba(255,255,255,.12)', color: '#fff', border: '1px solid rgba(255,255,255,.18)',
+            borderRadius: 10, padding: '7px 12px', fontSize: 13, fontWeight: 700,
+            cursor: 'pointer', fontFamily: 'inherit',
+          }}>
+          <span aria-hidden="true">⎋</span> خروج
+        </button>
       </header>
 
       <div className={`drawer-overlay ${open ? 'open' : ''}`} onClick={() => setOpen(false)} aria-hidden="true" />
@@ -135,6 +146,20 @@ export default function AppShell({
       <aside className={`app-sidebar ${open ? 'open' : ''}`}>
         <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
           <div className="side-brand"><LogoMark size={32} /> <span>Rusoom<span style={{ color: 'var(--brand)' }}>Pay</span></span></div>
+
+          {/* تسجيل الخروج في أعلى الشريط — كان أسفله ويصعب الوصول إليه (شكوى مستخدمين) */}
+          <div style={{ padding: '0 16px 10px' }}>
+            <button
+              onClick={handleLogout}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                background: 'rgba(192,57,43,.10)', color: '#E57364', border: '1px solid rgba(192,57,43,.30)',
+                borderRadius: 10, padding: '9px 12px', fontSize: 13.5, fontWeight: 700,
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}>
+              <span aria-hidden="true">⎋</span> تسجيل الخروج
+            </button>
+          </div>
 
           {(schoolLogo || schoolName) && (
             <div className="school-identity">
@@ -223,11 +248,6 @@ export default function AppShell({
             </a>
           </nav>
 
-          <div className="side-foot">
-            <button onClick={handleLogout} className="side-link" style={{ background: 'none', border: 0, width: '100%', cursor: 'pointer', font: 'inherit', textAlign: 'inherit' }}>
-              <span className="ic">⎋</span> تسجيل الخروج
-            </button>
-          </div>
         </div>
       </aside>
 
