@@ -2,7 +2,8 @@
 // تعديل بيانات الطالب — كل الحقول المتاحة في نموذج إضافة طالب، بما فيها
 // الرسوم السنوية ومبلغ التخفيض والرقم المدرسي، الإعفاء الكامل، الحالة الخاصة،
 // حالة الطالب (بما فيها "منسحب")، وإدارة كاملة للنقل والتغذية.
-// تعديل الرسوم هنا مرجعي فقط — لا يُعدّل فاتورة الرسوم القائمة تلقائياً.
+// تعديل الرسوم/التخفيض هنا يُزامَن تلقائياً مع فاتورة "الرسوم الدراسية السنوية"
+// القائمة (بالفرق) عبر RPC update_student — ويُرفض إن صار الصافي أقل من المدفوع.
 // التخفيض بمبلغ معين — النسبة تُحسب وتُعرض تلقائياً.
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -220,10 +221,11 @@ export default function EditStudent({
           <button onClick={() => setOpen(false)} style={{ background: 'none', border: 0, fontSize: 22, cursor: 'pointer', color: '#667' }}>×</button>
         </div>
 
-        <div style={{ background: '#FBF3D5', border: '1px solid #EAD9A0', borderRadius: 10, padding: '12px 14px', marginBottom: 18, fontSize: 13, color: '#7A5C0A', lineHeight: 1.8 }}>
-          ⚠️ <b>تنبيه مهم:</b> حقل "الرسوم السنوية" أدناه للسجل المرجعي فقط، ولا يُنشئ أو يُعدّل أي فاتورة فعلية.
-          لإضافة رسم حقيقي اذهب إلى{' '}
-          <a href="/fees" style={{ color: '#7A5C0A', fontWeight: 700, textDecoration: 'underline' }}>صفحة الرسوم والفواتير</a>{' '}
+        <div style={{ background: '#EAF4EE', border: '1px solid #BFE5D0', borderRadius: 10, padding: '12px 14px', marginBottom: 18, fontSize: 13, color: '#1A5C3A', lineHeight: 1.8 }}>
+          ℹ️ <b>ملاحظة:</b> تعديل "الرسوم السنوية" أو "مبلغ التخفيض" يُحدّث فاتورة «الرسوم الدراسية السنوية» القائمة
+          تلقائياً (بقيمة الفرق فقط). إن كان المبلغ المدفوع أكبر من الصافي الجديد يُرفض الحفظ.
+          لإضافة رسم جديد اذهب إلى{' '}
+          <a href="/fees" style={{ color: '#1A5C3A', fontWeight: 700, textDecoration: 'underline' }}>صفحة الرسوم والفواتير</a>{' '}
           واستخدم زر «إضافة رسم».
         </div>
 
@@ -311,8 +313,8 @@ export default function EditStudent({
             <input type="number" step="0.001" style={{ ...input, opacity: isExempt ? 0.5 : 1 }}
               value={f.annual_fee} onChange={(e) => set('annual_fee', e.target.value)}
               placeholder="0.000" dir="ltr" disabled={isExempt} />
-            <div style={{ fontSize: 10.5, color: '#B5720E', marginTop: 4 }}>
-              ⚠️ سجل مرجعي فقط — لا يُنشئ فاتورة.
+            <div style={{ fontSize: 10.5, color: '#1A7A45', marginTop: 4 }}>
+              الرسوم الأساسية قبل التخفيض — تُحدّث الفاتورة السنوية القائمة تلقائياً.
             </div>
           </div>
 
@@ -334,7 +336,7 @@ export default function EditStudent({
           {/* معاينة صافي الرسوم */}
           {!isExempt && annualFee > 0 && discountAmt > 0 && (
             <div style={{ flex: '1 1 100%', background: '#F4F8F6', border: '1px solid #BFE5D0', borderRadius: 10, padding: '10px 14px', fontSize: 13 }}>
-              <b style={{ color: '#0F2744' }}>صافي الرسوم (مرجعي):</b>{' '}
+              <b style={{ color: '#0F2744' }}>صافي الرسوم بعد التخفيض:</b>{' '}
               <span style={{ fontSize: 16, fontWeight: 800, color: '#0F9D74' }}>{fmt(netFee)} ر.ع</span>
               <span style={{ color: '#667', fontSize: 12, marginRight: 8 }}>({fmt(annualFee)} − {fmt(discountAmt)})</span>
             </div>
