@@ -22,9 +22,16 @@ export default async function AccountingPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // الصلاحية: المدير والمحاسب فقط
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (!canAccessFinance(profile?.role as Role)) redirect('/dashboard')
+  // الصلاحية: المدير والمحاسب، أو إداري منحه المالك صلاحية "التقارير" أو "القيود"
+  // (user_permissions عبر my_permissions — تُدار من «🔑 إدارة الصلاحيات» في صفحة الموظفين)
+  const [{ data: profile }, { data: perms }] = await Promise.all([
+    supabase.from('profiles').select('role').eq('id', user.id).single(),
+    supabase.rpc('my_permissions'),
+  ])
+  const granted = (perms as string[] | null) ?? []
+  if (!canAccessFinance(profile?.role as Role) && !granted.includes('reports') && !granted.includes('journal_entries')) {
+    redirect('/dashboard')
+  }
 
   const { data: school } = await supabase.from('schools').select('name, vat_number, currency').single()
   const currency = school?.currency ?? 'OMR'
