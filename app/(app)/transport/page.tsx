@@ -1,10 +1,13 @@
 // صفحة النقل المدرسي — مكوّن خادم
 // الباصات (مسارات متعددة/سائق/مشرفة/سعر/جهة دفع) + اشتراكات الطلاب + الفوترة الشهرية
+// ⚠️ إصلاح: الصفحة كانت تتجاهل إعداد "دمج النقل والتغذية" كلياً (نص ثابت يزعم أن الدمج
+// دائماً مفعّل). الآن نقرأ schools.bundle_transport_meals ونعرض الحالة الفعلية.
 import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import { isStaff, type Role } from '@/lib/roles'
 import TransportClient from './TransportClient'
 import ModuleTabs from '../ModuleTabs'
+import BundleStatusNotice from '../BundleStatusNotice'
 import { schoolServicesTabs } from '../module-tabs-config'
 
 export default async function TransportPage() {
@@ -21,7 +24,7 @@ export default async function TransportPage() {
     supabase.rpc('transport_buses'),
     supabase.rpc('transport_subscribers'),
     supabase.from('students').select('id, full_name, guardian_name').eq('status', 'active').order('full_name'),
-    supabase.from('schools').select('name, vat_number').single(),
+    supabase.from('schools').select('name, vat_number, bundle_transport_meals').single(),
   ])
 
   return (
@@ -31,6 +34,7 @@ export default async function TransportPage() {
       <p style={{ color: '#667', fontSize: 14, marginBottom: 20 }}>
         الباصات والمسارات واشتراكات الطلاب والفوترة الشهرية
       </p>
+      <BundleStatusNotice enabled={!!school?.bundle_transport_meals} service="transport" />
       <TransportClient
         initialBuses={buses || []}
         initialSubscribers={subscribers || []}
