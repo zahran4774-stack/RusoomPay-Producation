@@ -185,7 +185,7 @@ export default async function AccountingPage() {
               <JournalList
                 entries={ent}
                 currency={currency}
-                canReverse={['owner', 'accountant'].includes(profile?.role ?? '')}
+                canReverse={['owner', 'accountant'].includes(profile?.role ?? '') || granted.includes('journal_entries')}
               />
             </div>
           </>
