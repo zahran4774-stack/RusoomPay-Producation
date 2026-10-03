@@ -676,6 +676,7 @@ function AddFeeModal({ student, onClose }: { student: Student; onClose: () => vo
 type EditablePayment = {
   ok: boolean
   payment_id?: string
+  invoice_number?: string | null
   amount?: number
   method?: string
   paid_at?: string
@@ -694,7 +695,6 @@ function InvoiceModal({ student, fee, school, sym, fmt, onClose }: {
 }) {
   const supabase = createClient()
   const due = fee.total - fee.paid
-  const ref = `INV-${student.code}-${new Date().toISOString().slice(0, 10)}`
   const scName = (school?.name ?? 'المدرسة') + (school?.branch ? ` — ${school.branch}` : '')
   const status = due <= 0.0005 ? 'مسدّدة بالكامل' : fee.paid > 0 ? 'مسدّدة جزئياً' : 'غير مسدّدة'
   const [pdfBusy, setPdfBusy] = useState(false)
@@ -709,6 +709,11 @@ function InvoiceModal({ student, fee, school, sym, fmt, onClose }: {
   const [corrErr, setCorrErr] = useState('')
   const [corrMsg, setCorrMsg] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
+
+  // رقم الفاتورة: الرقم التسلسلي الحقيقي لآخر دفعة على هذا البند (INV-2026-0001)
+  // من payments.invoice_number — لا الرقم المُركَّب القديم الذي كان عرضة للتكرار.
+  // بند لم تُسجَّل عليه أي دفعة بعد: لا رقم إيصال له.
+  const ref = editablePay?.invoice_number || (fee.paid > 0 ? '—' : 'بانتظار السداد')
 
   useEffect(() => {
     supabase.rpc('latest_editable_payment', { p_fee_id: fee.id }).then(({ data }) => {
