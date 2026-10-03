@@ -1,10 +1,4 @@
 'use client'
-// تسعير المراحل — رسوم سنوية افتراضية لكل مرحلة دراسية، تُستخدم لتعبئة حقل
-// "الرسوم السنوية" تلقائياً عند اختيار المرحلة في نموذج تسجيل طالب جديد.
-// + دمج النقل والتغذية ضمن الرسوم الدراسية — إعداد عام على مستوى المدرسة:
-// عند التفعيل، يُدمج مبلغ باقة التغذية ومسار الباص المختارين تلقائياً في
-// رسم واحد موحّد عند تسجيل طالب جديد، بدل فاتورتين منفصلتين. يُطبَّق على
-// الطلاب الجدد فقط من تاريخ التفعيل — لا يُغيّر فواتير الطلاب الحاليين.
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import { GRADES } from '@/lib/academic'
@@ -14,6 +8,9 @@ type GradeFee = { grade: string; annual_fee: number }
 const input: React.CSSProperties = { width: '100%', padding: '9px 11px', borderRadius: 9, border: '1px solid #E3E8EE', fontSize: 14, fontFamily: 'inherit' }
 
 // قسم منفصل — زر تفعيل/تعطيل دمج النقل والتغذية ضمن الرسوم الدراسية
+// ⚠️ إصلاح: كان العنصر القابل للضغط الوحيد مربع اختيار 18×18 بكسل، والنص والصف
+// غير مربوطين به — فالضغط على النص (خصوصاً على الهاتف) لا يفعل شيئاً وكأن الزر معطّل.
+// الآن الصف كاملاً زر واحد قابل للضغط، بمفتاح تبديل كبير واضح الحالة.
 function BundleTransportMealsSetting({ initial, canEdit }: { initial: boolean; canEdit: boolean }) {
   const supabase = createClient()
   const [enabled, setEnabled] = useState(initial)
@@ -22,16 +19,21 @@ function BundleTransportMealsSetting({ initial, canEdit }: { initial: boolean; c
   const [saved, setSaved] = useState(false)
 
   async function toggle() {
-    if (!canEdit) return
+    if (!canEdit || busy) return
     const next = !enabled
     setErr(null)
     setBusy(true)
-    const { error } = await supabase.rpc('set_bundle_setting', { p_enabled: next })
-    setBusy(false)
-    if (error) { setErr(error.message); return }
-    setEnabled(next)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 1500)
+    try {
+      const { error } = await supabase.rpc('set_bundle_setting', { p_enabled: next })
+      if (error) { setErr(error.message); return }
+      setEnabled(next)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 1500)
+    } catch {
+      setErr('تعذّر الاتصال — تحقّق من الإنترنت وحاول مجدداً')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -47,18 +49,42 @@ function BundleTransportMealsSetting({ initial, canEdit }: { initial: boolean; c
 
       {err && <div style={{ color: '#C0392B', fontWeight: 600, fontSize: 13, marginBottom: 12 }}>⚠ {err}</div>}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', border: '1px solid #E3E8EE', borderRadius: 10, background: enabled ? '#F4F8F6' : '#fff' }}>
-        <input
-          type="checkbox" checked={enabled} disabled={!canEdit || busy}
-          onChange={toggle}
-          style={{ width: 18, height: 18, cursor: canEdit ? 'pointer' : 'default' }}
-        />
+      <button
+        type="button"
+        role="switch"
+        aria-checked={enabled}
+        onClick={toggle}
+        disabled={!canEdit || busy}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '14px 14px',
+          border: `1.5px solid ${enabled ? '#9FD6B8' : '#E3E8EE'}`, borderRadius: 12,
+          background: enabled ? '#F0F9F4' : '#fff', fontFamily: 'inherit', textAlign: 'right',
+          cursor: canEdit && !busy ? 'pointer' : 'default', opacity: busy ? 0.75 : 1,
+          transition: 'background .2s, border-color .2s',
+        }}>
+        {/* مفتاح تبديل كبير */}
+        <span aria-hidden="true" style={{
+          flexShrink: 0, position: 'relative', width: 50, height: 28, borderRadius: 99,
+          background: enabled ? '#1A7A45' : '#CBD3DD', transition: 'background .2s',
+        }}>
+          <span style={{
+            position: 'absolute', top: 3, right: enabled ? 3 : 25,
+            width: 22, height: 22, borderRadius: '50%', background: '#fff',
+            boxShadow: '0 1px 3px rgba(0,0,0,.25)', transition: 'right .2s',
+          }} />
+        </span>
         <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: '#0F2744' }}>
           دمج النقل والتغذية ضمن إجمالي الرسوم الدراسية
+          <span style={{ display: 'block', fontSize: 12, fontWeight: 600, marginTop: 2, color: enabled ? '#1A7A45' : '#8A94A6' }}>
+            {enabled ? 'مفعّل' : 'معطّل'}
+          </span>
         </span>
         {busy && <span style={{ fontSize: 12.5, color: '#8A94A6' }}>جارٍ الحفظ…</span>}
         {saved && <span style={{ fontSize: 12.5, color: '#15803D', fontWeight: 700 }}>✓ حُفظ</span>}
-      </div>
+      </button>
+      {!canEdit && (
+        <p style={{ fontSize: 12, color: '#8A94A6', margin: '8px 0 0' }}>تعديل هذا الإعداد للمالك أو الإداري فقط.</p>
+      )}
     </div>
   )
 }
