@@ -19,7 +19,7 @@ type Student = {
   guardian_phone?: string | null; guardian_email?: string | null
   birth_date?: string | null; gender?: string | null
   father_phone?: string | null; mother_phone?: string | null; address?: string | null
-  annual_fee?: number | null; discount_pct?: number | null
+  annual_fee?: number | null; discount_pct?: number | null; discount_amount?: number | null
   is_exempt?: boolean | null; special_case_reason?: string | null
   student_fees?: { id: string }[] | null
 }
@@ -270,6 +270,7 @@ export default function StudentsByClass({
                                 code: s.code ?? null,
                                 annual_fee: s.annual_fee ?? null,
                                 discount_pct: s.discount_pct ?? null,
+                                discount_amount: s.discount_amount ?? null,
                                 is_exempt: s.is_exempt ?? null,
                                 special_case_reason: s.special_case_reason ?? null,
                                 status: s.status ?? null,
