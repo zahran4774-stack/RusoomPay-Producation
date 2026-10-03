@@ -12,7 +12,6 @@ import { isStaff, canAccessFinance, isOwner } from '@/lib/roles'
 import { LogoMark } from '../Logo'
 import BranchSwitcher from './BranchSwitcher'
 import SubscriptionBadge, { type SubscriptionInfo } from './SubscriptionBadge'
-import LanguageSwitcher from '@/components/i18n/LanguageSwitcher'
 import {
   LayoutDashboard, GraduationCap, ReceiptText, Users, Apple, Bus,
   Package, BarChart3, ClipboardList, Gem, MessageCircle, Settings, Wallet,
@@ -20,7 +19,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 
-type NavLeaf = { type: 'link'; href: string; icon: LucideIcon; label: string; show: (r: Role) => boolean }
+type NavLeaf = { type: 'link'; href: string; icon: LucideIcon; label: string; show: (r: Role, p: string[]) => boolean }
 // مجموعة قابلة للطي — تجميع بصري فقط، لا رابط خاص بها. عنوانها إمّا يطوي/يفتح
 // أبناءها (رابطان أو أكثر ظاهران للدور الحالي) أو، إن بقي ابن واحد ظاهر فقط،
 // يُعرض ذلك الابن كرابط مباشر بلا قائمة منسدلة (انظر معالجة العرض أدناه).
@@ -49,11 +48,11 @@ const NAV: NavEntry[] = [
   {
     type: 'group', key: 'accounting', icon: BarChart3, label: 'المحاسبة والتقارير',
     children: [
-      { type: 'link', href: '/accounting', icon: LayoutGrid, label: 'نظرة عامة', show: (r) => canAccessFinance(r) },
-      { type: 'link', href: '/accounting?tab=trial', icon: Scale, label: 'ميزان المراجعة', show: (r) => canAccessFinance(r) },
-      { type: 'link', href: '/accounting?tab=journal', icon: BookOpen, label: 'القيود', show: (r) => canAccessFinance(r) },
-      { type: 'link', href: '/accounting?tab=periods', icon: CalendarRange, label: 'التقارير الدورية', show: (r) => canAccessFinance(r) },
-      { type: 'link', href: '/accounting?tab=forecast', icon: TrendingUp, label: 'التوقعات', show: (r) => canAccessFinance(r) },
+      { type: 'link', href: '/accounting', icon: LayoutGrid, label: 'نظرة عامة', show: (r, p) => canAccessFinance(r) || p.includes('reports') || p.includes('journal_entries') },
+      { type: 'link', href: '/accounting?tab=trial', icon: Scale, label: 'ميزان المراجعة', show: (r, p) => canAccessFinance(r) || p.includes('reports') },
+      { type: 'link', href: '/accounting?tab=journal', icon: BookOpen, label: 'القيود', show: (r, p) => canAccessFinance(r) || p.includes('journal_entries') },
+      { type: 'link', href: '/accounting?tab=periods', icon: CalendarRange, label: 'التقارير الدورية', show: (r, p) => canAccessFinance(r) || p.includes('reports') },
+      { type: 'link', href: '/accounting?tab=forecast', icon: TrendingUp, label: 'التوقعات', show: (r, p) => canAccessFinance(r) || p.includes('reports') },
     ],
   },
   { type: 'link', href: '/activity', icon: ClipboardList, label: 'سجل النشاط', show: (r) => isOwner(r) },
@@ -78,13 +77,14 @@ function toRgb(hex: string): string | null {
 }
 
 export default function AppShell({
-  role, brandColor, schoolLogo, schoolName, subscriptionInfo, children,
+  role, brandColor, schoolLogo, schoolName, subscriptionInfo, permissions = [], children,
 }: {
   role: Role
   brandColor: string | null
   schoolLogo: string | null
   schoolName: string | null
   subscriptionInfo?: SubscriptionInfo
+  permissions?: string[]
   children: React.ReactNode
 }) {
   const pathname = usePathname()
@@ -128,7 +128,6 @@ export default function AppShell({
           <span /><span /><span />
         </button>
         <div className="brand"><LogoMark size={26} /> <span>Rusoom<span style={{ color: 'var(--brand)' }}>Pay</span></span></div>
-        <LanguageSwitcher compact />
       </header>
 
       <div className={`drawer-overlay ${open ? 'open' : ''}`} onClick={() => setOpen(false)} aria-hidden="true" />
@@ -136,7 +135,6 @@ export default function AppShell({
       <aside className={`app-sidebar ${open ? 'open' : ''}`}>
         <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
           <div className="side-brand"><LogoMark size={32} /> <span>Rusoom<span style={{ color: 'var(--brand)' }}>Pay</span></span></div>
-          <div style={{ padding: '10px 16px', display: 'flex', justifyContent: 'flex-start' }}><LanguageSwitcher compact /></div>
 
           {(schoolLogo || schoolName) && (
             <div className="school-identity">
@@ -162,7 +160,7 @@ export default function AppShell({
           <nav className="side-nav">
             {NAV.map((entry) => {
               if (entry.type === 'link') {
-                if (!entry.show(role)) return null
+                if (!entry.show(role, permissions)) return null
                 const Icon = entry.icon
                 return (
                   <Link key={entry.href} href={entry.href} className={`side-link ${isActive(entry.href) ? 'active' : ''}`}>
@@ -171,7 +169,7 @@ export default function AppShell({
                 )
               }
 
-              const visibleChildren = entry.children.filter((c) => c.show(role))
+              const visibleChildren = entry.children.filter((c) => c.show(role, permissions))
               if (visibleChildren.length === 0) return null
 
               if (visibleChildren.length === 1) {
