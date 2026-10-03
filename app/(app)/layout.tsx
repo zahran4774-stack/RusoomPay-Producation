@@ -76,7 +76,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     )
   }
 
-  const { data: subscriptionInfo } = await supabase.rpc('my_subscription_status')
+  const [{ data: subscriptionInfo }, { data: permissions }] = await Promise.all([
+    supabase.rpc('my_subscription_status'),
+    supabase.rpc('my_permissions'),
+  ])
 
   const schoolName = school?.name
     ? school.name + (school.branch ? ` — ${school.branch}` : '')
@@ -91,6 +94,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         schoolLogo={school?.logo_url ?? null}
         schoolName={schoolName}
         subscriptionInfo={subscriptionInfo}
+        permissions={(permissions as string[] | null) ?? []}
       >
         {children}
       </AppShell>
