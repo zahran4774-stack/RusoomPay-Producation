@@ -5,10 +5,12 @@
 // تعديل الرسوم/التخفيض هنا يُزامَن تلقائياً مع فاتورة "الرسوم الدراسية السنوية"
 // القائمة (بالفرق) عبر RPC update_student — ويُرفض إن صار الصافي أقل من المدفوع.
 // التخفيض بمبلغ معين — النسبة تُحسب وتُعرض تلقائياً.
-import { useState } from 'react'
+// ⚠️ خيارات الشعبة تأتي من إعدادات المدرسة (schools.section_styles + custom_section_names)
+//    عبر buildSectionOptions — نفس مصدر نموذج «إضافة طالب» — لا من قائمة ثابتة.
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
-import { GRADES, SECTIONS, isValidGrade, isValidSection, GULF_COUNTRIES, DEFAULT_COUNTRY, cleanLocalNumber, isValidLocalNumber } from '@/lib/academic'
+import { GRADES, SECTIONS, isValidGrade, buildSectionOptions, GULF_COUNTRIES, DEFAULT_COUNTRY, cleanLocalNumber, isValidLocalNumber } from '@/lib/academic'
 
 const SPECIAL_CASE_SUGGESTIONS = ['ابن موظف', 'صدقة', 'مساعدة لوجه الله', 'أسرة محتاجة', 'أخرى']
 
@@ -71,6 +73,22 @@ export default function EditStudent({
   const [err, setErr] = useState<string | null>(null)
   const [ok, setOk] = useState(false)
 
+  // خيارات الشعبة من إعدادات المدرسة — تُجلب مرة واحدة عند أول فتح للنموذج
+  const [schoolSections, setSchoolSections] = useState<string[] | null>(null)
+  useEffect(() => {
+    if (!open || schoolSections) return
+    let cancelled = false
+    supabase
+      .from('schools')
+      .select('section_styles, custom_section_names')
+      .single()
+      .then(({ data }) => {
+        if (cancelled || !data) return
+        setSchoolSections(buildSectionOptions(data.section_styles, data.custom_section_names))
+      })
+    return () => { cancelled = true }
+  }, [open, schoolSections, supabase])
+
   const [f, setF] = useState({
     full_name: student.full_name ?? '',
     grade: student.grade ?? '',
@@ -123,7 +141,10 @@ export default function EditStudent({
   const [selectedMealPlan, setSelectedMealPlan] = useState(currentMealPlanId ?? '')
 
   const gradeOptions = f.grade && !isValidGrade(f.grade) ? [f.grade, ...GRADES] : [...GRADES]
-  const sectionOptions = f.section && !isValidSection(f.section) ? [f.section, ...SECTIONS] : [...SECTIONS]
+  // الشعب حسب إعدادات المدرسة؛ وقبل وصولها نعرض القائمة الافتراضية مؤقتاً.
+  // شعبة الطالب الحالية تبقى متاحة دائماً (حتى لو لم تعد ضمن الإعدادات) كي لا تضيع عند الحفظ.
+  const baseSections: string[] = schoolSections ?? [...SECTIONS]
+  const sectionOptions = f.section && !baseSections.includes(f.section) ? [f.section, ...baseSections] : baseSections
 
   async function submit() {
     setErr(null)
