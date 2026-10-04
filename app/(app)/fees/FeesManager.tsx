@@ -3,6 +3,8 @@
 // + إضافة رسم لكل طالب + تذكير واتساب (فردي/جماعي) · الفاتورة تحمل هوية المدرسة
 // ⚠️ كل إرسال تذكير (فردي أو جماعي) يمر عبر تأكيد صريح (نعم/لا) قبل التنفيذ.
 // ⚠️ زر جديد: طباعة تقرير الدفع الشهري (دفعوا / لم يدفعوا) لكامل المدرسة.
+// ⚠️ فلتر جديد: حالة الدفع خلال فترة (من/إلى) + زر سريع "لم يدفعوا الشهر الحالي"
+//    — البيانات من RPC student_payments_in_range (دفعات معتمدة غير محذوفة فقط).
 import { useState, useMemo, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
@@ -33,7 +35,20 @@ type School = {
   bank_holder?: string | null; bank_enabled?: boolean | null
 } | null
 
+type PayStatus = '' | 'paid' | 'unpaid'
+type RangePaid = Record<string, { amount: number; last: string | null }>
+
 const PAGE_SIZE = 6
+
+// نطاق الشهر الميلادي الحالي بتوقيت مسقط بصيغة YYYY-MM-DD
+// (paid_at عمود date فالمقارنة النصية دقيقة)
+function currentMonthRange() {
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Muscat' })
+  const [y, m] = today.split('-').map(Number)
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate()
+  const mm = String(m).padStart(2, '0')
+  return { from: `${y}-${mm}-01`, to: `${y}-${mm}-${String(last).padStart(2, '0')}` }
+}
 
 export default function FeesManager({ students, school, currency }: { students: Student[]; school: School; currency: string }) {
   const supabase = createClient()
@@ -46,6 +61,15 @@ export default function FeesManager({ students, school, currency }: { students: 
   const [partialOnly, setPartialOnly] = useState(false)
   const [open, setOpen] = useState<string | null>(null)   // الطالب المفتوح (Accordion)
   const [page, setPage] = useState(1)
+
+  // ─── فلتر حالة الدفع خلال فترة (من/إلى) ───
+  const [payStatus, setPayStatus] = useState<PayStatus>('')
+  const [fromDate, setFromDate] = useState(() => currentMonthRange().from)
+  const [toDate, setToDate] = useState(() => currentMonthRange().to)
+  const [rangePaid, setRangePaid] = useState<RangePaid | null>(null)
+  const [rangeBusy, setRangeBusy] = useState(false)
+  const [rangeErr, setRangeErr] = useState('')
+  const rangeInvalid = !!fromDate && !!toDate && fromDate > toDate
 
   // حالة إرسال التذكير
   const [remindingId, setRemindingId] = useState<string | null>(null)   // الطالب الجاري تذكيره (فردي)
@@ -61,12 +85,38 @@ export default function FeesManager({ students, school, currency }: { students: 
   // ─── تفعيل الفلتر المطلوب تلقائياً عند القدوم من School Copilot ───
   // ?status=overdue → نفس فلتر "المتأخرات فقط" (send_overdue_reminders)
   // ?status=partial → دفعات جزئية لم تكتمل بعد ولم يفت موعدها (view_partial)
+  // ?status=unpaid_month → لم يدفعوا الشهر الحالي
   const searchParams = useSearchParams()
   useEffect(() => {
     const status = searchParams.get('status')
     if (status === 'overdue') setOverdueOnly(true)
     if (status === 'partial') setPartialOnly(true)
+    if (status === 'unpaid_month') {
+      const r = currentMonthRange()
+      setFromDate(r.from); setToDate(r.to); setPayStatus('unpaid')
+    }
   }, [searchParams])
+
+  // ─── جلب مجاميع الدفعات خلال الفترة عند تفعيل الفلتر أو تغيير التواريخ ───
+  useEffect(() => {
+    if (!payStatus || rangeInvalid) { setRangePaid(null); setRangeErr(''); return }
+    let cancelled = false
+    setRangeBusy(true); setRangeErr(''); setRangePaid(null)
+    supabase
+      .rpc('student_payments_in_range', { p_from: fromDate || null, p_to: toDate || null })
+      .then(({ data, error }) => {
+        if (cancelled) return
+        setRangeBusy(false)
+        if (error) { setRangeErr('تعذّر جلب دفعات الفترة: ' + error.message); return }
+        const map: RangePaid = {}
+        ;((data as { student_id: string; amount: number; last_date: string | null }[]) ?? []).forEach((r) => {
+          map[r.student_id] = { amount: Number(r.amount) || 0, last: r.last_date }
+        })
+        setRangePaid(map)
+      })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [payStatus, fromDate, toDate, rangeInvalid])
 
   const dec = CUR_DEC[currency] ?? 3
   const sym = CUR_SYM[currency] ?? 'ر.ع'
@@ -78,6 +128,10 @@ export default function FeesManager({ students, school, currency }: { students: 
     [students]
   )
 
+  // فلتر الفترة جاهز للتطبيق؟ (مفعّل + تواريخ صحيحة + البيانات وصلت)
+  const rangeReady = !!payStatus && !rangeInvalid && rangePaid !== null
+  const paidOf = (id: string) => rangePaid?.[id]?.amount ?? 0
+
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase()
     const today = new Date().toISOString().slice(0, 10)
@@ -88,9 +142,9 @@ export default function FeesManager({ students, school, currency }: { students: 
         if (!hay.includes(term)) return false
       }
       const fees = s.student_fees ?? []
+      const studentRemain = fees.reduce((a, f) => a + ((f.total ?? 0) - (f.paid ?? 0)), 0)
       if (overdueOnly) {
-        const remain = fees.reduce((a, f) => a + ((f.total ?? 0) - (f.paid ?? 0)), 0)
-        if (remain <= 0.0005) return false
+        if (studentRemain <= 0.0005) return false
       }
       if (partialOnly) {
         // نفس تعريف partial_followup في smart_recommendations(): بدأ السداد
@@ -101,20 +155,32 @@ export default function FeesManager({ students, school, currency }: { students: 
         })
         if (!hasPartial) return false
       }
+      if (payStatus && !rangeInvalid) {
+        // أثناء التحميل لا نعرض نتائج قديمة مضلّلة
+        if (rangePaid === null) return false
+        const p = rangePaid[s.id]?.amount ?? 0
+        if (payStatus === 'paid' && p <= 0.0005) return false
+        if (payStatus === 'unpaid') {
+          if (p > 0.0005) return false
+          // من سدّد كامل رسومه مسبقاً لا يُعدّ "لم يدفع"
+          if (studentRemain <= 0.0005) return false
+        }
+      }
       return true
     })
-  }, [students, q, grade, overdueOnly, partialOnly])
+  }, [students, q, grade, overdueOnly, partialOnly, payStatus, rangeInvalid, rangePaid])
 
   // ملخّص شامل لكل النتائج المُصفّاة (يظهر دائماً)
   const summary = useMemo(() => {
-    let tot = 0, paid = 0, overdueStudents = 0
+    let tot = 0, paid = 0, overdueStudents = 0, periodPaid = 0
     filtered.forEach((s) => {
       let sRemain = 0
       ;(s.student_fees ?? []).forEach((f) => { tot += f.total ?? 0; paid += f.paid ?? 0; sRemain += (f.total ?? 0) - (f.paid ?? 0) })
       if (sRemain > 0.0005) overdueStudents++
+      periodPaid += rangePaid?.[s.id]?.amount ?? 0
     })
-    return { tot, paid, remain: tot - paid, overdueStudents }
-  }, [filtered])
+    return { tot, paid, remain: tot - paid, overdueStudents, periodPaid }
+  }, [filtered, rangePaid])
 
   // قائمة المتأخرين (لهم رقم ولي أمر) — للزر الجماعي
   const overdueList = useMemo(() => {
@@ -126,12 +192,22 @@ export default function FeesManager({ students, school, currency }: { students: 
       .filter((x) => x.remain > 0.0005 && x.student.guardian_phone)
   }, [students])
 
-  const active = q.trim() !== '' || grade !== '' || overdueOnly || partialOnly
+  const active = q.trim() !== '' || grade !== '' || overdueOnly || partialOnly || payStatus !== ''
+
+  const monthR = currentMonthRange()
+  const unpaidMonthActive = payStatus === 'unpaid' && fromDate === monthR.from && toDate === monthR.to
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
   const pageItems = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
   const resetPage = () => setPage(1)
+
+  function clearAll() {
+    const r = currentMonthRange()
+    setQ(''); setGrade(''); setOverdueOnly(false); setPartialOnly(false)
+    setPayStatus(''); setFromDate(r.from); setToDate(r.to)
+    resetPage()
+  }
 
   // ─── إرسال تذكير واتساب لطالب واحد — يمر عبر تأكيد صريح أولاً ───
   async function remindOne(student: Student, remain: number) {
@@ -292,6 +368,9 @@ export default function FeesManager({ students, school, currency }: { students: 
         <StatCard label="المحصّل" value={`${fmt(summary.paid)} ${sym}`} color="#1A7A45" bg="#EFF9F2" />
         <StatCard label="المتبقّي" value={`${fmt(summary.remain)} ${sym}`} color="#C0392B" bg="#FDEEED" />
         <StatCard label="طلاب عليهم متأخرات" value={`${summary.overdueStudents}`} color="#B54708" bg="#FFF6ED" />
+        {rangeReady && payStatus === 'paid' && (
+          <StatCard label="المحصّل خلال الفترة" value={`${fmt(summary.periodPaid)} ${sym}`} color="#163B68" bg="#EEF2F9" />
+        )}
       </div>
 
       {/* زر طباعة تقرير الدفع الشهري — دفعوا/لم يدفعوا هذا الشهر لكل المدرسة */}
@@ -403,12 +482,71 @@ export default function FeesManager({ students, school, currency }: { students: 
 
           {active && (
             <button
-              onClick={() => { setQ(''); setGrade(''); setOverdueOnly(false); setPartialOnly(false); resetPage() }}
+              onClick={clearAll}
               style={{ ...inp, cursor: 'pointer', color: '#667', border: '1.5px solid #EEF2F7' }}>
               ✕ مسح
             </button>
           )}
         </div>
+
+        {/* ─── فلتر حالة الدفع خلال فترة ─── */}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTop: '1px dashed #EEF2F7' }}>
+          <button
+            onClick={() => {
+              const r = currentMonthRange()
+              setFromDate(r.from); setToDate(r.to)
+              setPayStatus(unpaidMonthActive ? '' : 'unpaid')
+              resetPage()
+            }}
+            style={{
+              ...inp, cursor: 'pointer', fontWeight: 700,
+              border: `1.5px solid ${unpaidMonthActive ? '#C0392B' : '#DDE3EC'}`,
+              background: unpaidMonthActive ? '#FBE9E9' : '#fff',
+              color: unpaidMonthActive ? '#8A2B2B' : '#445',
+            }}>
+            {unpaidMonthActive ? '✓ ' : ''}لم يدفعوا الشهر الحالي
+          </button>
+
+          <select
+            value={payStatus}
+            onChange={(e) => { setPayStatus(e.target.value as PayStatus); resetPage() }}
+            style={{
+              ...inp, flex: '0 1 200px', cursor: 'pointer', fontWeight: payStatus ? 700 : 400,
+              border: `1.5px solid ${payStatus ? '#163B68' : '#DDE3EC'}`,
+            }}>
+            <option value="">حالة الدفع: الكل</option>
+            <option value="paid">دفعوا خلال الفترة</option>
+            <option value="unpaid">لم يدفعوا خلال الفترة</option>
+          </select>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#556' }}>
+            من
+            <input type="date" value={fromDate} max={toDate || undefined}
+              onChange={(e) => { setFromDate(e.target.value); resetPage() }}
+              style={{ ...inp, padding: '8px 10px' }} dir="ltr" />
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#556' }}>
+            إلى
+            <input type="date" value={toDate} min={fromDate || undefined}
+              onChange={(e) => { setToDate(e.target.value); resetPage() }}
+              style={{ ...inp, padding: '8px 10px' }} dir="ltr" />
+          </label>
+
+          {rangeBusy && <span style={{ fontSize: 12.5, color: '#8A94A6' }}>جارٍ جلب دفعات الفترة…</span>}
+        </div>
+
+        {rangeInvalid && payStatus && (
+          <div style={{ color: '#C0392B', fontSize: 12.5, fontWeight: 600, marginTop: 8 }}>⚠ تاريخ "من" بعد تاريخ "إلى" — صحّح الفترة</div>
+        )}
+        {rangeErr && (
+          <div style={{ color: '#C0392B', fontSize: 12.5, fontWeight: 600, marginTop: 8 }}>⚠ {rangeErr}</div>
+        )}
+        {payStatus && !rangeInvalid && !rangeErr && (
+          <div style={{ fontSize: 12, color: '#8A94A6', marginTop: 8, lineHeight: 1.7 }}>
+            تُحتسب الدفعات المعتمدة فقط — التحويلات البنكية قيد المراجعة لا تُحتسب حتى تُعتمد.
+            {payStatus === 'unpaid' && ' "لم يدفعوا" يستثني من سدّد رسومه بالكامل مسبقاً.'}
+          </div>
+        )}
 
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #EEF2F7',
                       display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap',
@@ -416,11 +554,16 @@ export default function FeesManager({ students, school, currency }: { students: 
           <span style={{ color: '#556' }}>
             عرض {pageItems.length} من {filtered.length}{active ? ` (مُصفّى من ${students.length})` : ' طالب'}
           </span>
+          {rangeReady && (
+            <span style={{ color: '#163B68', fontWeight: 700 }}>
+              الفترة: {fromDate || '…'} ← {toDate || '…'}
+            </span>
+          )}
         </div>
       </div>
 
       {/* لا نتائج */}
-      {filtered.length === 0 && (
+      {filtered.length === 0 && !rangeBusy && (
         <div style={{ background: '#fff', borderRadius: 14, padding: 32, textAlign: 'center',
                       color: '#8A94A6', boxShadow: '0 1px 4px rgba(0,0,0,.08)' }}>
           {students.length === 0 ? 'لا يوجد طلاب بعد' : 'لا نتائج مطابقة — جرّب تعديل البحث'}
@@ -436,6 +579,8 @@ export default function FeesManager({ students, school, currency }: { students: 
             const paid = fees.reduce((a, f) => a + f.paid, 0)
             const remain = tot - paid
             const isOpen = open === s.id
+            const periodPaid = rangeReady ? paidOf(s.id) : 0
+            const periodLast = rangeReady ? rangePaid?.[s.id]?.last ?? null : null
             return (
               <div key={s.id} style={{ borderTop: idx === 0 ? 'none' : '1px solid #EEF2F7' }}>
                 <div
@@ -453,6 +598,11 @@ export default function FeesManager({ students, school, currency }: { students: 
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    {rangeReady && periodPaid > 0.0005 && (
+                      <span style={{ background: '#EEF2F9', color: '#163B68', fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 20 }}>
+                        دفع بالفترة {fmt(periodPaid)} {sym}{periodLast ? ` · آخر دفعة ${periodLast}` : ''}
+                      </span>
+                    )}
                     <span style={{ fontSize: 12.5, color: '#667' }}>الإجمالي <b style={{ color: '#0F2744', direction: 'ltr', display: 'inline-block' }}>{fmt(tot)}</b></span>
                     {remain > 0.0005 ? (
                       <span style={{ background: '#FBE9E9', color: '#8A2B2B', fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 20 }}>
