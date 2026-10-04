@@ -2,8 +2,9 @@
 // app/(app)/accounting/DailyPaymentsReport.tsx
 // تقرير المدفوعات — يوم واحد (افتراضي: اليوم) أو فترة مخصّصة (من-إلى).
 // يعتمد على RPC daily_payments_report (معزول بالمدرسة + للطاقم المالي فقط).
+// بحث فوري باسم الطالب / كود الطالب / رقم الفاتورة (فلترة داخل النتائج المحمّلة).
 // الطباعة عبر نافذة منفصلة — مضمونة بصفحة واحدة نظيفة بلا صفحات فارغة.
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase-client'
 
 type Item = {
@@ -11,6 +12,7 @@ type Item = {
   student_code: string
   grade: string | null
   fee_description: string
+  invoice_number: string | null
   amount: number
   method: string
   paid_at: string
@@ -42,6 +44,22 @@ const addDays = (d: string, n: number) => {
   return dt.toISOString().slice(0, 10)
 }
 
+// توحيد النص للبحث: أرقام عربية→لاتينية، توحيد الألف/الياء/التاء المربوطة، إزالة التشكيل، أحرف صغيرة
+const normalize = (s: string | null | undefined) =>
+  (s ?? '')
+    .toString()
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .toLowerCase()
+    .trim()
+
+const esc = (s: string | null | undefined) =>
+  (s ?? '').toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
 type Mode = 'day' | 'range'
 
 export default function DailyPaymentsReport() {
@@ -53,6 +71,7 @@ export default function DailyPaymentsReport() {
   const [report, setReport] = useState<Report | null>(null)
   const [loading, setLoading] = useState(false)
   const [currency, setCurrency] = useState<string>('OMR')
+  const [query, setQuery] = useState('')
   const [brand, setBrand] = useState<{ name: string; branch: string | null; logoUrl: string | null; vat: string | null }>({
     name: '', branch: null, logoUrl: null, vat: null,
   })
@@ -98,7 +117,39 @@ export default function DailyPaymentsReport() {
     else load(from, to)
   }, [mode, date, from, to, load])
 
-  const items = report?.items ?? []
+  const allItems = useMemo(() => report?.items ?? [], [report])
+
+  // ═══ البحث: اسم الطالب / كود الطالب / رقم الفاتورة ═══
+  const q = normalize(query)
+  const searching = q.length > 0
+  const items = useMemo(() => {
+    if (!searching) return allItems
+    const tokens = q.split(/\s+/).filter(Boolean)
+    return allItems.filter((it) => {
+      const hay = `${normalize(it.student_name)} ${normalize(it.student_code)} ${normalize(it.invoice_number)}`
+      return tokens.every((t) => hay.includes(t))
+    })
+  }, [allItems, q, searching])
+
+  // الإجماليات: عند البحث تُحسب من النتائج المفلترة، وإلا من الـ RPC
+  const stats = useMemo(() => {
+    if (!searching) {
+      return {
+        total: report?.total ?? 0,
+        cash: report?.cash ?? 0,
+        bank: report?.bank ?? 0,
+        count: report?.count ?? 0,
+      }
+    }
+    let total = 0, cash = 0, bank = 0
+    for (const it of items) {
+      const a = Number(it.amount) || 0
+      total += a
+      if (it.method === 'cash') cash += a
+      else bank += a
+    }
+    return { total, cash, bank, count: items.length }
+  }, [searching, report, items])
 
   const timeOf = (iso: string) => {
     try { return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) }
@@ -133,19 +184,24 @@ export default function DailyPaymentsReport() {
     if (!report?.ok || items.length === 0) return
 
     const logoBlock = brand.logoUrl
-      ? `<img class="lg-img" src="${brand.logoUrl}" alt="" />`
-      : `<div class="lg">${initial}</div>`
+      ? `<img class="lg-img" src="${esc(brand.logoUrl)}" alt="" />`
+      : `<div class="lg">${esc(initial)}</div>`
 
     const tbody = items.map((it, i) => `
       <tr>
         <td class="muted">${i + 1}</td>
-        <td><div class="sname">${it.student_name}</div><div class="scode">${it.student_code}</div></td>
-        <td class="muted">${it.grade ?? '—'}</td>
-        <td class="muted">${it.fee_description}</td>
+        <td><div class="sname">${esc(it.student_name)}</div><div class="scode">${esc(it.student_code)}</div></td>
+        <td class="muted">${esc(it.grade) || '—'}</td>
+        <td class="muted">${esc(it.fee_description)}</td>
+        <td class="n muted">${esc(it.invoice_number) || '—'}</td>
         <td class="n bold">${fmt(it.amount)} ${sym}</td>
-        <td><span class="pill ${it.method === 'cash' ? 'cash' : 'bank'}">${METHOD_LABEL[it.method] || it.method}</span></td>
+        <td><span class="pill ${it.method === 'cash' ? 'cash' : 'bank'}">${esc(METHOD_LABEL[it.method] || it.method)}</span></td>
         <td class="n muted">${report.is_range ? dateOf(it.paid_at) : timeOf(it.created_at)}</td>
       </tr>`).join('')
+
+    const searchNote = searching
+      ? `<div class="pd">نتيجة البحث: «${esc(query.trim())}» — ${items.length} من ${allItems.length}</div>`
+      : ''
 
     const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>تقرير المدفوعات</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -209,31 +265,31 @@ tr.tot td{font-weight:800;background:#F2F5F9;border-top:2px solid #0A1D33;border
 <div class="h">
   <div class="b">${logoBlock}
     <div>
-      <div class="sn">${brand.name}</div>
-      ${brand.branch ? `<div class="br">${brand.branch}</div>` : ''}
-      ${brand.vat ? `<div class="vt">الرقم الضريبي: ${brand.vat}</div>` : ''}
+      <div class="sn">${esc(brand.name)}</div>
+      ${brand.branch ? `<div class="br">${esc(brand.branch)}</div>` : ''}
+      ${brand.vat ? `<div class="vt">الرقم الضريبي: ${esc(brand.vat)}</div>` : ''}
     </div>
   </div>
-  <div class="m"><div class="tl">تقرير المدفوعات</div><div class="pd">${rangeLabel}</div></div>
+  <div class="m"><div class="tl">تقرير المدفوعات</div><div class="pd">${rangeLabel}</div>${searchNote}</div>
 </div>
 
 <div class="stats">
-  <div class="st total"><div class="lbl">الإجمالي</div><div class="val">${fmt(report.total ?? 0)} ${sym}</div></div>
-  <div class="st cash"><div class="lbl">نقداً</div><div class="val">${fmt(report.cash ?? 0)} ${sym}</div></div>
-  <div class="st bank"><div class="lbl">تحويل/بطاقة</div><div class="val">${fmt(report.bank ?? 0)} ${sym}</div></div>
-  <div class="st cnt"><div class="lbl">عدد الدفعات</div><div class="val">${report.count ?? 0}</div></div>
+  <div class="st total"><div class="lbl">الإجمالي</div><div class="val">${fmt(stats.total)} ${sym}</div></div>
+  <div class="st cash"><div class="lbl">نقداً</div><div class="val">${fmt(stats.cash)} ${sym}</div></div>
+  <div class="st bank"><div class="lbl">تحويل/بطاقة</div><div class="val">${fmt(stats.bank)} ${sym}</div></div>
+  <div class="st cnt"><div class="lbl">عدد الدفعات</div><div class="val">${stats.count}</div></div>
 </div>
 
 <table>
   <thead><tr>
-    <th>#</th><th>الطالب</th><th>الصف</th><th>البند</th><th>المبلغ</th><th>الطريقة</th><th>${report.is_range ? 'التاريخ' : 'الوقت'}</th>
+    <th>#</th><th>الطالب</th><th>الصف</th><th>البند</th><th>رقم الفاتورة</th><th>المبلغ</th><th>الطريقة</th><th>${report.is_range ? 'التاريخ' : 'الوقت'}</th>
   </tr></thead>
   <tbody>
     ${tbody}
     <tr class="tot">
       <td></td>
-      <td colspan="3">الإجمالي (${report.count} دفعة)</td>
-      <td class="n">${fmt(report.total ?? 0)} ${sym}</td>
+      <td colspan="4">الإجمالي (${stats.count} دفعة)</td>
+      <td class="n">${fmt(stats.total)} ${sym}</td>
       <td colspan="2"></td>
     </tr>
   </tbody>
@@ -270,6 +326,8 @@ tr.tot td{font-weight:800;background:#F2F5F9;border-top:2px solid #0A1D33;border
     setTimeout(doPrint, 3000)
   }
 
+  const canPrint = !!report?.ok && items.length > 0
+
   return (
     <section style={{ background: '#fff', border: '1px solid #E7EBF0', borderRadius: 16, padding: 22, marginTop: 18 }} dir="rtl">
       {/* الرأس */}
@@ -280,8 +338,8 @@ tr.tot td{font-weight:800;background:#F2F5F9;border-top:2px solid #0A1D33;border
         </div>
         <button
           onClick={printReport}
-          disabled={!report?.ok || items.length === 0}
-          style={{ ...btnPrint, opacity: (!report?.ok || items.length === 0) ? 0.45 : 1, cursor: (!report?.ok || items.length === 0) ? 'not-allowed' : 'pointer' }}
+          disabled={!canPrint}
+          style={{ ...btnPrint, opacity: canPrint ? 1 : 0.45, cursor: canPrint ? 'pointer' : 'not-allowed' }}
         >⎙ طباعة</button>
       </div>
 
@@ -314,18 +372,43 @@ tr.tot td{font-weight:800;background:#F2F5F9;border-top:2px solid #0A1D33;border
         </div>
       )}
 
+      {/* البحث */}
+      <div style={{ position: 'relative', marginBottom: 14 }}>
+        <span aria-hidden style={{ position: 'absolute', insetInlineStart: 12, top: '50%', transform: 'translateY(-50%)', color: '#8A94A6', fontSize: 15, pointerEvents: 'none' }}>🔍</span>
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="ابحث باسم الطالب أو كوده أو رقم الفاتورة…"
+          aria-label="بحث في المدفوعات"
+          style={{ ...searchInput, paddingInlineStart: 38, paddingInlineEnd: query ? 38 : 12 }}
+        />
+        {query && (
+          <button
+            onClick={() => setQuery('')}
+            aria-label="مسح البحث"
+            style={{ position: 'absolute', insetInlineEnd: 8, top: '50%', transform: 'translateY(-50%)', border: 'none', background: '#EEF1F5', color: '#556', width: 24, height: 24, borderRadius: '50%', cursor: 'pointer', fontSize: 14, lineHeight: 1, fontFamily: 'inherit' }}
+          >✕</button>
+        )}
+      </div>
+
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontWeight: 800, color: '#0F2744', fontSize: 16 }}>
           تقرير المدفوعات — {rangeLabel}
         </div>
+        {searching && report?.ok && (
+          <div style={{ fontSize: 13, color: '#667', marginTop: 4 }}>
+            نتائج البحث: {items.length} من {allItems.length} دفعة
+          </div>
+        )}
       </div>
 
       {/* بطاقات الإجمالي */}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-        <Stat label="الإجمالي" value={`${fmt(report?.total ?? 0)} ${sym}`} color="#0F2744" bg="#F4F7FB" />
-        <Stat label="نقداً" value={`${fmt(report?.cash ?? 0)} ${sym}`} color="#1A7A45" bg="#EFF9F2" />
-        <Stat label="تحويل/بطاقة" value={`${fmt(report?.bank ?? 0)} ${sym}`} color="#1D5FA8" bg="#EEF4FC" />
-        <Stat label="عدد الدفعات" value={`${report?.count ?? 0}`} color="#B54708" bg="#FFF6ED" />
+        <Stat label="الإجمالي" value={`${fmt(stats.total)} ${sym}`} color="#0F2744" bg="#F4F7FB" />
+        <Stat label="نقداً" value={`${fmt(stats.cash)} ${sym}`} color="#1A7A45" bg="#EFF9F2" />
+        <Stat label="تحويل/بطاقة" value={`${fmt(stats.bank)} ${sym}`} color="#1D5FA8" bg="#EEF4FC" />
+        <Stat label="عدد الدفعات" value={`${stats.count}`} color="#B54708" bg="#FFF6ED" />
       </div>
 
       {loading && <div style={{ textAlign: 'center', color: '#8A94A6', padding: 24 }}>جارٍ التحميل…</div>}
@@ -340,21 +423,28 @@ tr.tot td{font-weight:800;background:#F2F5F9;border-top:2px solid #0A1D33;border
         </div>
       )}
 
-      {!loading && report?.ok && items.length === 0 && (
+      {!loading && report?.ok && allItems.length === 0 && (
         <div style={{ textAlign: 'center', color: '#8A94A6', padding: 28, background: '#F8FAFC', borderRadius: 12 }}>
           لا توجد مدفوعات مسجّلة في هذه الفترة
         </div>
       )}
 
+      {!loading && report?.ok && allItems.length > 0 && items.length === 0 && (
+        <div style={{ textAlign: 'center', color: '#8A94A6', padding: 28, background: '#F8FAFC', borderRadius: 12 }}>
+          لا توجد نتائج مطابقة لـ «{query.trim()}» في هذه الفترة
+        </div>
+      )}
+
       {!loading && report?.ok && items.length > 0 && (
         <div style={{ overflowX: 'auto', border: '1px solid #EEF1F5', borderRadius: 12 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
             <thead>
               <tr style={{ background: '#F4F8F7', textAlign: 'right' }}>
                 <th style={th}>#</th>
                 <th style={th}>الطالب</th>
                 <th style={th}>الصف</th>
                 <th style={th}>البند</th>
+                <th style={th}>رقم الفاتورة</th>
                 <th style={th}>المبلغ</th>
                 <th style={th}>الطريقة</th>
                 <th style={th}>{report?.is_range ? 'التاريخ' : 'الوقت'}</th>
@@ -362,7 +452,7 @@ tr.tot td{font-weight:800;background:#F2F5F9;border-top:2px solid #0A1D33;border
             </thead>
             <tbody>
               {items.map((it, i) => (
-                <tr key={i}>
+                <tr key={`${it.invoice_number ?? 'x'}-${it.created_at}-${i}`}>
                   <td style={{ ...td, color: '#8A94A6' }}>{i + 1}</td>
                   <td style={td}>
                     <div style={{ fontWeight: 600, color: '#0F1B2D' }}>{it.student_name}</div>
@@ -370,6 +460,9 @@ tr.tot td{font-weight:800;background:#F2F5F9;border-top:2px solid #0A1D33;border
                   </td>
                   <td style={{ ...td, color: '#556' }}>{it.grade ?? '—'}</td>
                   <td style={{ ...td, color: '#556' }}>{it.fee_description}</td>
+                  <td style={{ ...td, direction: 'ltr', textAlign: 'right', color: '#556', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                    {it.invoice_number || '—'}
+                  </td>
                   <td style={{ ...td, direction: 'ltr', textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmt(it.amount)} {sym}</td>
                   <td style={td}>
                     <span style={{ fontSize: 12.5, background: it.method === 'cash' ? '#EFF9F2' : '#EEF4FC', color: it.method === 'cash' ? '#1A7A45' : '#1D5FA8', padding: '3px 10px', borderRadius: 20, fontWeight: 600 }}>
@@ -383,8 +476,8 @@ tr.tot td{font-weight:800;background:#F2F5F9;border-top:2px solid #0A1D33;border
               ))}
               <tr style={{ borderTop: '2px solid #0F2744', fontWeight: 700, background: '#F9FBFC' }}>
                 <td style={td}></td>
-                <td style={td} colSpan={3}>الإجمالي ({report.count} دفعة)</td>
-                <td style={{ ...td, direction: 'ltr', textAlign: 'right', color: '#0F2744' }}>{fmt(report.total ?? 0)} {sym}</td>
+                <td style={td} colSpan={4}>الإجمالي ({stats.count} دفعة)</td>
+                <td style={{ ...td, direction: 'ltr', textAlign: 'right', color: '#0F2744' }}>{fmt(stats.total)} {sym}</td>
                 <td style={td} colSpan={2}></td>
               </tr>
             </tbody>
@@ -408,4 +501,5 @@ const th: React.CSSProperties = { padding: '11px 14px', fontSize: 12.5, fontWeig
 const td: React.CSSProperties = { padding: '11px 14px', fontSize: 13.5, color: '#1D2939', borderTop: '1px solid #EEF1F5', verticalAlign: 'top' }
 const btnLite: React.CSSProperties = { padding: '9px 14px', borderRadius: 10, border: '1.5px solid #DDE3EC', background: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', color: '#334' }
 const dateInput: React.CSSProperties = { padding: '9px 12px', borderRadius: 10, border: '1.5px solid #DDE3EC', fontSize: 14, fontFamily: 'inherit', background: '#fff' }
+const searchInput: React.CSSProperties = { width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #DDE3EC', fontSize: 14, fontFamily: 'inherit', background: '#fff', color: '#1D2939', outline: 'none' }
 const btnPrint: React.CSSProperties = { padding: '9px 16px', borderRadius: 10, border: 'none', background: '#163B68', color: '#fff', fontSize: 14, fontWeight: 700, fontFamily: 'inherit' }
