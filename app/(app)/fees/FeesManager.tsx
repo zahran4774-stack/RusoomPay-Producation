@@ -5,6 +5,7 @@
 // ⚠️ زر جديد: طباعة تقرير الدفع الشهري (دفعوا / لم يدفعوا) لكامل المدرسة.
 // ⚠️ فلتر جديد: حالة الدفع خلال فترة (من/إلى) + زر سريع "لم يدفعوا الشهر الحالي"
 //    — البيانات من RPC student_payments_in_range (دفعات معتمدة غير محذوفة فقط).
+// ⚠️ زر جديد: «ترتيب أبجدي» — يرتّب أسماء الطلاب أبجدياً (عربي) داخل النتائج المعروضة.
 import { useState, useMemo, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
@@ -20,6 +21,14 @@ const WHATSAPP_ENABLED = false
 
 const CUR_DEC: Record<string, number> = { OMR: 3, KWD: 3, BHD: 3, SAR: 2, AED: 2, QAR: 2 }
 const CUR_SYM: Record<string, string> = { OMR: 'ر.ع', SAR: 'ر.س', AED: 'د.إ', QAR: 'ر.ق', KWD: 'د.ك', BHD: 'د.ب' }
+
+// مقارن أبجدي عربي — يتجاهل الفروق بين أ/إ/آ/ا والتشكيل، ويرتّب الأرقام رقمياً
+const AR_COLLATOR = new Intl.Collator('ar', { sensitivity: 'base', numeric: true, ignorePunctuation: true })
+const nameKey = (s: string) =>
+  (s ?? '')
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/^\s+/, '')
 
 type Fee = { id: string; description: string; total: number; paid: number; due_date: string | null }
 type Student = {
@@ -59,6 +68,8 @@ export default function FeesManager({ students, school, currency }: { students: 
   const [overdueOnly, setOverdueOnly] = useState(false)
   // دفعات جزئية فقط — قادمة من زر "تابع الدفعات الجزئية" في School Copilot
   const [partialOnly, setPartialOnly] = useState(false)
+  // ترتيب أبجدي لأسماء الطلاب (إيقافه = الترتيب الأصلي حسب الرقم المدرسي)
+  const [alphaSort, setAlphaSort] = useState(false)
   const [open, setOpen] = useState<string | null>(null)   // الطالب المفتوح (Accordion)
   const [page, setPage] = useState(1)
 
@@ -135,7 +146,7 @@ export default function FeesManager({ students, school, currency }: { students: 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase()
     const today = new Date().toISOString().slice(0, 10)
-    return students.filter((s) => {
+    const list = students.filter((s) => {
       if (grade && s.grade !== grade) return false
       if (term) {
         const hay = `${s.full_name} ${s.code} ${s.section ?? ''}`.toLowerCase()
@@ -168,7 +179,12 @@ export default function FeesManager({ students, school, currency }: { students: 
       }
       return true
     })
-  }, [students, q, grade, overdueOnly, partialOnly, payStatus, rangeInvalid, rangePaid])
+    // الترتيب الأبجدي (عربي) لاسم الطالب — filter أعاد مصفوفة جديدة فالفرز عليها آمن
+    if (alphaSort) {
+      list.sort((a, b) => AR_COLLATOR.compare(nameKey(a.full_name), nameKey(b.full_name)))
+    }
+    return list
+  }, [students, q, grade, overdueOnly, partialOnly, payStatus, rangeInvalid, rangePaid, alphaSort])
 
   // ملخّص شامل لكل النتائج المُصفّاة (يظهر دائماً)
   const summary = useMemo(() => {
@@ -480,6 +496,20 @@ export default function FeesManager({ students, school, currency }: { students: 
             {partialOnly ? '✓ ' : ''}دفعات جزئية فقط
           </button>
 
+          {/* ترتيب أبجدي لأسماء الطلاب */}
+          <button
+            onClick={() => { setAlphaSort((v) => !v); resetPage() }}
+            aria-pressed={alphaSort}
+            title={alphaSort ? 'إلغاء الترتيب الأبجدي (العودة للترتيب الأصلي)' : 'عرض الأسماء بالتسلسل الأبجدي'}
+            style={{
+              ...inp, cursor: 'pointer', fontWeight: 700,
+              border: `1.5px solid ${alphaSort ? '#163B68' : '#DDE3EC'}`,
+              background: alphaSort ? '#EEF2F9' : '#fff',
+              color: alphaSort ? '#163B68' : '#445',
+            }}>
+            {alphaSort ? '✓ ' : ''}🔤 ترتيب أبجدي
+          </button>
+
           {active && (
             <button
               onClick={clearAll}
@@ -553,6 +583,7 @@ export default function FeesManager({ students, school, currency }: { students: 
                       gap: 8, fontSize: 13.5 }}>
           <span style={{ color: '#556' }}>
             عرض {pageItems.length} من {filtered.length}{active ? ` (مُصفّى من ${students.length})` : ' طالب'}
+            {alphaSort && <span style={{ color: '#163B68', fontWeight: 700 }}> · مرتّب أبجدياً</span>}
           </span>
           {rangeReady && (
             <span style={{ color: '#163B68', fontWeight: 700 }}>
