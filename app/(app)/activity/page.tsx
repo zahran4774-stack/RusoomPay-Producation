@@ -2,7 +2,14 @@
 // يعرض العمليات المسجّلة في audit_log بترقيم صفحات من جانب الخادم (25/صفحة)،
 // بحث نصّي، وفلترة بالمستخدم والفترة الزمنية — كلها منفَّذة كاستعلام واحد على
 // الخادم، لا جلب كامل الجدول إلى المتصفح.
+//
+// ⚠️ إصلاح أسماء المستخدمين: سياسة RLS على profiles (profiles_self_read) تسمح
+// لكل مستخدم بقراءة ملفه فقط، فكان الربط profiles(full_name) يرجع فارغاً لأي
+// موظف غير المالك فيظهر "النظام". الأسماء تُجلب الآن على الخادم فقط، ومحصورة
+// بمدرسة المالك (school_id) وبمعرّفات ظهرت أصلاً في سجله — لا تغيير في سياسات
+// قاعدة البيانات ولا في العزل بين المدارس.
 import { createClient } from '@/lib/supabase-server'
+import { createServiceClient } from '@/lib/supabase-service'
 import { redirect } from 'next/navigation'
 import { isOwner, type Role } from '@/lib/roles'
 import ActivityToolbar, { type ActorOption } from './ActivityToolbar'
@@ -27,9 +34,16 @@ export default async function ActivityPage({
   const { data: profile } = await supabase.from('profiles').select('role, school_id').eq('id', user.id).single()
   if (!isOwner(profile?.role as Role)) redirect('/dashboard')
 
+  const schoolId = profile?.school_id as string | null | undefined
+
+  // عميل الخدمة (خادم فقط) لقراءة أسماء الطاقم — إن تعذّر إنشاؤه نرجع للسلوك القديم
+  let service: ReturnType<typeof createServiceClient> | null = null
+  try { service = createServiceClient() } catch { service = null }
+
   // قائمة المستخدمين لفلتر "المستخدم" — الطاقم الحالي بالمدرسة فقط (استعلام
   // صغير منفصل، لا علاقة له بحجم سجل التدقيق نفسه)
-  const { data: staff } = await supabase
+  const staffClient = service && schoolId ? service : supabase
+  const { data: staff } = await staffClient
     .from('profiles')
     .select('id, full_name')
     .eq('school_id', profile?.school_id)
@@ -40,7 +54,7 @@ export default async function ActivityPage({
   // الاستعلام الرئيسي — فلترة وترتيب وترقيم صفحات على الخادم بالكامل
   let query = supabase
     .from('audit_log')
-    .select('id, action, details, created_at, actor_id, profiles(full_name)', { count: 'exact' })
+    .select('id, action, details, created_at, actor_id', { count: 'exact' })
     .order('created_at', { ascending: false })
     .order('id', { ascending: false }) // ترتيب ثانوي ثابت لضمان ترقيم صفحات حتمي
 
@@ -55,14 +69,36 @@ export default async function ActivityPage({
   const fromIdx = (page - 1) * PAGE_SIZE
   const { data: logs, count } = await query.range(fromIdx, fromIdx + PAGE_SIZE - 1)
 
+  // أسماء منفّذي العمليات في هذه الصفحة فقط — محصورة بمدرسة المالك
+  const actorIds = Array.from(
+    new Set((logs ?? []).map((l) => l.actor_id as string | null).filter((v): v is string => !!v))
+  )
+  const nameById = new Map<string, string>()
+  if (actorIds.length > 0) {
+    if (service && schoolId) {
+      const { data: names } = await service
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', actorIds)
+        .eq('school_id', schoolId)
+      ;(names ?? []).forEach((n) => { if (n.full_name) nameById.set(n.id, n.full_name) })
+    } else {
+      // احتياطي: ما تسمح به RLS (ملف المالك نفسه فقط)
+      const { data: names } = await supabase.from('profiles').select('id, full_name').in('id', actorIds)
+      ;(names ?? []).forEach((n) => { if (n.full_name) nameById.set(n.id, n.full_name) })
+    }
+  }
+
   const rows: ActivityRow[] = (logs ?? []).map((l) => {
-    const prof = (Array.isArray(l.profiles) ? l.profiles[0] : l.profiles) as { full_name?: string } | null
+    const aid = l.actor_id as string | null
     return {
       id: l.id,
       action: l.action,
       details: l.details,
       created_at: l.created_at,
-      actor: prof?.full_name ?? 'النظام',
+      // actor_id فارغ = عملية نظام فعلية (مثل اعتماد دفعة ثواني تلقائياً)
+      // actor_id موجود بلا اسم = مستخدم بلا اسم أو محذوف
+      actor: aid ? (nameById.get(aid) ?? 'مستخدم بلا اسم') : 'النظام',
     }
   })
 
