@@ -11,6 +11,11 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import { AlertTriangle } from 'lucide-react'
 
+// ═══ مفتاح تفعيل واتساب ═══
+// إرسال الواتساب مجمّد على مستوى المنصة حالياً.
+// طالما false: زر التذكير يظهر معطّلاً بوضوح ولا يُرسل شيئاً.
+const WHATSAPP_ENABLED = false
+
 type RiskItem = {
   student_id: string; student_name: string; student_code: string
   guardian: string; phone: string | null
@@ -43,6 +48,7 @@ export default function RiskIndicator({ currency, data }: { currency: string; da
   const pageItems = items.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
   async function sendReminder(r: RiskItem) {
+    if (!WHATSAPP_ENABLED) return
     if (!r.phone) { alert('لا يوجد رقم لولي الأمر'); return }
     if (!confirm(`إرسال تذكير واتساب ودّي إلى ولي أمر ${r.student_name}؟`)) return
 
@@ -68,7 +74,7 @@ export default function RiskIndicator({ currency, data }: { currency: string; da
             '1': school,
             '2': r.guardian || 'ولي الأمر',
             '3': r.student_name,
-            '4': fmt(r.outstanding),
+            '4': fmt(r.outstanding) + ' ' + sym,
           },
         }),
       })
@@ -117,7 +123,9 @@ export default function RiskIndicator({ currency, data }: { currency: string; da
                   </span>
                 </td>
                 <td style={td}>
-                  {r.phone ? (
+                  {!r.phone ? (
+                    <span style={{ fontSize: 12.5, color: '#667' }}>{r.action}</span>
+                  ) : WHATSAPP_ENABLED ? (
                     <button
                       onClick={() => sendReminder(r)}
                       disabled={sendingId === r.student_id}
@@ -126,7 +134,11 @@ export default function RiskIndicator({ currency, data }: { currency: string; da
                       {sendingId === r.student_id ? 'جارٍ الإرسال…' : '💬 إرسال تذكير ودّي'}
                     </button>
                   ) : (
-                    <span style={{ fontSize: 12.5, color: '#667' }}>{r.action}</span>
+                    <span
+                      title="خدمة واتساب قيد التفعيل"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, color: '#9AA7B8', fontWeight: 600, cursor: 'default' }}>
+                      💬 تذكير واتساب (قيد التفعيل)
+                    </span>
                   )}
                 </td>
               </tr>
