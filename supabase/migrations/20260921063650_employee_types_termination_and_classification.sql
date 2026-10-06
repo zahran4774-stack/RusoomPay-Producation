@@ -1,7 +1,3 @@
--- 00000000000007_employee_types_termination_classification.sql
--- طُبِّقت على الإنتاج عبر Supabase MCP باسم: employee_types_termination_and_classification
--- تُشغَّل بعد ملفات baseline (01–06): تحذف توقيعَي add_employee/update_employee القديمين وتنشئ الجديدين.
-
 -- ═══ 1) الأعمدة: نوع الموظف + سبب إنهاء الخدمة (وقت الإنهاء = deleted_at الموجود) ═══
 alter table public.employees
   add column if not exists employee_type text not null default 'official',
@@ -13,7 +9,7 @@ alter table public.employees
   add constraint employees_termination_reason_check
     check (termination_reason is null or termination_reason in ('resigned','other'));
 
--- ═══ 2) add_employee: إضافة p_employee_type ═══
+-- ═══ 2) add_employee: إضافة p_employee_type (حذف التوقيع القديم لتفادي تحميل زائد قابل للاستدعاء) ═══
 drop function if exists public.add_employee(text, text, text, numeric, numeric, text, text, text, text, text, text, text, boolean);
 
 create function public.add_employee(
@@ -195,6 +191,7 @@ revoke all on function public.update_employee(uuid, text, text, text, numeric, n
 grant execute on function public.update_employee(uuid, text, text, text, numeric, numeric, text, text, text, text, text, boolean, text, integer, text) to authenticated;
 
 -- ═══ 4) إنهاء الخدمة (حذف ناعم + سبب اختياري) ═══
+-- يحفظ السجل والتاريخ المالي؛ تستثنيه دورات الرواتب القادمة (generate_payroll_run يفلتر deleted_at)
 create function public.terminate_employee(p_id uuid, p_reason text default null)
 returns void
 language plpgsql
@@ -234,9 +231,11 @@ begin
     raise exception 'الموظف غير موجود أو أُنهيت خدمته مسبقاً';
   end if;
 
+  -- من كان يتبع هذا الموظف في الهيكل التنظيمي يصبح بلا مدير مباشر
   update public.employees set manager_id = null
    where school_id = v_school_id and manager_id = p_id;
 
+  -- طلبات تعديل الراتب المعلّقة لموظف انتهت خدمته تُرفض تلقائياً
   update public.salary_requests
      set status = 'rejected', decided_at = now(), decided_by = auth.uid()
    where employee_id = p_id and status = 'pending';
@@ -253,7 +252,7 @@ $function$;
 revoke all on function public.terminate_employee(uuid, text) from public, anon;
 grant execute on function public.terminate_employee(uuid, text) to authenticated;
 
--- ═══ 5) إعادة التفعيل ═══
+-- ═══ 5) إعادة التفعيل (للتراجع عن إنهاء خدمة بالخطأ) ═══
 create function public.reinstate_employee(p_id uuid)
 returns void
 language plpgsql
@@ -294,6 +293,8 @@ revoke all on function public.reinstate_employee(uuid) from public, anon;
 grant execute on function public.reinstate_employee(uuid) to authenticated;
 
 -- ═══ 6) تقرير تصنيف الموظفين: حسب المسمى الوظيفي + حسب نوع الموظف ═══
+-- الموظفون على رأس العمل فقط. الراتب = الأساسي + كل البدلات (نفس أساس دورات الرواتب).
+-- المسمى يُطبَّع (حالة الأحرف + المسافات) كي لا يتشتّت "english" و"ENGLISH" في سطرين.
 create function public.employees_classification()
 returns table(dim text, grp text, headcount integer, total_basic numeric, total_allowance numeric, total_salary numeric)
 language plpgsql
