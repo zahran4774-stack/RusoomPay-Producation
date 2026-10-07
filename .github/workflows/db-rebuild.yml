@@ -71,26 +71,21 @@ jobs:
           psql "$DB" -v ON_ERROR_STOP=1 -c "select c.relname as table_without_rls from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and not c.relrowsecurity order by 1;"
 
       - name: Schema fingerprint (compare with production)
-        # يطبع بصمة لكل نوع كائن كـ notice annotation، لمقارنتها بنفس الاستعلام على الإنتاج.
+        # يطبع بصمة لكل نوع كائن كـ annotation (fp)، وقوائم رموز قصيرة لكل كائن (tok-*) لتشخيص الفروق
+        # عند مقارنتها بنفس الاستعلامات على الإنتاج. لا أسرار ولا اتصال خارجي.
         run: |
           DB="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
-          out=$(psql "$DB" -v ON_ERROR_STOP=1 -At -F ' ' -f supabase/tests/schema_fingerprint.sql)
-          echo "$out"
-          msg=$(echo "$out" | awk 'BEGIN{ORS="%0A"} {print}')
-          echo "::notice title=schema-fingerprint::${msg}"
-
-      - name: Schema detail lists (diagnostics)
-        run: |
-          DB="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
-          emit() { # $1=title  $2=sql
-            out=$(psql "$DB" -v ON_ERROR_STOP=1 -At -c "$2")
-            msg=$(echo "$out" | awk 'BEGIN{ORS="%0A"} {print}')
-            echo "::notice title=$1::${msg}"
-          }
-          emit detail-tables "select c.relname||':'||(select count(*) from information_schema.columns k where k.table_schema='public' and k.table_name=c.relname) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' order by 1"
-          emit detail-functions "select p.proname||'('||pg_get_function_identity_arguments(p.oid)||')' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prokind in ('f','p') order by 1"
-          emit detail-triggers "select c.relname||'.'||t.tgname from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and not t.tgisinternal order by 1"
-          emit detail-policies "select tablename||'.'||policyname from pg_policies where schemaname='public' order by 1"
+          fp=$(psql "$DB" -v ON_ERROR_STOP=1 -At -F ' ' -f supabase/tests/schema_objects.sql \
+            -c "select kind, count(*), md5(string_agg(k, E'\n' order by k)) from schema_objects group by kind order by kind")
+          echo "$fp"
+          echo "::notice title=fp::$(echo "$fp" | awk 'BEGIN{ORS="%0A"} {print}')"
+          if [ "${DETAIL:-1}" = "1" ]; then
+            psql "$DB" -v ON_ERROR_STOP=1 -At -F '|' -f supabase/tests/schema_objects.sql \
+              -c "select kind, string_agg(left(md5(k),7), ' ' order by k) from schema_objects group by kind order by kind" |
+            while IFS='|' read -r kind toks; do
+              echo "::notice title=tok-${kind}::${toks}"
+            done
+          fi
 
       - name: Stop Supabase
         if: always()

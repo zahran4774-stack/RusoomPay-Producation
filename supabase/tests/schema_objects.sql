@@ -1,7 +1,7 @@
--- بصمة مخطط قاعدة البيانات (public + storage policies) — تُشغَّل على قاعدة الإنتاج
--- وعلى القاعدة المبنية من الـ migrations، ويُقارَن الناتج. read-only: SELECT فقط.
--- المخرج: صف لكل نوع كائن: (kind, n, md5). تطابق md5 = تطابق ذلك النوع.
--- لا تعتمد على OIDs أو ترتيب الأعمدة أو المالك، كي لا تظهر فروق وهمية.
+-- كائنات مخطط قاعدة البيانات (public + بعض storage) كجدول مؤقت schema_objects(kind, k).
+-- يُشغَّل على القاعدة المبنية من الـ migrations (CI) وعلى الإنتاج (read-only) لمقارنة البصمات.
+-- لا يعتمد على OIDs أو ترتيب الأعمدة أو المالك، كي لا تظهر فروق وهمية.
+create temp table schema_objects as
 with
 cols as (
   select format('%s.%s:%s:%s:%s:%s', c.table_name, c.column_name, c.data_type, c.is_nullable,
@@ -51,17 +51,12 @@ enums as (
   from pg_type t join pg_enum e on e.enumtypid = t.oid join pg_namespace n on n.oid = t.typnamespace
   where n.nspname = 'public' group by t.typname
 )
-select kind, count(*) as n, md5(string_agg(k, E'\n' order by k)) as md5
-from (
-  select 'columns' kind, k from cols
-  union all select 'functions', k from funcs
-  union all select 'policies', k from pols
-  union all select 'indexes', k from idx
-  union all select 'triggers', k from trg
-  union all select 'constraints', k from cons
-  union all select 'rls_flags', k from rls
-  union all select 'buckets', k from buckets
-  union all select 'enums', k from enums
-) x
-group by kind
-order by kind;
+select 'columns' as kind, k from cols
+union all select 'functions', k from funcs
+union all select 'policies', k from pols
+union all select 'indexes', k from idx
+union all select 'triggers', k from trg
+union all select 'constraints', k from cons
+union all select 'rls_flags', k from rls
+union all select 'buckets', k from buckets
+union all select 'enums', k from enums;
