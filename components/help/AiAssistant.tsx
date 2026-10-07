@@ -19,6 +19,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
 import { useLanguage } from '../i18n/LanguageProvider'
+import { createClient } from '../../lib/supabase-client'
 
 type Msg = { role: 'user' | 'assistant'; content: string }
 
@@ -83,6 +84,7 @@ const STR = {
 const HIDDEN_PATHS = [
   '/', '/login', '/signup', '/register', '/forgot-password', '/reset-password', '/auth',
   '/privacy', '/terms', '/parent-register', '/staff-register',
+  '/parent', // بوابة ولي الأمر: لا مساعد ذكي (قرار المنتج + حماية بيانات المدرسة)
 ]
 
 export default function AiAssistant() {
@@ -94,6 +96,15 @@ export default function AiAssistant() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [conversationId, setConversationId] = useState<string | undefined>()
+  // الدور: المساعد للطاقم فقط — يبقى مخفياً حتى يُعرف الدور، ولا يظهر لولي الأمر أبداً
+  const [staffOk, setStaffOk] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    createClient().rpc('my_role').then(({ data }) => {
+      if (!cancelled) setStaffOk(!!data && data !== 'parent' && data !== 'student')
+    }, () => { if (!cancelled) setStaffOk(false) })
+    return () => { cancelled = true }
+  }, [pathname])
 
   // إعادة الضبط للحالة الأساسية — يمسح المحادثة دون إغلاق اللوحة
   const resetChat = useCallback(() => {
@@ -176,7 +187,7 @@ export default function AiAssistant() {
   const hidden = HIDDEN_PATHS.some((p) =>
     p === '/' ? pathname === '/' : pathname?.startsWith(p),
   )
-  if (hidden) return null
+  if (hidden || !staffOk) return null
 
   return (
     <div data-i18n-ignore="true">
