@@ -2806,7 +2806,8 @@ CREATE OR REPLACE TRIGGER trg_check_financial_year_open
   BEFORE INSERT ON public.journal_entries
   FOR EACH ROW EXECUTE FUNCTION public.check_financial_year_open();
 
-CREATE OR REPLACE CONSTRAINT TRIGGER trg_check_journal_balanced
+DROP TRIGGER IF EXISTS trg_check_journal_balanced ON public.journal_lines;
+CREATE CONSTRAINT TRIGGER trg_check_journal_balanced
   AFTER INSERT ON public.journal_lines
   DEFERRABLE INITIALLY DEFERRED
   FOR EACH ROW EXECUTE FUNCTION public.check_journal_balanced();
