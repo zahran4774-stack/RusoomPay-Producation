@@ -1,0 +1,82 @@
+# ═══════════════════════════════════════════════════════════════
+# الاختبارات التكاملية (tests/integration) على قاعدة Supabase محلية مؤقتة داخل GitHub.
+#
+# بديل لـ tests.yml القديم الذي كان يضرب قاعدة الإنتاج (وترك مدارس/مستخدمين وهميين فيها).
+# هنا: supabase start يبني القاعدة من supabase/migrations، والاختبارات تنشئ بياناتها فيها وتُحذف القاعدة
+# كاملة عند نهاية التشغيل. لا أسرار ولا اتصال بالإنتاج إطلاقاً.
+# ═══════════════════════════════════════════════════════════════
+name: Integration Tests (local DB)
+
+on:
+  push:
+    branches:
+      - main
+      - db-baseline
+    paths:
+      - 'tests/**'
+      - 'supabase/**'
+      - 'lib/**'
+      - 'app/api/**'
+      - 'package.json'
+      - '.github/workflows/integration-tests.yml'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  integration:
+    name: Integration tests on throwaway Supabase
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase (applies all migrations)
+        run: |
+          supabase start -x studio,mailpit,edge-runtime,logflare,vector,imgproxy,postgres-meta,supavisor
+
+      - name: Export local connection settings
+        # مفاتيح القاعدة المحلية المؤقتة فقط (ديمو) — ليست أسراراً حقيقية
+        run: |
+          supabase status -o env > local.env
+          get() { grep "^$1=" local.env | head -1 | cut -d= -f2- | tr -d '"'; }
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$(get API_URL)"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$(get ANON_KEY)"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$(get SERVICE_ROLE_KEY)"
+            echo "TEST_SUPABASE_URL=$(get API_URL)"
+            echo "TEST_SUPABASE_SERVICE_KEY=$(get SERVICE_ROLE_KEY)"
+          } >> "$GITHUB_ENV"
+
+      - name: Run integration tests
+        run: npx vitest run tests/integration 2>&1 | tee it.log
+        continue-on-error: true
+        id: it
+
+      - name: Summarize results
+        run: |
+          sum=$(sed 's/\x1b\[[0-9;]*m//g' it.log | grep -E "✓|×|FAIL|Test Files|Tests |AssertionError|Error:" | head -40 | sed 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
+          echo "::notice title=integration tests::${sum}"
+          if sed 's/\x1b\[[0-9;]*m//g' it.log | grep -qE "^ *(FAIL|×)|Failed Tests|Test Files .* failed"; then
+            echo "integration tests failed"; exit 1
+          fi
+
+      - name: Stop Supabase
+        if: always()
+        run: supabase stop --no-backup || true
