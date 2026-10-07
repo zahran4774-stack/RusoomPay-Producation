@@ -77,6 +77,31 @@ jobs:
             echo "integration tests failed"; exit 1
           fi
 
+      - name: Rehearse purge_archived_test_data.sql on this throwaway DB
+        # حالة هذه القاعدة بعد الاختبارات تشبه الإنتاج (مدارس ARCHIVED_TEST + قيود + مستخدمو @test.rusoompay.invalid).
+        # نضيف مدرسة "حقيقية" بقيد محاسبي ونشغّل سكربت التنظيف الفعلي بأعداد هذه القاعدة، ثم نتأكد أنها بقيت.
+        run: |
+          DB="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          psql "$DB" -v ON_ERROR_STOP=1 <<'SQL'
+          do $$ declare s uuid; a1 uuid; a2 uuid; e uuid;
+          begin
+            insert into public.schools(name,country,currency) values ('REAL_KEEP','OM','OMR') returning id into s;
+            insert into public.accounts(school_id,code,name,type) values (s,'1110','cash','asset') returning id into a1;
+            insert into public.accounts(school_id,code,name,type) values (s,'4100','rev','revenue') returning id into a2;
+            insert into public.journal_entries(school_id,entry_date,description) values (s,current_date,'keep me') returning id into e;
+            insert into public.journal_lines(school_id,entry_id,account_id,debit,credit) values (s,e,a1,5,0),(s,e,a2,0,5);
+          end $$;
+          SQL
+          S=$(psql "$DB" -At -c "select count(*) from public.schools where name like 'ARCHIVED\_TEST\_%' escape '\\' and is_test is true")
+          U=$(psql "$DB" -At -c "select count(*) from auth.users where email like '%@test.rusoompay.invalid'")
+          echo "rehearsal counts: schools=$S users=$U"
+          sed "s/VALUES (15, 212);/VALUES ($S, $U);/" supabase/maintenance/purge_archived_test_data.sql > purge_rehearsal.sql
+          psql "$DB" -v ON_ERROR_STOP=1 -f purge_rehearsal.sql 2>&1 | tee purge.log
+          grep -q "PURGE OK" purge.log
+          psql "$DB" -At -c "select 'left_archived='||(select count(*) from public.schools where name like 'ARCHIVED%')||' real_kept='||(select count(*) from public.schools where name='REAL_KEEP')||' real_lines='||(select count(*) from public.journal_lines l join public.schools s on s.id=l.school_id where s.name='REAL_KEEP')||' trig_on='||(select count(*) from pg_trigger where tgname in ('no_delete_journal','no_delete_lines') and tgenabled='O')" | tee after.txt
+          grep -q "left_archived=0 real_kept=1 real_lines=2 trig_on=2" after.txt
+          echo "::notice title=purge rehearsal::$(tr '\n' ' ' < after.txt) | $(grep -c PURGE purge.log) ok | $(cat purge.log | grep 'rehearsal' | head -1)"
+
       - name: Stop Supabase
         if: always()
         run: supabase stop --no-backup || true
