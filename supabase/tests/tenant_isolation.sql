@@ -90,6 +90,34 @@ do $$ declare r jsonb; ok boolean:=true; begin begin execute $q$select public.fi
 do $$ declare ok boolean:=false; begin begin execute $q$select public.student_payment_tracker('bbbbbbbb-3333-0000-0000-00000000000b'::uuid)$q$; exception when others then ok:=true; end; if ok then raise notice 'PASS: anon cannot read another school payment tracker'; else raise warning 'FAIL: anon cannot read another school payment tracker'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
 do $$ declare ok boolean:=false; begin begin execute $q$select public.update_school_branding('x','#000000','#000000')$q$; exception when others then ok:=true; end; if ok then raise notice 'PASS: anon cannot update school branding'; else raise warning 'FAIL: anon cannot update school branding'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
 reset role;
+do $$ declare f text; bad text:=''; begin
+  foreach f in array array['record_payment','approve_payment','reject_payment','delete_payment_within_window','edit_payment_within_window','food_purchase','mark_meal_purchase_paid','cancel_meal_purchase','create_manual_journal_entry','next_invoice_number','next_expense_code','set_user_permission','staff_permissions_list','test_dummy_function','student_payment_tracker','update_school_branding','start_impersonation','platform_error_log']
+  loop
+    if exists (select 1 from pg_proc p where p.pronamespace='public'::regnamespace and p.proname=f and has_function_privilege('anon',p.oid,'EXECUTE')) then bad:=bad||f||' '; end if;
+  end loop;
+  if bad='' then raise notice 'PASS: anon has no EXECUTE on sensitive functions'; else raise warning 'FAIL: anon can EXECUTE: %%', bad; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if;
+  bad:='';
+  foreach f in array array['enabled_countries','public_schools','available_plans','register_school','parent_signup_by_phone','my_role','my_school_id']
+  loop
+    if not exists (select 1 from pg_proc p where p.pronamespace='public'::regnamespace and p.proname=f and has_function_privilege('anon',p.oid,'EXECUTE')) then bad:=bad||f||' '; end if;
+  end loop;
+  if bad='' then raise notice 'PASS: anon keeps pre-login functions'; else raise warning 'FAIL: anon lost: %%', bad; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if;
+  bad:='';
+  foreach f in array array['record_payment','approve_payment','food_purchase','create_manual_journal_entry','student_payment_tracker','my_role']
+  loop
+    if not exists (select 1 from pg_proc p where p.pronamespace='public'::regnamespace and p.proname=f and has_function_privilege('authenticated',p.oid,'EXECUTE')) then bad:=bad||f||' '; end if;
+  end loop;
+  if bad='' then raise notice 'PASS: authenticated keeps app functions'; else raise warning 'FAIL: authenticated lost: %%', bad; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if;
+end $$;
+reset role;
+select set_config('request.jwt.claims','{"sub":"aaaaaaaa-1111-0000-0000-00000000000a","role":"authenticated"}',false);
+set role authenticated;
+do $$ declare c int; begin begin execute $q$select count(*) from (select public.my_role()::text r) x where r='owner'$q$ into c; exception when others then c:=-1; end; if c = 1 then raise notice 'PASS: owner A my_role works after revoke'; else raise warning 'FAIL: owner A my_role works after revoke'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+reset role;
+select set_config('request.jwt.claims','{"role":"anon"}',false);
+set role anon;
+do $$ declare c int; begin begin execute $q$select 1 from (select count(*) from public.public_schools()) x$q$ into c; exception when others then c:=-1; end; if c = 1 then raise notice 'PASS: anon public_schools callable'; else raise warning 'FAIL: anon public_schools callable'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+reset role;
 do $$ declare p numeric; n text; begin
   select paid into p from public.student_fees where id='bbbbbbbb-4444-0000-0000-00000000000b';
   if p = 0 then raise notice 'PASS: school B fee untouched'; else raise warning 'FAIL: school B fee changed (paid=%)', p; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if;
