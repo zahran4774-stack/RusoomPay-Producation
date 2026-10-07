@@ -307,6 +307,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
     }
 
+    // 1ب) الدور — المساعد للطاقم فقط؛ أولياء الأمور والطلاب ممنوعون (يكشف أرقام المدرسة)
+    const { data: myRole } = await supabase.rpc('my_role')
+    if (!myRole || myRole === 'parent' || myRole === 'student') {
+      return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+    }
+
     // 2) تحديد المعدّل
     const allowed = await checkRateLimit(supabase, user.id)
     if (!allowed) {
