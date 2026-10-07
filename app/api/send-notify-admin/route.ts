@@ -18,6 +18,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'يجب تسجيل الدخول' }, { status: 401 })
     }
 
+    // 1ب) الدور — طاقم المدرسة فقط (لا أولياء أمور ولا طلاب)
+    const { data: myRole } = await supabase.rpc('my_role')
+    if (!['owner', 'admin', 'platform_admin'].includes(myRole as string)) {
+      return NextResponse.json({ success: false, error: 'غير مصرّح' }, { status: 403 })
+    }
+
     // 2) تحديد المعدّل — 5 تنبيهات كل 5 دقائق لكل مستخدم
     const rl = await checkRateLimit(`notify-admin:${user.id}`, 5, 300)
     if (!rl.allowed) {

@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { notifyOwnerNewSubscriber } from "@/lib/whatsapp";
+import { checkRateLimit, clientId } from "@/lib/rate-limit";
+
+const MAX_LEN = 200;
+const str = (v: unknown, max = MAX_LEN) =>
+  typeof v === "string" && v.trim().length > 0 && v.length <= max ? v.trim() : null;
+const optStr = (v: unknown, max = MAX_LEN) =>
+  v == null || v === "" ? null : str(v, max);
 
 function getSupabaseAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -17,17 +24,38 @@ function getSupabaseAdmin() {
 
 export async function POST(req: NextRequest) {
   try {
+    // نقطة عامة بلا تسجيل دخول: تحديد معدّل لكل IP (5 طلبات/ساعة) — كل طلب يرسل واتساب لمالك المنصة
+    const rl = await checkRateLimit(`register:${clientId(req)}`, 5, 3600);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "محاولات كثيرة. حاول لاحقاً." },
+        { status: 429, headers: { "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)) } }
+      );
+    }
+
     const supabase = getSupabaseAdmin();
 
-    const body = await req.json();
-    const { schoolName, contactName, phone, email, city, plan } = body;
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return NextResponse.json({ error: "جسم الطلب غير صالح" }, { status: 400 });
+    }
 
-    // التحقق من الحقول الإلزامية
+    // التحقق من الحقول وأطوالها (يمنع حشو البيانات)
+    const schoolName = str(body.schoolName);
+    const contactName = str(body.contactName);
+    const phone = str(body.phone, 30);
+    const plan = str(body.plan, 50);
+    const email = optStr(body.email);
+    const city = optStr(body.city);
+
     if (!schoolName || !contactName || !phone || !plan) {
       return NextResponse.json(
-        { error: "بيانات ناقصة" },
+        { error: "بيانات ناقصة أو غير صالحة" },
         { status: 400 }
       );
+    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return NextResponse.json({ error: "بريد غير صالح" }, { status: 400 });
     }
 
     // حفظ الطلب في Supabase بحالة pending
@@ -58,8 +86,8 @@ export async function POST(req: NextRequest) {
       schoolName,
       contactName,
       phone,
-      email,
-      city,
+      email: email ?? undefined,
+      city: city ?? undefined,
       plan,
     }).catch((err) =>
       console.error("[register] notify error:", err)
