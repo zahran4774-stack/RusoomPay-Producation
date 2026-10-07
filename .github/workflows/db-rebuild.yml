@@ -1,0 +1,66 @@
+# ═══════════════════════════════════════════════════════════════
+# فحص إعادة بناء قاعدة البيانات من ملفات supabase/migrations
+#
+# يبني قاعدة Postgres نظيفة ومؤقتة داخل GitHub (supabase start) ويطبّق كل
+# الـ migrations بالترتيب. إذا فشل أي ملف، يفشل الفحص.
+#
+# أمان: لا يستخدم أي أسرار (secrets) ولا يتصل بقاعدة الإنتاج إطلاقاً —
+# كل شيء يجري على قاعدة محلية تُحذف عند انتهاء التشغيل.
+# ═══════════════════════════════════════════════════════════════
+name: DB Rebuild Check
+
+on:
+  push:
+    branches:
+      - db-baseline
+    paths:
+      - 'supabase/**'
+      - '.github/workflows/db-rebuild.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'supabase/**'
+      - '.github/workflows/db-rebuild.yml'
+  workflow_dispatch:
+
+jobs:
+  rebuild:
+    name: Rebuild DB from migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase (applies all migrations)
+        # نستبعد الخدمات غير اللازمة لتسريع التشغيل. auth و storage و postgrest و realtime
+        # تبقى لأن الـ migrations تعتمد على مخططاتها (auth.users, storage.objects ...).
+        run: supabase start -x studio,mailpit,edge-runtime,logflare,vector,imgproxy,postgres-meta,supavisor
+
+      - name: Schema summary
+        run: |
+          DB="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          psql "$DB" -v ON_ERROR_STOP=1 <<'SQL'
+          select 'tables'    as what, count(*) from information_schema.tables where table_schema='public' and table_type='BASE TABLE'
+          union all select 'functions', count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public'
+          union all select 'policies',  count(*) from pg_policies where schemaname='public'
+          union all select 'triggers',  count(*) from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and not t.tgisinternal
+          union all select 'indexes',   count(*) from pg_indexes where schemaname='public'
+          union all select 'migrations_applied', count(*) from supabase_migrations.schema_migrations;
+          SQL
+
+      - name: Public tables without RLS (report)
+        run: |
+          DB="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          psql "$DB" -v ON_ERROR_STOP=1 -c "select c.relname as table_without_rls from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and not c.relrowsecurity order by 1;"
+
+      - name: Stop Supabase
+        if: always()
+        run: supabase stop --no-backup || true
