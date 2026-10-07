@@ -52,6 +52,12 @@ END $$;
 -- حذف المدارس (cascade لكل جداولها) مع تعطيل حارس حذف القيود داخل المعاملة فقط
 ALTER TABLE public.journal_lines   DISABLE TRIGGER no_delete_lines;
 ALTER TABLE public.journal_entries DISABLE TRIGGER no_delete_journal;
+-- جداول مرتبطة بالمدرسة بلا cascade (NO ACTION): نفرّغ صفوف مدارس الاختبار فقط
+DELETE FROM public.school_invoice_counters WHERE school_id IN (SELECT id FROM _ts);
+DELETE FROM public.user_permissions        WHERE school_id IN (SELECT id FROM _ts);
+DELETE FROM public.certificate_requests    WHERE school_id IN (SELECT id FROM _ts);
+DELETE FROM public.meal_orders             WHERE school_id IN (SELECT id FROM _ts);
+UPDATE public.profiles SET impersonating_school_id = NULL WHERE impersonating_school_id IN (SELECT id FROM _ts);
 DELETE FROM public.schools WHERE id IN (SELECT id FROM _ts);
 ALTER TABLE public.journal_entries ENABLE TRIGGER no_delete_journal;
 ALTER TABLE public.journal_lines   ENABLE TRIGGER no_delete_lines;
