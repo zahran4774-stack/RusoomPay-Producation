@@ -18,7 +18,7 @@ insert into public.profiles(id,school_id,role,full_name) values
   ('aaaaaaaa-2222-0000-0000-00000000000a','aaaaaaaa-0000-0000-0000-00000000000a','parent','Parent A'),
   ('aaaaaaaa-5555-0000-0000-00000000000a','aaaaaaaa-0000-0000-0000-00000000000a','parent','Parent L');
 insert into public.parent_students(school_id,parent_id,student_id) values ('aaaaaaaa-0000-0000-0000-00000000000a','aaaaaaaa-5555-0000-0000-00000000000a','aaaaaaaa-3333-0000-0000-00000000000a');
-insert into public.employees(school_id,code,full_name) values ('aaaaaaaa-0000-0000-0000-00000000000a','EMP-A','Emp A'),('bbbbbbbb-0000-0000-0000-00000000000b','EMP-B','Emp B');
+insert into public.employees(school_id,code,full_name,nationality) values ('aaaaaaaa-0000-0000-0000-00000000000a','EMP-A','Emp A','OM'),('bbbbbbbb-0000-0000-0000-00000000000b','EMP-B','Emp B','OM');
 insert into public.students(id,school_id,code,full_name,grade) values
   ('aaaaaaaa-3333-0000-0000-00000000000a','aaaaaaaa-0000-0000-0000-00000000000a','STU-A1','Student A','الأول'),
   ('bbbbbbbb-3333-0000-0000-00000000000b','bbbbbbbb-0000-0000-0000-00000000000b','STU-B1','Student B','الأول');
