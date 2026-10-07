@@ -56,6 +56,10 @@ BEGIN
         RAISE EXCEPTION 'sql function % is not set-returning; handle manually', r.proname;
       END IF;
       body := substring(def FROM '\$function\$([\s\S]*)\$function\$');
+      IF r.proname = 'inventory_category_report' THEN
+        -- plpgsql RETURN QUERY is strict about types: sum(integer) is bigint, the column is numeric
+        body := replace(body, 'coalesce(sum(qty),0) as total_qty', 'coalesce(sum(qty),0)::numeric as total_qty');
+      END IF;
       def  := substring(def FROM '^([\s\S]*?)\$function\$') || E'$function$\n#variable_conflict use_column\nbegin\n' || guard || E'\nreturn query\n' || body || E'\nend;\n$function$\n';
       def  := regexp_replace(def, 'LANGUAGE sql', 'LANGUAGE plpgsql');
     ELSE
