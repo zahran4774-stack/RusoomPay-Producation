@@ -22,8 +22,7 @@ funcs as (
 pols as (
   select format('%s.%s.%s.%s.%s.%s.%s', schemaname, tablename, policyname, cmd, permissive,
                 array_to_string(roles, ','), md5(coalesce(qual, '') || '|' || coalesce(with_check, ''))) as k
-  from pg_policies where schemaname in ('public', 'storage') and
-    (schemaname = 'public' or policyname like 'fee_receipts%' or policyname like 'subscription_receipts%')
+  from pg_policies where (schemaname = 'public') or (schemaname = 'storage' and tablename = 'objects')
 ),
 idx as (
   select indexdef as k from pg_indexes where schemaname = 'public'

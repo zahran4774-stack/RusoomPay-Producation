@@ -3086,6 +3086,59 @@ CREATE POLICY subscription_receipts_school_upload ON storage.objects AS PERMISSI
    FROM profiles
   WHERE (profiles.id = auth.uid())))));
 
+-- Remaining storage policies (logos / invoices / certificates buckets)
+DROP POLICY IF EXISTS certificates_guardian_read ON storage.objects;
+CREATE POLICY certificates_guardian_read ON storage.objects AS PERMISSIVE FOR SELECT TO authenticated
+  USING (((bucket_id = 'certificates'::text) AND (EXISTS ( SELECT 1
+   FROM (certificates c
+     JOIN parent_students ps ON ((ps.student_id = c.student_id)))
+  WHERE ((c.file_path = objects.name) AND (ps.parent_id = auth.uid()))))));
+
+DROP POLICY IF EXISTS certificates_staff_all ON storage.objects;
+CREATE POLICY certificates_staff_all ON storage.objects AS PERMISSIVE FOR ALL TO authenticated
+  USING (((bucket_id = 'certificates'::text) AND ((storage.foldername(name))[1] = ( SELECT (profiles.school_id)::text AS school_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid())))))
+  WITH CHECK (((bucket_id = 'certificates'::text) AND ((storage.foldername(name))[1] = ( SELECT (profiles.school_id)::text AS school_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid())))));
+
+DROP POLICY IF EXISTS invoices_school_read ON storage.objects;
+CREATE POLICY invoices_school_read ON storage.objects AS PERMISSIVE FOR SELECT TO public
+  USING (((bucket_id = 'invoices'::text) AND ((storage.foldername(name))[1] = ( SELECT (profiles.school_id)::text AS school_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid())))));
+
+DROP POLICY IF EXISTS invoices_school_upload ON storage.objects;
+CREATE POLICY invoices_school_upload ON storage.objects AS PERMISSIVE FOR INSERT TO public
+  WITH CHECK (((bucket_id = 'invoices'::text) AND ((storage.foldername(name))[1] = ( SELECT (profiles.school_id)::text AS school_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid())))));
+
+DROP POLICY IF EXISTS logos_delete ON storage.objects;
+CREATE POLICY logos_delete ON storage.objects AS PERMISSIVE FOR DELETE TO authenticated
+  USING (((bucket_id = 'logos'::text) AND ((storage.foldername(name))[1] = ( SELECT (profiles.school_id)::text AS school_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid())))));
+
+DROP POLICY IF EXISTS logos_read ON storage.objects;
+CREATE POLICY logos_read ON storage.objects AS PERMISSIVE FOR SELECT TO authenticated
+  USING (((bucket_id = 'logos'::text) AND ((storage.foldername(name))[1] = ( SELECT (profiles.school_id)::text AS school_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid())))));
+
+DROP POLICY IF EXISTS logos_update ON storage.objects;
+CREATE POLICY logos_update ON storage.objects AS PERMISSIVE FOR UPDATE TO authenticated
+  USING (((bucket_id = 'logos'::text) AND ((storage.foldername(name))[1] = ( SELECT (profiles.school_id)::text AS school_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid())))));
+
+DROP POLICY IF EXISTS logos_upload ON storage.objects;
+CREATE POLICY logos_upload ON storage.objects AS PERMISSIVE FOR INSERT TO authenticated
+  WITH CHECK (((bucket_id = 'logos'::text) AND ((storage.foldername(name))[1] = ( SELECT (profiles.school_id)::text AS school_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid())))));
+
 -- ---------------------------------------------------------------------------
 -- Function EXECUTE grants (production state)
 -- Default: authenticated only. Exceptions below: service-role-only (payment
