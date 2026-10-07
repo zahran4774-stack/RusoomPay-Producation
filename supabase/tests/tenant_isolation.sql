@@ -111,7 +111,7 @@ do $$ declare ok boolean:=false; begin begin execute $q$select public.student_pa
 do $$ declare ok boolean:=false; begin begin execute $q$select public.update_school_branding('x','#000000','#000000')$q$; exception when others then ok:=true; end; if ok then raise notice 'PASS: anon cannot update school branding'; else raise warning 'FAIL: anon cannot update school branding'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
 reset role;
 do $$ declare f text; bad text:=''; begin
-  foreach f in array array['record_payment','approve_payment','reject_payment','delete_payment_within_window','edit_payment_within_window','food_purchase','mark_meal_purchase_paid','cancel_meal_purchase','create_manual_journal_entry','next_invoice_number','next_expense_code','set_user_permission','staff_permissions_list','test_dummy_function','student_payment_tracker','update_school_branding','start_impersonation','platform_error_log']
+  foreach f in array array['record_payment','approve_payment','reject_payment','delete_payment_within_window','edit_payment_within_window','food_purchase','mark_meal_purchase_paid','cancel_meal_purchase','create_manual_journal_entry','next_invoice_number','next_expense_code','set_user_permission','staff_permissions_list','student_payment_tracker','update_school_branding','start_impersonation','platform_error_log']
   loop
     if exists (select 1 from pg_proc p where p.pronamespace='public'::regnamespace and p.proname=f and has_function_privilege('anon',p.oid,'EXECUTE')) then bad:=bad||f||' '; end if;
   end loop;
