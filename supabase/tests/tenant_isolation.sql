@@ -95,19 +95,19 @@ do $$ declare f text; bad text:=''; begin
   loop
     if exists (select 1 from pg_proc p where p.pronamespace='public'::regnamespace and p.proname=f and has_function_privilege('anon',p.oid,'EXECUTE')) then bad:=bad||f||' '; end if;
   end loop;
-  if bad='' then raise notice 'PASS: anon has no EXECUTE on sensitive functions'; else raise warning 'FAIL: anon can EXECUTE: %%', bad; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if;
+  if bad='' then raise notice 'PASS: anon has no EXECUTE on sensitive functions'; else raise warning 'FAIL: anon can EXECUTE: %', bad; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if;
   bad:='';
   foreach f in array array['enabled_countries','public_schools','available_plans','register_school','parent_signup_by_phone','my_role','my_school_id']
   loop
     if not exists (select 1 from pg_proc p where p.pronamespace='public'::regnamespace and p.proname=f and has_function_privilege('anon',p.oid,'EXECUTE')) then bad:=bad||f||' '; end if;
   end loop;
-  if bad='' then raise notice 'PASS: anon keeps pre-login functions'; else raise warning 'FAIL: anon lost: %%', bad; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if;
+  if bad='' then raise notice 'PASS: anon keeps pre-login functions'; else raise warning 'FAIL: anon lost: %', bad; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if;
   bad:='';
   foreach f in array array['record_payment','approve_payment','food_purchase','create_manual_journal_entry','student_payment_tracker','my_role']
   loop
     if not exists (select 1 from pg_proc p where p.pronamespace='public'::regnamespace and p.proname=f and has_function_privilege('authenticated',p.oid,'EXECUTE')) then bad:=bad||f||' '; end if;
   end loop;
-  if bad='' then raise notice 'PASS: authenticated keeps app functions'; else raise warning 'FAIL: authenticated lost: %%', bad; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if;
+  if bad='' then raise notice 'PASS: authenticated keeps app functions'; else raise warning 'FAIL: authenticated lost: %', bad; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if;
 end $$;
 reset role;
 select set_config('request.jwt.claims','{"sub":"aaaaaaaa-1111-0000-0000-00000000000a","role":"authenticated"}',false);
