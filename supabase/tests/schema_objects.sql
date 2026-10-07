@@ -12,7 +12,7 @@ cols as (
 ),
 funcs as (
   select format('%s(%s)=%s|anon:%s|auth:%s|public:%s', p.proname, pg_get_function_identity_arguments(p.oid),
-                md5(pg_get_functiondef(p.oid)),
+                md5(replace(pg_get_functiondef(p.oid), E'\r', '')),
                 has_function_privilege('anon', p.oid, 'execute'),
                 has_function_privilege('authenticated', p.oid, 'execute'),
                 has_function_privilege('public', p.oid, 'execute')) as k

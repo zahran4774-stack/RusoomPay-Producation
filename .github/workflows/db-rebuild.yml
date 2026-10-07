@@ -118,6 +118,12 @@ jobs:
           grep -v '^PROBE ' probe.log | grep -iE 'error' | head -5 | sed 's/^/::warning title=probe error::/'
           exit 0
 
+      - name: Function hashes (informational)
+        run: |
+          DB="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          out=$(psql "$DB" -At -c "select string_agg(proname||' '||left(md5(pg_get_functiondef(oid)),6)||' '||(has_function_privilege('anon',oid,'execute'))::int||(has_function_privilege('authenticated',oid,'execute'))::int||(has_function_privilege('public',oid,'execute'))::int, ' ; ' order by proname) from pg_proc where pronamespace='public'::regnamespace and proname in ('account_balances','balance_sheet_asof','journal_period','trial_balance_period','financial_summary','income_statement_period','vat_report_period','cashflow_forecast','collection_analytics','dashboard_summary','risk_scores','copilot_gated','org_overview','overdue_reminders','payroll_yearly_summary','meal_cost_report','meal_purchases_list','meal_suppliers','inventory_category_report','inventory_dispenses_list','inventory_list','inventory_purchases_summary','food_inventory_list','my_school_feedback','student_parents','student_certificates','validate_wps_run','ensure_cafeteria_account','ensure_inventory_accounts','ensure_meal_cost_accounts','ensure_transport_account','claim_queue_batch','mark_queue_result','cleanup_rate_limits','next_invoice_number','next_expense_code')")
+          echo "::notice title=function hashes::${out}"
+
       - name: Stop Supabase
         if: always()
         run: supabase stop --no-backup || true
