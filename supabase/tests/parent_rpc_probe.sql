@@ -1,37 +1,4 @@
--- Tenant-isolation / authorization tests. Run against a THROWAWAY local database only
--- (CI: supabase start). Seeds two schools, acts as real roles with JWT claims, and
--- verifies school A cannot see or change school B, and anon cannot reach money RPCs.
--- Failures are counted (not fatal one by one); the script fails at the end if any failed.
-\set ON_ERROR_STOP on
-select set_config('t.fail','0',false);
-begin;
-set local session_replication_role = replica;  -- seed without business triggers
-insert into auth.users(id, aud, role, email) values
-  ('aaaaaaaa-1111-0000-0000-00000000000a','authenticated','authenticated','owner.a@test.invalid'),
-  ('bbbbbbbb-1111-0000-0000-00000000000b','authenticated','authenticated','owner.b@test.invalid'),
-  ('aaaaaaaa-2222-0000-0000-00000000000a','authenticated','authenticated','parent.a@test.invalid'),
-  ('aaaaaaaa-5555-0000-0000-00000000000a','authenticated','authenticated','parent.l@test.invalid');
-insert into public.schools(id,name) values ('aaaaaaaa-0000-0000-0000-00000000000a','School A'),('bbbbbbbb-0000-0000-0000-00000000000b','School B');
-insert into public.profiles(id,school_id,role,full_name) values
-  ('aaaaaaaa-1111-0000-0000-00000000000a','aaaaaaaa-0000-0000-0000-00000000000a','owner','Owner A'),
-  ('bbbbbbbb-1111-0000-0000-00000000000b','bbbbbbbb-0000-0000-0000-00000000000b','owner','Owner B'),
-  ('aaaaaaaa-2222-0000-0000-00000000000a','aaaaaaaa-0000-0000-0000-00000000000a','parent','Parent A'),
-  ('aaaaaaaa-5555-0000-0000-00000000000a','aaaaaaaa-0000-0000-0000-00000000000a','parent','Parent L');
-insert into public.parent_students(school_id,parent_id,student_id) values ('aaaaaaaa-0000-0000-0000-00000000000a','aaaaaaaa-5555-0000-0000-00000000000a','aaaaaaaa-3333-0000-0000-00000000000a');
-insert into public.employees(school_id,code,full_name,nationality) values ('aaaaaaaa-0000-0000-0000-00000000000a','EMP-A','Emp A','OM'),('bbbbbbbb-0000-0000-0000-00000000000b','EMP-B','Emp B','OM');
-insert into public.students(id,school_id,code,full_name,grade) values
-  ('aaaaaaaa-3333-0000-0000-00000000000a','aaaaaaaa-0000-0000-0000-00000000000a','STU-A1','Student A','الأول'),
-  ('bbbbbbbb-3333-0000-0000-00000000000b','bbbbbbbb-0000-0000-0000-00000000000b','STU-B1','Student B','الأول');
-insert into public.student_fees(id,school_id,student_id,description,total,paid) values
-  ('aaaaaaaa-4444-0000-0000-00000000000a','aaaaaaaa-0000-0000-0000-00000000000a','aaaaaaaa-3333-0000-0000-00000000000a','fee A',100,0),
-  ('bbbbbbbb-4444-0000-0000-00000000000b','bbbbbbbb-0000-0000-0000-00000000000b','bbbbbbbb-3333-0000-0000-00000000000b','fee B',100,0);
-insert into public.accounts(id,school_id,code,name,type) values
-  ('aaaaaaaa-7777-0000-0000-000000000001','aaaaaaaa-0000-0000-0000-00000000000a','1000','Cash A','asset'),('aaaaaaaa-7777-0000-0000-000000000002','aaaaaaaa-0000-0000-0000-00000000000a','4000','Revenue A','income');
-insert into public.journal_entries(id,school_id) values ('aaaaaaaa-6666-0000-0000-00000000000a','aaaaaaaa-0000-0000-0000-00000000000a');
-insert into public.journal_lines(school_id,entry_id,account_id,debit,credit) values
-  ('aaaaaaaa-0000-0000-0000-00000000000a','aaaaaaaa-6666-0000-0000-00000000000a','aaaaaaaa-7777-0000-0000-000000000001',100,0),('aaaaaaaa-0000-0000-0000-00000000000a','aaaaaaaa-6666-0000-0000-00000000000a','aaaaaaaa-7777-0000-0000-000000000002',0,100);
-commit;
-
+-- relies on the data seeded (and committed) by tenant_isolation.sql, which runs first
 -- Probe: what can a PARENT (profile in school A, no linked child) execute? Informational; never fails the run.
 reset role;
 select set_config('request.jwt.claims','{"sub":"aaaaaaaa-2222-0000-0000-00000000000a","role":"authenticated"}',false);
