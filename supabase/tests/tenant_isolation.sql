@@ -9,12 +9,16 @@ set local session_replication_role = replica;  -- seed without business triggers
 insert into auth.users(id, aud, role, email) values
   ('aaaaaaaa-1111-0000-0000-00000000000a','authenticated','authenticated','owner.a@test.invalid'),
   ('bbbbbbbb-1111-0000-0000-00000000000b','authenticated','authenticated','owner.b@test.invalid'),
-  ('aaaaaaaa-2222-0000-0000-00000000000a','authenticated','authenticated','parent.a@test.invalid');
+  ('aaaaaaaa-2222-0000-0000-00000000000a','authenticated','authenticated','parent.a@test.invalid'),
+  ('aaaaaaaa-5555-0000-0000-00000000000a','authenticated','authenticated','parent.l@test.invalid');
 insert into public.schools(id,name) values ('aaaaaaaa-0000-0000-0000-00000000000a','School A'),('bbbbbbbb-0000-0000-0000-00000000000b','School B');
 insert into public.profiles(id,school_id,role,full_name) values
   ('aaaaaaaa-1111-0000-0000-00000000000a','aaaaaaaa-0000-0000-0000-00000000000a','owner','Owner A'),
   ('bbbbbbbb-1111-0000-0000-00000000000b','bbbbbbbb-0000-0000-0000-00000000000b','owner','Owner B'),
-  ('aaaaaaaa-2222-0000-0000-00000000000a','aaaaaaaa-0000-0000-0000-00000000000a','parent','Parent A');
+  ('aaaaaaaa-2222-0000-0000-00000000000a','aaaaaaaa-0000-0000-0000-00000000000a','parent','Parent A'),
+  ('aaaaaaaa-5555-0000-0000-00000000000a','aaaaaaaa-0000-0000-0000-00000000000a','parent','Parent L');
+insert into public.parent_students(school_id,parent_id,student_id) values ('aaaaaaaa-0000-0000-0000-00000000000a','aaaaaaaa-5555-0000-0000-00000000000a','aaaaaaaa-3333-0000-0000-00000000000a');
+insert into public.employees(school_id,code,full_name) values ('aaaaaaaa-0000-0000-0000-00000000000a','EMP-A','Emp A'),('bbbbbbbb-0000-0000-0000-00000000000b','EMP-B','Emp B');
 insert into public.students(id,school_id,code,full_name,grade) values
   ('aaaaaaaa-3333-0000-0000-00000000000a','aaaaaaaa-0000-0000-0000-00000000000a','STU-A1','Student A','الأول'),
   ('bbbbbbbb-3333-0000-0000-00000000000b','bbbbbbbb-0000-0000-0000-00000000000b','STU-B1','Student B','الأول');
@@ -48,8 +52,22 @@ select set_config('request.jwt.claims','{"sub":"aaaaaaaa-2222-0000-0000-00000000
 set role authenticated;
 do $$ declare c int; begin begin execute $q$select count(*) from public.students$q$ into c; exception when others then c:=-1; end; if c = 0 then raise notice 'PASS: unlinked parent sees no students'; else raise warning 'FAIL: unlinked parent sees no students'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
 do $$ declare c int; begin begin execute $q$select count(*) from public.student_fees$q$ into c; exception when others then c:=-1; end; if c = 0 then raise notice 'PASS: unlinked parent sees no fees'; else raise warning 'FAIL: unlinked parent sees no fees'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare c int; begin begin execute $q$select count(*) from public.employees$q$ into c; exception when others then c:=-1; end; if c = 0 then raise notice 'PASS: unlinked parent sees no employees'; else raise warning 'FAIL: unlinked parent sees no employees'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare c int; begin begin execute $q$update public.student_fees set paid=100 where id='aaaaaaaa-4444-0000-0000-00000000000a'$q$; get diagnostics c = row_count; exception when others then c:=0; end; if c = 0 then raise notice 'PASS: unlinked parent cannot update a fee of own school'; else raise warning 'FAIL: unlinked parent cannot update a fee of own school'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
 do $$ declare ok boolean:=false; begin begin execute $q$select public.record_payment('aaaaaaaa-4444-0000-0000-00000000000a'::uuid,10,'cash')$q$; exception when others then ok:=true; end; if ok then raise notice 'PASS: parent cannot record a payment'; else raise warning 'FAIL: parent cannot record a payment'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
 do $$ declare ok boolean:=false; begin begin execute $q$select public.approve_payment('cccccccc-0000-0000-0000-000000000001'::uuid)$q$; exception when others then ok:=true; end; if ok then raise notice 'PASS: parent cannot approve a payment'; else raise warning 'FAIL: parent cannot approve a payment'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+reset role;
+select set_config('request.jwt.claims','{"sub":"aaaaaaaa-5555-0000-0000-00000000000a","role":"authenticated"}',false);
+set role authenticated;
+do $$ declare c int; begin begin execute $q$select count(*) from public.students$q$ into c; exception when others then c:=-1; end; if c = 1 then raise notice 'PASS: linked parent sees exactly own child'; else raise warning 'FAIL: linked parent sees exactly own child'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare c int; begin begin execute $q$select count(*) from public.student_fees$q$ into c; exception when others then c:=-1; end; if c = 1 then raise notice 'PASS: linked parent sees own child fee'; else raise warning 'FAIL: linked parent sees own child fee'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare c int; begin begin execute $q$select count(*) from public.employees$q$ into c; exception when others then c:=-1; end; if c = 0 then raise notice 'PASS: linked parent sees no employees'; else raise warning 'FAIL: linked parent sees no employees'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare c int; begin begin execute $q$update public.student_fees set paid=100 where id='aaaaaaaa-4444-0000-0000-00000000000a'$q$; get diagnostics c = row_count; exception when others then c:=0; end; if c = 0 then raise notice 'PASS: linked parent cannot update fee'; else raise warning 'FAIL: linked parent cannot update fee'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare c int; begin begin execute $q$update public.students set full_name='x' where id='aaaaaaaa-3333-0000-0000-00000000000a'$q$; get diagnostics c = row_count; exception when others then c:=0; end; if c = 0 then raise notice 'PASS: linked parent cannot update student'; else raise warning 'FAIL: linked parent cannot update student'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+reset role;
+select set_config('request.jwt.claims','{"sub":"aaaaaaaa-1111-0000-0000-00000000000a","role":"authenticated"}',false);
+set role authenticated;
+do $$ declare c int; begin begin execute $q$select count(*) from public.employees$q$ into c; exception when others then c:=-1; end; if c = 1 then raise notice 'PASS: owner A sees own employees only'; else raise warning 'FAIL: owner A sees own employees only'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
 reset role;
 select set_config('request.jwt.claims','{"role":"anon"}',false);
 set role anon;
