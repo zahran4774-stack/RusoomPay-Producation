@@ -79,6 +79,19 @@ jobs:
           msg=$(echo "$out" | awk 'BEGIN{ORS="%0A"} {print}')
           echo "::notice title=schema-fingerprint::${msg}"
 
+      - name: Schema detail lists (diagnostics)
+        run: |
+          DB="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          emit() { # $1=title  $2=sql
+            out=$(psql "$DB" -v ON_ERROR_STOP=1 -At -c "$2")
+            msg=$(echo "$out" | awk 'BEGIN{ORS="%0A"} {print}')
+            echo "::notice title=$1::${msg}"
+          }
+          emit detail-tables "select c.relname||':'||(select count(*) from information_schema.columns k where k.table_schema='public' and k.table_name=c.relname) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' order by 1"
+          emit detail-functions "select p.proname||'('||pg_get_function_identity_arguments(p.oid)||')' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.prokind in ('f','p') order by 1"
+          emit detail-triggers "select c.relname||'.'||t.tgname from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and not t.tgisinternal order by 1"
+          emit detail-policies "select tablename||'.'||policyname from pg_policies where schemaname='public' order by 1"
+
       - name: Stop Supabase
         if: always()
         run: supabase stop --no-backup || true
