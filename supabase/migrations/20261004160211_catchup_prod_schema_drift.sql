@@ -125,6 +125,78 @@ ALTER TABLE public.students ADD COLUMN IF NOT EXISTS transport_type text DEFAULT
 -- ---------------------------------------------------------------------------
 -- Function bodies (production definitions) — CREATE OR REPLACE
 -- ---------------------------------------------------------------------------
+-- CREATE OR REPLACE cannot change a function's return type. Drop the (few) functions whose
+-- recorded return type differs from production so the definitions below can be created.
+DO $$
+DECLARE r record;
+BEGIN
+  FOR r IN
+    SELECT p.oid::regprocedure AS sig
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    JOIN (VALUES
+    ('add_branch', $r$uuid$r$),
+    ('approve_payment', $r$jsonb$r$),
+    ('approve_payroll_run', $r$uuid$r$),
+    ('balance_sheet_asof', $r$TABLE(section text, code text, name text, balance numeric)$r$),
+    ('cafeteria_subscribers', $r$TABLE(student_id uuid, student_name text, guardian text, plan_id uuid, plan_name text, fee numeric)$r$),
+    ('cancel_meal_purchase', $r$void$r$),
+    ('cancel_payroll_run', $r$uuid$r$),
+    ('cancel_pending_payment', $r$jsonb$r$),
+    ('check_financial_year_open', $r$trigger$r$),
+    ('check_journal_balanced', $r$trigger$r$),
+    ('close_financial_year', $r$jsonb$r$),
+    ('control_center_subscriptions', $r$TABLE(school_id uuid, school_name text, country text, plan text, status text, period_start timestamp with time zone, period_end timestamp with time zone, amount numeric)$r$),
+    ('control_center_summary', $r$jsonb$r$),
+    ('create_financial_year', $r$uuid$r$),
+    ('create_manual_journal_entry', $r$uuid$r$),
+    ('delete_payment_within_window', $r$jsonb$r$),
+    ('edit_payment_within_window', $r$jsonb$r$),
+    ('export_wps_header', $r$TABLE(employer_name text, employer_cr_no text, payer_cr_no text, email text, phone text, payment_type text, value_date date, payment_year integer, payment_month integer, salary_frequency text, debit_account_no text, no_of_records integer, total_amount numeric)$r$),
+    ('export_wps_rows', $r$TABLE(seq_no integer, account_number text, employee_name text, bank_name text, id_type text, id_number text, working_days integer, basic_salary numeric, extra_income numeric, deductions numeric, social_security numeric, net_salary numeric)$r$),
+    ('find_payment_by_invoice_number', $r$jsonb$r$),
+    ('food_purchase', $r$jsonb$r$),
+    ('generate_payroll_run', $r$uuid$r$),
+    ('grant_employee_access', $r$jsonb$r$),
+    ('has_permission', $r$boolean$r$),
+    ('import_students', $r$jsonb$r$),
+    ('income_statement_period', $r$TABLE(section text, code text, name text, amount numeric)$r$),
+    ('latest_editable_payment', $r$jsonb$r$),
+    ('mark_meal_purchase_paid', $r$uuid$r$),
+    ('meal_purchases_list', $r$TABLE(id uuid, supplier_id uuid, supplier_name text, purchase_date date, purchase_type text, meals_count integer, unit_cost numeric, total_cost numeric, period text, paid boolean, notes text, item_type text, status text)$r$),
+    ('my_financial_years', $r$SETOF financial_years$r$),
+    ('my_permissions', $r$text[]$r$),
+    ('my_schools', $r$TABLE(school_id uuid, school_name text, branch text, role user_role, is_active_context boolean)$r$),
+    ('my_subscription_status', $r$jsonb$r$),
+    ('next_expense_code', $r$text$r$),
+    ('next_invoice_number', $r$text$r$),
+    ('org_overview', $r$TABLE(school_id uuid, school_name text, branch text, students integer, employees integer, fees_total numeric, fees_paid numeric, collection_rate numeric, revenue numeric, expense numeric, profit numeric)$r$),
+    ('pay_payroll_run', $r$uuid$r$),
+    ('record_payment', $r$jsonb$r$),
+    ('refund_payment', $r$uuid$r$),
+    ('reject_payment', $r$void$r$),
+    ('reopen_financial_year', $r$jsonb$r$),
+    ('reverse_journal_entry', $r$uuid$r$),
+    ('risk_scores', $r$jsonb$r$),
+    ('school_copilot', $r$jsonb$r$),
+    ('school_pricing_complete', $r$boolean$r$),
+    ('set_bundle_setting', $r$void$r$),
+    ('set_custom_section_names', $r$void$r$),
+    ('set_section_styles', $r$void$r$),
+    ('set_user_permission', $r$void$r$),
+    ('staff_permissions_list', $r$jsonb$r$),
+    ('student_payment_tracker', $r$TABLE(month_label text, month_key text, paid_amount numeric, has_payment boolean)$r$),
+    ('switch_active_school', $r$jsonb$r$),
+    ('test_dummy_function', $r$text$r$),
+    ('transition_payment_state', $r$void$r$),
+    ('update_meal_plan', $r$void$r$)
+    ) AS want(proname, result) ON want.proname = p.proname
+    WHERE n.nspname = 'public' AND pg_get_function_result(p.oid) IS DISTINCT FROM want.result
+  LOOP
+    EXECUTE format('DROP FUNCTION %s', r.sig);
+  END LOOP;
+END $$;
+
 CREATE OR REPLACE FUNCTION public.add_branch(p_name text, p_branch text, p_country text DEFAULT NULL::text, p_currency text DEFAULT NULL::text)
  RETURNS uuid
  LANGUAGE plpgsql
