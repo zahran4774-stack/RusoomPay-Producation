@@ -77,7 +77,7 @@ Be careful replaying these against anything other than a scratch database:
 
 The catch-up reproduces production as-is. Notes found while generating it:
 
-- 65 of 232 `public` functions are executable by `PUBLIC` (hence by `anon`),
+- (Fixed 2026-10-07, see below.) 65 of 232 `public` functions were executable by `PUBLIC` (hence by `anon`),
   including money-moving `SECURITY DEFINER` RPCs such as `record_payment`,
   `approve_payment`, `reject_payment`, `edit_payment_within_window`,
   `delete_payment_within_window`, `food_purchase`. Most check `my_role()`
@@ -95,4 +95,21 @@ attached to a school could read all its students, fees and employees and write
 `20261007090000_tighten_role_less_policies.sql` restricts them to owner/admin/accountant
 and gives parents read-only access to their own children via `parent_students`.
 It is verified in CI only; applying it to production is a separate, deliberate step
-(after that, refresh `expected_fingerprint.txt`: policies 90 -> 92).
+(applied to production on 2026-10-07).
+
+## Production hardening applied 2026-10-07
+
+Both migrations below were applied to production (via the SQL editor) and
+`expected_fingerprint.txt` was refreshed from production afterwards; a clean rebuild
+matches it on all nine kinds.
+
+- `20261007090000_tighten_role_less_policies.sql` - see above.
+- `20261007120000_revoke_public_execute_on_rpcs.sql` - anon keeps EXECUTE on 14 pre-login/helper
+  functions only (was 65); everything else is authenticated + service_role; trigger functions and
+  `test_dummy_function` have no API role. Also closes `next_invoice_number` / `next_expense_code`,
+  which accepted any school id from anon without checking the caller.
+
+Register them (and the catch-up) in production's history without re-running them:
+```
+supabase migration repair --status applied 20261004160211 20261007090000 20261007120000
+```
