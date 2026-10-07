@@ -1,0 +1,130 @@
+-- Tenant-isolation / authorization tests. Run against a THROWAWAY local database only
+-- (CI: supabase start). Seeds two schools, acts as real roles with JWT claims, and
+-- verifies school A cannot see or change school B, and anon cannot reach money RPCs.
+-- Failures are counted (not fatal one by one); the script fails at the end if any failed.
+\set ON_ERROR_STOP on
+select set_config('t.fail','0',false);
+begin;
+set local session_replication_role = replica;  -- seed without business triggers
+insert into auth.users(id, aud, role, email) values
+  ('aaaaaaaa-1111-0000-0000-00000000000a','authenticated','authenticated','owner.a@test.invalid'),
+  ('bbbbbbbb-1111-0000-0000-00000000000b','authenticated','authenticated','owner.b@test.invalid'),
+  ('aaaaaaaa-2222-0000-0000-00000000000a','authenticated','authenticated','parent.a@test.invalid'),
+  ('aaaaaaaa-5555-0000-0000-00000000000a','authenticated','authenticated','parent.l@test.invalid');
+insert into public.schools(id,name) values ('aaaaaaaa-0000-0000-0000-00000000000a','School A'),('bbbbbbbb-0000-0000-0000-00000000000b','School B');
+insert into public.profiles(id,school_id,role,full_name) values
+  ('aaaaaaaa-1111-0000-0000-00000000000a','aaaaaaaa-0000-0000-0000-00000000000a','owner','Owner A'),
+  ('bbbbbbbb-1111-0000-0000-00000000000b','bbbbbbbb-0000-0000-0000-00000000000b','owner','Owner B'),
+  ('aaaaaaaa-2222-0000-0000-00000000000a','aaaaaaaa-0000-0000-0000-00000000000a','parent','Parent A'),
+  ('aaaaaaaa-5555-0000-0000-00000000000a','aaaaaaaa-0000-0000-0000-00000000000a','parent','Parent L');
+insert into public.parent_students(school_id,parent_id,student_id) values ('aaaaaaaa-0000-0000-0000-00000000000a','aaaaaaaa-5555-0000-0000-00000000000a','aaaaaaaa-3333-0000-0000-00000000000a');
+insert into public.employees(school_id,code,full_name,nationality) values ('aaaaaaaa-0000-0000-0000-00000000000a','EMP-A','Emp A','OM'),('bbbbbbbb-0000-0000-0000-00000000000b','EMP-B','Emp B','OM');
+insert into public.students(id,school_id,code,full_name,grade) values
+  ('aaaaaaaa-3333-0000-0000-00000000000a','aaaaaaaa-0000-0000-0000-00000000000a','STU-A1','Student A','الأول'),
+  ('bbbbbbbb-3333-0000-0000-00000000000b','bbbbbbbb-0000-0000-0000-00000000000b','STU-B1','Student B','الأول');
+insert into public.student_fees(id,school_id,student_id,description,total,paid) values
+  ('aaaaaaaa-4444-0000-0000-00000000000a','aaaaaaaa-0000-0000-0000-00000000000a','aaaaaaaa-3333-0000-0000-00000000000a','fee A',100,0),
+  ('bbbbbbbb-4444-0000-0000-00000000000b','bbbbbbbb-0000-0000-0000-00000000000b','bbbbbbbb-3333-0000-0000-00000000000b','fee B',100,0);
+commit;
+
+reset role;
+select set_config('request.jwt.claims','{"sub":"aaaaaaaa-1111-0000-0000-00000000000a","role":"authenticated"}',false);
+set role authenticated;
+do $$ declare c int; begin begin execute $q$select count(*) from public.students$q$ into c; exception when others then c:=-1; end; if c = 1 then raise notice 'PASS: A sees only its own students'; else raise warning 'FAIL: A sees only its own students'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare c int; begin begin execute $q$select count(*) from public.students where id='bbbbbbbb-3333-0000-0000-00000000000b'$q$ into c; exception when others then c:=-1; end; if c = 0 then raise notice 'PASS: A cannot see school B students by id'; else raise warning 'FAIL: A cannot see school B students by id'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare c int; begin begin execute $q$select count(*) from public.student_fees$q$ into c; exception when others then c:=-1; end; if c = 1 then raise notice 'PASS: A sees only its own fees'; else raise warning 'FAIL: A sees only its own fees'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare c int; begin begin execute $q$update public.students set full_name='hacked' where id='bbbbbbbb-3333-0000-0000-00000000000b'$q$; get diagnostics c = row_count; exception when others then c:=0; end; if c = 0 then raise notice 'PASS: A cannot update school B student'; else raise warning 'FAIL: A cannot update school B student'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare c int; begin begin execute $q$update public.student_fees set paid=100 where id='bbbbbbbb-4444-0000-0000-00000000000b'$q$; get diagnostics c = row_count; exception when others then c:=0; end; if c = 0 then raise notice 'PASS: A cannot update school B fee'; else raise warning 'FAIL: A cannot update school B fee'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare ok boolean:=false; begin begin execute $q$insert into public.students(school_id,code,full_name,grade) values ('bbbbbbbb-0000-0000-0000-00000000000b','X','x','x')$q$; exception when others then ok:=true; end; if ok then raise notice 'PASS: A cannot insert a student into school B'; else raise warning 'FAIL: A cannot insert a student into school B'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare ok boolean:=false; begin begin execute $q$select public.record_payment('bbbbbbbb-4444-0000-0000-00000000000b'::uuid,10,'cash')$q$; exception when others then ok:=true; end; if ok then raise notice 'PASS: A cannot record a payment on school B fee'; else raise warning 'FAIL: A cannot record a payment on school B fee'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare ok boolean:=false; begin begin execute $q$select public.student_payment_tracker('bbbbbbbb-3333-0000-0000-00000000000b'::uuid)$q$; exception when others then ok:=true; end; if ok then raise notice 'PASS: A cannot read school B student payment tracker'; else raise warning 'FAIL: A cannot read school B student payment tracker'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare r jsonb; ok boolean:=true; begin begin execute $q$select public.latest_editable_payment('bbbbbbbb-4444-0000-0000-00000000000b'::uuid)$q$ into r; if (r->>'ok')='true' then ok:=false; end if; exception when others then ok:=true; end; if ok then raise notice 'PASS: A cannot see school B payments via latest_editable_payment'; else raise warning 'FAIL: A cannot see school B payments via latest_editable_payment'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare ok boolean:=false; begin begin execute $q$select public.close_financial_year('cccccccc-0000-0000-0000-000000000001'::uuid)$q$; exception when others then ok:=true; end; if ok then raise notice 'PASS: A cannot close a financial year of another school'; else raise warning 'FAIL: A cannot close a financial year of another school'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare c int; begin begin execute $q$select count(*) from public.schools$q$ into c; exception when others then c:=-1; end; if c = 1 then raise notice 'PASS: A sees only its school row'; else raise warning 'FAIL: A sees only its school row'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare c int; begin begin execute $q$select count(*) from public.school_memberships where school_id='bbbbbbbb-0000-0000-0000-00000000000b'$q$ into c; exception when others then c:=-1; end; if c = 0 then raise notice 'PASS: A sees only its own profile-school members (memberships)'; else raise warning 'FAIL: A sees only its own profile-school members (memberships)'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+reset role;
+select set_config('request.jwt.claims','{"sub":"bbbbbbbb-1111-0000-0000-00000000000b","role":"authenticated"}',false);
+set role authenticated;
+do $$ declare c int; begin begin execute $q$select count(*) from public.students$q$ into c; exception when others then c:=-1; end; if c = 1 then raise notice 'PASS: B sees only its own students'; else raise warning 'FAIL: B sees only its own students'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare c int; begin begin execute $q$select count(*) from public.students where id='aaaaaaaa-3333-0000-0000-00000000000a'$q$ into c; exception when others then c:=-1; end; if c = 0 then raise notice 'PASS: B cannot see school A students by id'; else raise warning 'FAIL: B cannot see school A students by id'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+reset role;
+select set_config('request.jwt.claims','{"sub":"aaaaaaaa-2222-0000-0000-00000000000a","role":"authenticated"}',false);
+set role authenticated;
+do $$ declare c int; begin begin execute $q$select count(*) from public.students$q$ into c; exception when others then c:=-1; end; if c = 0 then raise notice 'PASS: unlinked parent sees no students'; else raise warning 'FAIL: unlinked parent sees no students'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare c int; begin begin execute $q$select count(*) from public.student_fees$q$ into c; exception when others then c:=-1; end; if c = 0 then raise notice 'PASS: unlinked parent sees no fees'; else raise warning 'FAIL: unlinked parent sees no fees'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare c int; begin begin execute $q$select count(*) from public.employees$q$ into c; exception when others then c:=-1; end; if c = 0 then raise notice 'PASS: unlinked parent sees no employees'; else raise warning 'FAIL: unlinked parent sees no employees'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare c int; begin begin execute $q$update public.student_fees set paid=100 where id='aaaaaaaa-4444-0000-0000-00000000000a'$q$; get diagnostics c = row_count; exception when others then c:=0; end; if c = 0 then raise notice 'PASS: unlinked parent cannot update a fee of own school'; else raise warning 'FAIL: unlinked parent cannot update a fee of own school'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare ok boolean:=false; begin begin execute $q$select public.record_payment('aaaaaaaa-4444-0000-0000-00000000000a'::uuid,10,'cash')$q$; exception when others then ok:=true; end; if ok then raise notice 'PASS: parent cannot record a payment'; else raise warning 'FAIL: parent cannot record a payment'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare ok boolean:=false; begin begin execute $q$select public.approve_payment('cccccccc-0000-0000-0000-000000000001'::uuid)$q$; exception when others then ok:=true; end; if ok then raise notice 'PASS: parent cannot approve a payment'; else raise warning 'FAIL: parent cannot approve a payment'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+reset role;
+select set_config('request.jwt.claims','{"sub":"aaaaaaaa-5555-0000-0000-00000000000a","role":"authenticated"}',false);
+set role authenticated;
+do $$ declare c int; begin begin execute $q$select count(*) from public.students$q$ into c; exception when others then c:=-1; end; if c = 1 then raise notice 'PASS: linked parent sees exactly own child'; else raise warning 'FAIL: linked parent sees exactly own child'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare c int; begin begin execute $q$select count(*) from public.student_fees$q$ into c; exception when others then c:=-1; end; if c = 1 then raise notice 'PASS: linked parent sees own child fee'; else raise warning 'FAIL: linked parent sees own child fee'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare c int; begin begin execute $q$select count(*) from public.employees$q$ into c; exception when others then c:=-1; end; if c = 0 then raise notice 'PASS: linked parent sees no employees'; else raise warning 'FAIL: linked parent sees no employees'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare c int; begin begin execute $q$update public.student_fees set paid=100 where id='aaaaaaaa-4444-0000-0000-00000000000a'$q$; get diagnostics c = row_count; exception when others then c:=0; end; if c = 0 then raise notice 'PASS: linked parent cannot update fee'; else raise warning 'FAIL: linked parent cannot update fee'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare c int; begin begin execute $q$update public.students set full_name='x' where id='aaaaaaaa-3333-0000-0000-00000000000a'$q$; get diagnostics c = row_count; exception when others then c:=0; end; if c = 0 then raise notice 'PASS: linked parent cannot update student'; else raise warning 'FAIL: linked parent cannot update student'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+reset role;
+select set_config('request.jwt.claims','{"sub":"aaaaaaaa-1111-0000-0000-00000000000a","role":"authenticated"}',false);
+set role authenticated;
+do $$ declare c int; begin begin execute $q$select count(*) from public.employees$q$ into c; exception when others then c:=-1; end; if c = 1 then raise notice 'PASS: owner A sees own employees only'; else raise warning 'FAIL: owner A sees own employees only'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+reset role;
+select set_config('request.jwt.claims','{"role":"anon"}',false);
+set role anon;
+do $$ declare c int; begin begin execute $q$select count(*) from public.students$q$ into c; exception when others then c:=-1; end; if c = 0 then raise notice 'PASS: anon sees no students'; else raise warning 'FAIL: anon sees no students'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare c int; begin begin execute $q$select count(*) from public.student_fees$q$ into c; exception when others then c:=-1; end; if c = 0 then raise notice 'PASS: anon sees no fees'; else raise warning 'FAIL: anon sees no fees'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare c int; begin begin execute $q$select count(*) from public.payments$q$ into c; exception when others then c:=-1; end; if c = 0 then raise notice 'PASS: anon sees no payments'; else raise warning 'FAIL: anon sees no payments'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare c int; begin begin execute $q$select count(*) from public.journal_entries$q$ into c; exception when others then c:=-1; end; if c = 0 then raise notice 'PASS: anon sees no journal entries'; else raise warning 'FAIL: anon sees no journal entries'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare ok boolean:=false; begin begin execute $q$select public.record_payment('bbbbbbbb-4444-0000-0000-00000000000b'::uuid,10,'cash')$q$; exception when others then ok:=true; end; if ok then raise notice 'PASS: anon cannot record a payment'; else raise warning 'FAIL: anon cannot record a payment'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare ok boolean:=false; begin begin execute $q$select public.approve_payment('cccccccc-0000-0000-0000-000000000001'::uuid)$q$; exception when others then ok:=true; end; if ok then raise notice 'PASS: anon cannot approve a payment'; else raise warning 'FAIL: anon cannot approve a payment'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare ok boolean:=false; begin begin execute $q$select public.reject_payment('cccccccc-0000-0000-0000-000000000001'::uuid,'x')$q$; exception when others then ok:=true; end; if ok then raise notice 'PASS: anon cannot reject a payment'; else raise warning 'FAIL: anon cannot reject a payment'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare ok boolean:=false; begin begin execute $q$select public.delete_payment_within_window('cccccccc-0000-0000-0000-000000000001'::uuid)$q$; exception when others then ok:=true; end; if ok then raise notice 'PASS: anon cannot delete a payment'; else raise warning 'FAIL: anon cannot delete a payment'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare ok boolean:=false; begin begin execute $q$select public.edit_payment_within_window('cccccccc-0000-0000-0000-000000000001'::uuid,5,current_date,'cash')$q$; exception when others then ok:=true; end; if ok then raise notice 'PASS: anon cannot edit a payment'; else raise warning 'FAIL: anon cannot edit a payment'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare ok boolean:=false; begin begin execute $q$select public.create_manual_journal_entry('x',current_date,'[]'::jsonb)$q$; exception when others then ok:=true; end; if ok then raise notice 'PASS: anon cannot create a manual journal entry'; else raise warning 'FAIL: anon cannot create a manual journal entry'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare r jsonb; ok boolean:=true; begin begin execute $q$select public.food_purchase('cccccccc-0000-0000-0000-000000000001'::uuid,1,'bank')$q$ into r; if (r->>'ok')='true' then ok:=false; end if; exception when others then ok:=true; end; if ok then raise notice 'PASS: anon cannot food_purchase'; else raise warning 'FAIL: anon cannot food_purchase'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare r jsonb; ok boolean:=true; begin begin execute $q$select to_jsonb(public.mark_meal_purchase_paid('cccccccc-0000-0000-0000-000000000001'::uuid,'bank'))$q$ into r; if (r->>'ok')='true' then ok:=false; end if; exception when others then ok:=true; end; if ok then raise notice 'PASS: anon cannot mark meal purchase paid'; else raise warning 'FAIL: anon cannot mark meal purchase paid'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare ok boolean:=false; begin begin execute $q$select public.cancel_meal_purchase('cccccccc-0000-0000-0000-000000000001'::uuid,'bank')$q$; exception when others then ok:=true; end; if ok then raise notice 'PASS: anon cannot cancel a meal purchase'; else raise warning 'FAIL: anon cannot cancel a meal purchase'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare ok boolean:=false; begin begin execute $q$select public.set_user_permission('aaaaaaaa-1111-0000-0000-00000000000a'::uuid,'approvals',true)$q$; exception when others then ok:=true; end; if ok then raise notice 'PASS: anon cannot set a user permission'; else raise warning 'FAIL: anon cannot set a user permission'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare r jsonb; ok boolean:=true; begin begin execute $q$select public.staff_permissions_list()$q$ into r; if (r->>'ok')='true' then ok:=false; end if; exception when others then ok:=true; end; if ok then raise notice 'PASS: anon cannot read staff permissions'; else raise warning 'FAIL: anon cannot read staff permissions'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare r jsonb; ok boolean:=true; begin begin execute $q$select public.find_payment_by_invoice_number('INV-2026-0001')$q$ into r; if (r->>'ok')='true' then ok:=false; end if; exception when others then ok:=true; end; if ok then raise notice 'PASS: anon cannot find a payment by invoice number'; else raise warning 'FAIL: anon cannot find a payment by invoice number'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare ok boolean:=false; begin begin execute $q$select public.student_payment_tracker('bbbbbbbb-3333-0000-0000-00000000000b'::uuid)$q$; exception when others then ok:=true; end; if ok then raise notice 'PASS: anon cannot read another school payment tracker'; else raise warning 'FAIL: anon cannot read another school payment tracker'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+do $$ declare ok boolean:=false; begin begin execute $q$select public.update_school_branding('x','#000000','#000000')$q$; exception when others then ok:=true; end; if ok then raise notice 'PASS: anon cannot update school branding'; else raise warning 'FAIL: anon cannot update school branding'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+reset role;
+do $$ declare f text; bad text:=''; begin
+  foreach f in array array['record_payment','approve_payment','reject_payment','delete_payment_within_window','edit_payment_within_window','food_purchase','mark_meal_purchase_paid','cancel_meal_purchase','create_manual_journal_entry','next_invoice_number','next_expense_code','set_user_permission','staff_permissions_list','test_dummy_function','student_payment_tracker','update_school_branding','start_impersonation','platform_error_log']
+  loop
+    if exists (select 1 from pg_proc p where p.pronamespace='public'::regnamespace and p.proname=f and has_function_privilege('anon',p.oid,'EXECUTE')) then bad:=bad||f||' '; end if;
+  end loop;
+  if bad='' then raise notice 'PASS: anon has no EXECUTE on sensitive functions'; else raise warning 'FAIL: anon can EXECUTE: %', bad; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if;
+  bad:='';
+  foreach f in array array['enabled_countries','public_schools','available_plans','register_school','parent_signup_by_phone','my_role','my_school_id']
+  loop
+    if not exists (select 1 from pg_proc p where p.pronamespace='public'::regnamespace and p.proname=f and has_function_privilege('anon',p.oid,'EXECUTE')) then bad:=bad||f||' '; end if;
+  end loop;
+  if bad='' then raise notice 'PASS: anon keeps pre-login functions'; else raise warning 'FAIL: anon lost: %', bad; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if;
+  bad:='';
+  foreach f in array array['record_payment','approve_payment','food_purchase','create_manual_journal_entry','student_payment_tracker','my_role']
+  loop
+    if not exists (select 1 from pg_proc p where p.pronamespace='public'::regnamespace and p.proname=f and has_function_privilege('authenticated',p.oid,'EXECUTE')) then bad:=bad||f||' '; end if;
+  end loop;
+  if bad='' then raise notice 'PASS: authenticated keeps app functions'; else raise warning 'FAIL: authenticated lost: %', bad; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if;
+end $$;
+reset role;
+select set_config('request.jwt.claims','{"sub":"aaaaaaaa-1111-0000-0000-00000000000a","role":"authenticated"}',false);
+set role authenticated;
+do $$ declare c int; begin begin execute $q$select count(*) from (select public.my_role()::text r) x where r='owner'$q$ into c; exception when others then c:=-1; end; if c = 1 then raise notice 'PASS: owner A my_role works after revoke'; else raise warning 'FAIL: owner A my_role works after revoke'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+reset role;
+select set_config('request.jwt.claims','{"role":"anon"}',false);
+set role anon;
+do $$ declare c int; begin begin execute $q$select 1 from (select count(*) from public.public_schools()) x$q$ into c; exception when others then c:=-1; end; if c = 1 then raise notice 'PASS: anon public_schools callable'; else raise warning 'FAIL: anon public_schools callable'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if; end $$;
+reset role;
+do $$ declare p numeric; n text; begin
+  select paid into p from public.student_fees where id='bbbbbbbb-4444-0000-0000-00000000000b';
+  if p = 0 then raise notice 'PASS: school B fee untouched'; else raise warning 'FAIL: school B fee changed (paid=%)', p; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if;
+  select full_name into n from public.students where id='bbbbbbbb-3333-0000-0000-00000000000b';
+  if n = 'Student B' then raise notice 'PASS: school B student untouched'; else raise warning 'FAIL: school B student changed'; perform set_config('t.fail',(current_setting('t.fail')::int+1)::text,false); end if;
+end $$;
+do $$ begin
+  if current_setting('t.fail')::int > 0 then raise exception '% tenant-isolation checks FAILED', current_setting('t.fail'); end if;
+  raise notice 'ALL tenant-isolation checks passed';
+end $$;

@@ -1,0 +1,112 @@
+# ═══════════════════════════════════════════════════════════════
+# فحص إعادة بناء قاعدة البيانات من ملفات supabase/migrations
+#
+# يبني قاعدة Postgres نظيفة ومؤقتة داخل GitHub (supabase start) ويطبّق كل
+# الـ migrations بالترتيب. إذا فشل أي ملف، يفشل الفحص.
+#
+# أمان: لا يستخدم أي أسرار (secrets) ولا يتصل بقاعدة الإنتاج إطلاقاً —
+# كل شيء يجري على قاعدة محلية تُحذف عند انتهاء التشغيل.
+# ═══════════════════════════════════════════════════════════════
+name: DB Rebuild Check
+
+on:
+  push:
+    branches:
+      - db-baseline
+    paths:
+      - 'supabase/**'
+      - '.github/workflows/db-rebuild.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'supabase/**'
+      - '.github/workflows/db-rebuild.yml'
+  workflow_dispatch:
+
+jobs:
+  rebuild:
+    name: Rebuild DB from migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase (applies all migrations)
+        # نستبعد الخدمات غير اللازمة لتسريع التشغيل. auth و storage و postgrest و realtime
+        # تبقى لأن الـ migrations تعتمد على مخططاتها (auth.users, storage.objects ...).
+        run: |
+          set +e
+          supabase start -x studio,mailpit,edge-runtime,logflare,vector,imgproxy,postgres-meta,supavisor 2>&1 | tee start.log
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ]; then
+            # نُظهر آخر سطور الخطأ كـ annotation كي يسهل قراءتها دون فتح السجل الكامل
+            msg=$(tail -n 60 start.log | sed 's/\r//g; s/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
+            echo "::error title=supabase start failed::${msg}"
+          fi
+          exit "$code"
+
+      - name: Schema summary
+        run: |
+          DB="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          psql "$DB" -v ON_ERROR_STOP=1 <<'SQL'
+          select 'tables'    as what, count(*) from information_schema.tables where table_schema='public' and table_type='BASE TABLE'
+          union all select 'functions', count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public'
+          union all select 'policies',  count(*) from pg_policies where schemaname='public'
+          union all select 'triggers',  count(*) from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and not t.tgisinternal
+          union all select 'indexes',   count(*) from pg_indexes where schemaname='public'
+          union all select 'migrations_applied', count(*) from supabase_migrations.schema_migrations;
+          SQL
+
+      - name: Public tables without RLS (report)
+        run: |
+          DB="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          psql "$DB" -v ON_ERROR_STOP=1 -c "select c.relname as table_without_rls from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and not c.relrowsecurity order by 1;"
+
+      - name: Schema fingerprint (compare with production snapshot)
+        # يحسب بصمة لكل نوع كائن (supabase/tests/schema_objects.sql) ويقارنها بالبصمة المسجّلة من الإنتاج
+        # (supabase/tests/expected_fingerprint.txt). عدم التطابق = تحذير (لا يُفشل الفحص)؛ يعني أن القاعدة
+        # المبنية من الـ migrations لم تعد مطابقة لآخر لقطة معروفة من الإنتاج.
+        run: |
+          DB="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          psql "$DB" -v ON_ERROR_STOP=1 -At -F ' ' -f supabase/tests/schema_objects.sql \
+            -c "select kind, count(*), md5(string_agg(k, E'\n' order by k)) from schema_objects group by kind order by kind" \
+            | grep -v '^SELECT' > actual_fingerprint.txt
+          cat actual_fingerprint.txt
+          if diff -u supabase/tests/expected_fingerprint.txt actual_fingerprint.txt > fp.diff; then
+            echo "::notice title=schema fingerprint::MATCHES the recorded production snapshot"
+          else
+            cat fp.diff
+            msg=$(awk 'BEGIN{ORS="%0A"} {print}' fp.diff)
+            echo "::warning title=schema fingerprint differs from production snapshot::${msg}"
+          fi
+
+      - name: Tenant isolation & authorization tests (throwaway DB)
+        # يبذر مدرستين على القاعدة المحلية المؤقتة ويتصرف كأدوار حقيقية (JWT claims) ليتأكد أن مدرسة لا ترى
+        # ولا تعدّل بيانات مدرسة أخرى، وأن anon لا يصل لدوال المال. لا أسرار ولا اتصال بالإنتاج.
+        run: |
+          DB="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          set +e
+          psql "$DB" -v ON_ERROR_STOP=1 -f supabase/tests/tenant_isolation.sql > iso.log 2>&1
+          code=$?
+          set -e
+          grep -E 'PASS:|FAIL:|ERROR|checks' iso.log | sed 's/^psql:[^ ]* *//' | sort | uniq -c | sort -rn > iso.sum || true
+          msg=$(grep -E 'FAIL:|ERROR|FAILED|ALL tenant' iso.log | sed 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
+          pass=$(grep -c 'PASS:' iso.log || true)
+          if [ "$code" -ne 0 ]; then
+            echo "::error title=tenant isolation::passed=${pass}%0A${msg}"
+          else
+            echo "::notice title=tenant isolation::passed=${pass}%0A${msg}"
+          fi
+          exit "$code"
+
+      - name: Stop Supabase
+        if: always()
+        run: supabase stop --no-backup || true

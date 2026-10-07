@@ -1,0 +1,1 @@
+create index if not exists idx_meal_orders_school_date on public.meal_orders (school_id, meal_date);
