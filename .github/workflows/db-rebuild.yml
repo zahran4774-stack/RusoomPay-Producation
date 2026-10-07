@@ -107,6 +107,17 @@ jobs:
           fi
           exit "$code"
 
+      - name: Parent RPC probe (informational)
+        # يشغّل دوال RPC كولي أمر (بلا أبناء مرتبطين) ويطبع ما نجح تنفيذه؛ للمراجعة فقط ولا يُفشل الفحص
+        run: |
+          DB="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          set +e
+          psql "$DB" -At -f supabase/tests/parent_rpc_probe.sql > probe.log 2>&1
+          out=$(grep '^PROBE ' probe.log | sed 's/ ; /%0A/g')
+          echo "::notice title=parent rpc probe::${out}"
+          grep -v '^PROBE ' probe.log | grep -iE 'error' | head -5 | sed 's/^/::warning title=probe error::/'
+          exit 0
+
       - name: Stop Supabase
         if: always()
         run: supabase stop --no-backup || true
