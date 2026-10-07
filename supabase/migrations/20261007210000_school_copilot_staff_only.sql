@@ -37,10 +37,7 @@ CREATE OR REPLACE FUNCTION public.assistant_context()
  SET search_path TO ''
 AS $fn$
 declare
-  v_school uuid;
-  v_role text;
-  v_copilot jsonb := null;
-  v_school_name text;
+  v_school uuid; v_role text; v_copilot jsonb := null; v_school_name text;
 begin
   v_school := public.my_school_id();
   v_role := public.my_role()::text;
@@ -48,7 +45,6 @@ begin
     return jsonb_build_object('ok', false, 'error', 'no_school');
   end if;
   select name into v_school_name from public.schools where id = v_school;
-  -- أرقام المدرسة للطاقم فقط
   if coalesce(v_role, '') in ('owner', 'admin', 'accountant', 'platform_admin') then
     v_copilot := public.school_copilot();
   end if;
