@@ -83,3 +83,16 @@ The catch-up reproduces production as-is. Notes found while generating it:
   `delete_payment_within_window`, `food_purchase`. Most check `my_role()`
   internally, but the grant itself is broader than necessary.
 - `test_dummy_function()` exists in production.
+
+## Tenant-isolation tests and the policy fix (NOT applied to production)
+
+`supabase/tests/tenant_isolation.sql` (CI step "Tenant isolation & authorization tests")
+seeds two schools and acts as owner / parent / anon with real JWT claims.
+It found that in production `students_staff_read`, `employees_staff_read`,
+`student_fees_school_rw` and `journal_lines_rw` had no role check, so a parent
+attached to a school could read all its students, fees and employees and write
+`student_fees` / `journal_lines`.
+`20261007090000_tighten_role_less_policies.sql` restricts them to owner/admin/accountant
+and gives parents read-only access to their own children via `parent_students`.
+It is verified in CI only; applying it to production is a separate, deliberate step
+(after that, refresh `expected_fingerprint.txt`: policies 90 -> 92).
