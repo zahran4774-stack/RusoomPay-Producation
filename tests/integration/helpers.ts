@@ -18,7 +18,7 @@ export function serviceClient(): SupabaseClient {
 }
 
 // عميل عادي (anon key) — نستخدمه لاحقاً لتسجيل دخول المحاسب الوهمي بجلسة JWT حقيقية
-function anonClient(): SupabaseClient {
+export function anonClient(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   if (!anonKey) {

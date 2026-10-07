@@ -1,0 +1,110 @@
+# ═══════════════════════════════════════════════════════════════
+# الاختبارات التكاملية (tests/integration) على قاعدة Supabase محلية مؤقتة داخل GitHub.
+#
+# بديل لـ tests.yml القديم الذي كان يضرب قاعدة الإنتاج (وترك مدارس/مستخدمين وهميين فيها).
+# هنا: supabase start يبني القاعدة من supabase/migrations، والاختبارات تنشئ بياناتها فيها وتُحذف القاعدة
+# كاملة عند نهاية التشغيل. لا أسرار ولا اتصال بالإنتاج إطلاقاً.
+# ═══════════════════════════════════════════════════════════════
+name: Integration Tests (local DB)
+
+on:
+  push:
+    branches:
+      - main
+      - db-baseline
+    paths:
+      - 'tests/**'
+      - 'supabase/**'
+      - 'lib/**'
+      - 'app/api/**'
+      - 'package.json'
+      - '.github/workflows/integration-tests.yml'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  integration:
+    name: Integration tests on throwaway Supabase
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase (applies all migrations)
+        run: |
+          supabase start -x studio,mailpit,edge-runtime,logflare,vector,imgproxy,postgres-meta,supavisor
+
+      - name: Export local connection settings
+        # مفاتيح القاعدة المحلية المؤقتة فقط (ديمو) — ليست أسراراً حقيقية
+        run: |
+          supabase status -o env > local.env
+          get() { grep "^$1=" local.env | head -1 | cut -d= -f2- | tr -d '"'; }
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$(get API_URL)"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$(get ANON_KEY)"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$(get SERVICE_ROLE_KEY)"
+            echo "TEST_SUPABASE_URL=$(get API_URL)"
+            echo "TEST_SUPABASE_SERVICE_KEY=$(get SERVICE_ROLE_KEY)"
+          } >> "$GITHUB_ENV"
+
+      - name: Run integration tests
+        run: npx vitest run tests/integration 2>&1 | tee it.log
+        continue-on-error: true
+        id: it
+
+      - name: Summarize results
+        run: |
+          sum=$(sed 's/\x1b\[[0-9;]*m//g' it.log | grep -E "✓|×|FAIL|Test Files|Tests |AssertionError|Error:" | head -40 | sed 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
+          echo "::notice title=integration tests::${sum}"
+          if sed 's/\x1b\[[0-9;]*m//g' it.log | grep -qE "^ *(FAIL|×)|Failed Tests|Test Files .* failed"; then
+            echo "integration tests failed"; exit 1
+          fi
+
+      - name: Rehearse purge_archived_test_data.sql on this throwaway DB
+        # حالة هذه القاعدة بعد الاختبارات تشبه الإنتاج (مدارس ARCHIVED_TEST + قيود + مستخدمو @test.rusoompay.invalid).
+        # نضيف مدرسة "حقيقية" بقيد محاسبي ونشغّل سكربت التنظيف الفعلي بأعداد هذه القاعدة، ثم نتأكد أنها بقيت.
+        run: |
+          DB="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          exec 2>&1
+          trap 'rc=$?; if [ $rc -ne 0 ]; then sleep 1; echo "::error title=purge rehearsal failed::$(tail -c 1500 rehearsal.out | tr "\n" " ")"; fi' EXIT
+          exec > >(tee rehearsal.out)
+          psql "$DB" -v ON_ERROR_STOP=1 <<'SQL'
+          do $$ declare s uuid; a1 uuid; a2 uuid; e uuid;
+          begin
+            insert into public.schools(name,country,currency) values ('REAL_KEEP','OM','OMR') returning id into s;
+            insert into public.accounts(school_id,code,name,type) values (s,'1110','cash','asset') returning id into a1;
+            insert into public.accounts(school_id,code,name,type) values (s,'4100','rev','revenue') returning id into a2;
+            insert into public.journal_entries(school_id,entry_date,description) values (s,current_date,'keep me') returning id into e;
+            insert into public.journal_lines(school_id,entry_id,account_id,debit,credit) values (s,e,a1,5,0),(s,e,a2,0,5);
+          end $$;
+          SQL
+          S=$(psql "$DB" -At -c "select count(*) from public.schools where name like 'ARCHIVED\_TEST\_%' escape '\\' and is_test is true")
+          U=$(psql "$DB" -At -c "select count(*) from auth.users where email like '%@test.rusoompay.invalid'")
+          echo "rehearsal counts: schools=$S users=$U"
+          sed "s/VALUES (15, 212);/VALUES ($S, $U);/" supabase/maintenance/purge_archived_test_data.sql > purge_rehearsal.sql
+          psql "$DB" -v ON_ERROR_STOP=1 -f purge_rehearsal.sql 2>&1 | tee purge.log
+          grep -q "PURGE OK" purge.log
+          psql "$DB" -At -c "select 'left_archived='||(select count(*) from public.schools where name like 'ARCHIVED%')||' real_kept='||(select count(*) from public.schools where name='REAL_KEEP')||' real_lines='||(select count(*) from public.journal_lines l join public.schools s on s.id=l.school_id where s.name='REAL_KEEP')||' trig_on='||(select count(*) from pg_trigger where tgname in ('no_delete_journal','no_delete_lines') and tgenabled='O')" | tee after.txt
+          grep -q "left_archived=0 real_kept=1 real_lines=2 trig_on=2" after.txt
+          echo "::notice title=purge rehearsal::$(tr '\n' ' ' < after.txt) | $(grep -c PURGE purge.log) ok | $(cat purge.log | grep 'rehearsal' | head -1)"
+
+      - name: Stop Supabase
+        if: always()
+        run: supabase stop --no-backup || true
