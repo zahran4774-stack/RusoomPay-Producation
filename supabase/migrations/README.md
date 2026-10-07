@@ -113,3 +113,15 @@ Register them (and the catch-up) in production's history without re-running them
 ```
 supabase migration repair --status applied 20261004160211 20261007090000 20261007120000
 ```
+
+## Staff-only report RPCs (NOT yet applied to production)
+
+`20261007150000_staff_only_report_rpcs.sql` - found by `supabase/tests/parent_rpc_probe.sql`:
+29 report/data RPCs only scoped by `my_school_id()`, so a parent attached to a school could read
+trial balance, journal, P&L, VAT, cash-flow, dashboard, risk list and overdue lists (with guardian
+phones), payroll summary, inventory, suppliers, feedback, and any student's parent list.
+They now require owner/admin/accountant (platform_admin kept for impersonation);
+`validate_wps_run` also checks the payroll run belongs to the caller's school;
+`claim_queue_batch`, `mark_queue_result`, `cleanup_rate_limits`, `next_invoice_number`,
+`next_expense_code` are service_role only. After applying it to production, refresh
+`expected_fingerprint.txt` (functions hash) from production.
