@@ -94,6 +94,8 @@ jobs:
           echo "::notice title=tok-funcdef::${fd}"
           cols=$(psql "$DB" -v ON_ERROR_STOP=1 -At -c "select string_agg(table_name||'.'||column_name||':'||data_type||':'||is_nullable||':'||coalesce(column_default,''), E'\n' order by table_name, column_name) from information_schema.columns where table_schema='public' and table_name in ('subscriptions','suppliers')" | awk 'BEGIN{ORS="%0A"} {print}')
           echo "::notice title=diag-cols::${cols}"
+          en=$(psql "$DB" -v ON_ERROR_STOP=1 -At -c "select t.typname||'='||string_agg(e.enumlabel, ',' order by e.enumsortorder) from pg_type t join pg_enum e on e.enumtypid=t.oid join pg_namespace n on n.oid=t.typnamespace where n.nspname='public' group by t.typname order by 1" | awk 'BEGIN{ORS="%0A"} {print}')
+          echo "::notice title=diag-enums::${en}"
 
       - name: Stop Supabase
         if: always()
