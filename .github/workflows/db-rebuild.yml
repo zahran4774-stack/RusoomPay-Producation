@@ -88,6 +88,25 @@ jobs:
             echo "::warning title=schema fingerprint differs from production snapshot::${msg}"
           fi
 
+      - name: Tenant isolation & authorization tests (throwaway DB)
+        # يبذر مدرستين على القاعدة المحلية المؤقتة ويتصرف كأدوار حقيقية (JWT claims) ليتأكد أن مدرسة لا ترى
+        # ولا تعدّل بيانات مدرسة أخرى، وأن anon لا يصل لدوال المال. لا أسرار ولا اتصال بالإنتاج.
+        run: |
+          DB="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          set +e
+          psql "$DB" -v ON_ERROR_STOP=1 -f supabase/tests/tenant_isolation.sql > iso.log 2>&1
+          code=$?
+          set -e
+          grep -E 'PASS:|FAIL:|ERROR|checks' iso.log | sed 's/^psql:[^ ]* *//' | sort | uniq -c | sort -rn > iso.sum || true
+          msg=$(grep -E 'FAIL:|ERROR|FAILED|ALL tenant' iso.log | sed 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
+          pass=$(grep -c 'PASS:' iso.log || true)
+          if [ "$code" -ne 0 ]; then
+            echo "::error title=tenant isolation::passed=${pass}%0A${msg}"
+          else
+            echo "::notice title=tenant isolation::passed=${pass}%0A${msg}"
+          fi
+          exit "$code"
+
       - name: Stop Supabase
         if: always()
         run: supabase stop --no-backup || true
