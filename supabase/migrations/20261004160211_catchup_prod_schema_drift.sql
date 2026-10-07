@@ -125,6 +125,17 @@ ALTER TABLE public.students ADD COLUMN IF NOT EXISTS special_case_reason text;
 ALTER TABLE public.students ADD COLUMN IF NOT EXISTS transport_type text DEFAULT 'none'::text;
 
 -- ---------------------------------------------------------------------------
+-- Objects present in the recorded history but absent from production
+-- (old overloads and a constraint dropped directly in production)
+-- ---------------------------------------------------------------------------
+DROP FUNCTION IF EXISTS public.food_purchase(uuid, numeric);
+DROP FUNCTION IF EXISTS public.mark_meal_purchase_paid(uuid);
+DROP FUNCTION IF EXISTS public.record_payment(uuid, numeric, text, date);
+DROP FUNCTION IF EXISTS public.reject_payment(uuid);
+DROP FUNCTION IF EXISTS public.save_meal_purchase(uuid, uuid, date, text, integer, numeric, text, boolean, text);
+ALTER TABLE public.students DROP CONSTRAINT IF EXISTS students_section_valid;
+
+-- ---------------------------------------------------------------------------
 -- Function bodies (production definitions) — CREATE OR REPLACE
 -- ---------------------------------------------------------------------------
 -- CREATE OR REPLACE cannot change a function's return type. Drop the (few) functions whose
@@ -3115,6 +3126,17 @@ BEGIN
                         'food_purchase', 'has_permission', 'latest_editable_payment',
                         'mark_meal_purchase_paid', 'meal_purchases_list', 'my_permissions',
                         'my_subscription_status', 'next_expense_code', 'next_invoice_number',
+                        'add_annual_meal_fee', 'add_student_fee', 'available_plans', 'block_approved_payroll_items',
+                        'block_journal_mutation', 'cafeteria_plans', 'create_academic_year',
+                        'current_academic_year', 'enabled_countries', 'is_valid_gulf_phone', 'log_error',
+                        'meal_cost_report', 'meal_suppliers', 'monthly_payment_report', 'my_role',
+                        'my_school_id', 'next_grade', 'normalize_phone', 'overdue_reminders',
+                        'parent_signup_by_phone', 'platform_error_log', 'platform_school_analytics',
+                        'public_schools', 'register_school', 'resolve_error', 'save_meal_plan',
+                        'save_supplier', 'set_current_academic_year', 'start_impersonation',
+                        'stop_impersonation', 'students_without_meal', 'sync_pasi_flag', 'system_health',
+                        'transport_buses', 'transport_subscribers', 'update_school_branding',
+                        'update_student_family_info',
                         'record_payment', 'reject_payment', 'school_pricing_complete',
                         'set_bundle_setting', 'set_custom_section_names', 'set_user_permission',
                         'staff_permissions_list', 'student_payment_tracker', 'test_dummy_function',
