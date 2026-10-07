@@ -82,6 +82,9 @@ jobs:
         # نضيف مدرسة "حقيقية" بقيد محاسبي ونشغّل سكربت التنظيف الفعلي بأعداد هذه القاعدة، ثم نتأكد أنها بقيت.
         run: |
           DB="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          exec 2>&1
+          trap 'rc=$?; if [ $rc -ne 0 ]; then sleep 1; echo "::error title=purge rehearsal failed::$(tail -c 1500 rehearsal.out | tr "\n" " ")"; fi' EXIT
+          exec > >(tee rehearsal.out)
           psql "$DB" -v ON_ERROR_STOP=1 <<'SQL'
           do $$ declare s uuid; a1 uuid; a2 uuid; e uuid;
           begin
