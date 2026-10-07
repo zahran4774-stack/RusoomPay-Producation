@@ -96,6 +96,17 @@ jobs:
           echo "::notice title=diag-cols::${cols}"
           en=$(psql "$DB" -v ON_ERROR_STOP=1 -At -c "select t.typname||'='||string_agg(e.enumlabel, ',' order by e.enumsortorder) from pg_type t join pg_enum e on e.enumtypid=t.oid join pg_namespace n on n.oid=t.typnamespace where n.nspname='public' group by t.typname order by 1" | awk 'BEGIN{ORS="%0A"} {print}')
           echo "::notice title=diag-enums::${en}"
+          if [ -f supabase/tests/extra_tokens.txt ]; then
+            toks=$(cat supabase/tests/extra_tokens.txt)
+            psql "$DB" -v ON_ERROR_STOP=1 -At -f supabase/tests/schema_objects.sql \
+              -c "select kind||' '||left(md5(k),7)||' '||k from schema_objects where left(md5(k),7) = any(string_to_array('$toks',' ')) and kind in ('functions','constraints') order by kind, k" > extra.txt
+            i=0
+            split -l 15 extra.txt extra_part_
+            for f in extra_part_*; do
+              i=$((i+1))
+              echo "::notice title=diag-extra-$i::$(awk 'BEGIN{ORS="%0A"} {print}' "$f")"
+            done
+          fi
 
       - name: Stop Supabase
         if: always()

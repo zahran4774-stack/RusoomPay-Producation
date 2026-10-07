@@ -22,6 +22,8 @@ SET check_function_bodies = off;
 
 CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA extensions;
 
+ALTER TYPE public.student_status ADD VALUE IF NOT EXISTS 'withdrawn';
+
 -- ---------------------------------------------------------------------------
 -- Tables that exist in production but not in the recorded history
 -- ---------------------------------------------------------------------------
