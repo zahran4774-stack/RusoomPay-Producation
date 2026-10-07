@@ -1,6 +1,10 @@
 // إرسال بريد دعوة موظف عبر Resend
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
+import { checkRateLimit } from '@/lib/rate-limit'
+
+const esc = (v: string) =>
+  v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 
 const ROLE_AR: Record<string, string> = {
   admin: 'إداري',
@@ -22,9 +26,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'غير مصرّح' }, { status: 403 })
     }
 
-    const { email, name, role } = await req.json()
+    // حدّ: 20 دعوة كل ساعة لكل مستخدم — يمنع استغلال المرسل no-reply@rusoompay.com
+    const rl = await checkRateLimit(`invite:${user.id}`, 20, 3600)
+    if (!rl.allowed) {
+      return NextResponse.json({ error: 'محاولات كثيرة. حاول لاحقاً.' }, { status: 429 })
+    }
+
+    const input = await req.json().catch(() => null) as { email?: unknown; name?: unknown; role?: unknown } | null
+    const email = typeof input?.email === 'string' ? input.email.trim() : ''
+    const name = typeof input?.name === 'string' ? input.name.trim() : ''
+    const role = typeof input?.role === 'string' ? input.role : ''
     if (!email || !name) {
       return NextResponse.json({ error: 'بيانات ناقصة' }, { status: 400 })
+    }
+    if (email.length > 200 || name.length > 100 || !/^[^\s@<>"']+@[^\s@<>"']+\.[^\s@<>"']+$/.test(email)) {
+      return NextResponse.json({ error: 'بيانات غير صالحة' }, { status: 400 })
     }
 
     const apiKey = process.env.RESEND_API_KEY
@@ -34,7 +50,7 @@ export async function POST(req: Request) {
 
     const { data: school } = await supabase
       .from('schools').select('name').eq('id', profile.school_id).single()
-    const schoolName = school?.name ?? 'مدرستك'
+    const schoolName = esc(school?.name ?? 'مدرستك')
 
     const signupUrl = 'https://rusoompay.com'
     const roleAr = ROLE_AR[role] ?? 'موظف'
@@ -49,14 +65,14 @@ export async function POST(req: Request) {
       <div style="font-size:12.5px;opacity:.75;margin-top:3px">دعوة للانضمام إلى نظام إدارة المدرسة</div>
     </div>
     <div style="padding:26px 24px">
-      <p style="font-size:15px;margin:0 0 14px">مرحباً ${name}،</p>
+      <p style="font-size:15px;margin:0 0 14px">مرحباً ${esc(name)}،</p>
       <p style="font-size:14px;line-height:1.9;color:#445;margin:0 0 18px">
         تمت دعوتك للانضمام إلى نظام <b>${schoolName}</b> بصلاحية <b>${roleAr}</b>.
         لتفعيل حسابك، سجّل في المنصة باستخدام هذا البريد بالذات:
       </p>
       <div style="background:#F7F9FC;border:1px solid #E3E8EE;border-radius:10px;padding:13px 16px;margin-bottom:20px;text-align:center">
         <div style="font-size:11.5px;color:#8A94A6;margin-bottom:4px">بريد التسجيل</div>
-        <div style="font-size:15px;font-weight:700;color:#0F2744;direction:ltr">${email}</div>
+        <div style="font-size:15px;font-weight:700;color:#0F2744;direction:ltr">${esc(email)}</div>
       </div>
       <div style="text-align:center;margin-bottom:20px">
         <a href="${signupUrl}" style="display:inline-block;background:#163B68;color:#fff;text-decoration:none;padding:13px 34px;border-radius:11px;font-size:15px;font-weight:800">
@@ -82,7 +98,7 @@ export async function POST(req: Request) {
       body: JSON.stringify({
         from: 'RusoomPay <no-reply@rusoompay.com>',
         to: [email],
-        subject: `دعوة للانضمام إلى نظام ${schoolName}`,
+        subject: `دعوة للانضمام إلى نظام ${school?.name ?? 'مدرستك'}`,
         html,
       }),
     })
