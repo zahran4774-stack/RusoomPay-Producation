@@ -11,10 +11,11 @@ import * as accounting from './accounting'
 import * as employees from './employees'
 import * as settings from './settings'
 import * as students from './students'
+import * as app from './app'
 
 type Module = { exact: Record<string, string>; patterns: Array<[string, string]> }
 
-const MODULES: Module[] = [common, fees, accounting, employees, settings, students]
+const MODULES: Module[] = [common, fees, accounting, employees, settings, students, app]
 
 export const EXTRA_EXACT: Record<string, string> = {}
 export const PATTERN_PAIRS: Array<[string, string]> = []

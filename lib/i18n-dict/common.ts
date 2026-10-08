@@ -8,3 +8,7 @@ export const patterns: Array<[string, string]> = [
   ['{0} طالب', '{0} {0?student|students}'],
   ['{0} يوم', '{0} {0?day|days}'],
 ]
+
+exact['د.ك'] = 'KWD'
+exact['ر.ق'] = 'QAR'
+exact['خروج'] = 'Log out'

@@ -1816,11 +1816,26 @@ function tokenize(input: string): Token[] {
   return tokens
 }
 
+// Dotted abbreviations (currencies such as "ر.ع") are not single Arabic words, so they
+// are swapped first; they also appear inside composed strings ("12.500 ر.ع").
+const ABBREVIATIONS: Array<[RegExp, string]> = Object.entries(exact)
+  .filter(([ar]) => /^[\u0620-\u06FF]{1,3}(\.[\u0620-\u06FF]{1,3})+\.?$/.test(ar))
+  .sort((a, b) => b[0].length - a[0].length)
+  .map(([ar, en]) => [new RegExp(`(?<![\\u0620-\\u06FF])${ar.replace(/\./g, '\\.')}(?![\\u0620-\\u06FF])`, 'g'), en])
+
 function translateUncached(input: string): string {
   const trimmed = input.trim()
   if (exact[trimmed] !== undefined) return input.replace(trimmed, () => exact[trimmed])
   const templated = matchPattern(trimmed)
   if (templated !== null) return input.replace(trimmed, () => templated)
+  if (ABBREVIATIONS.length > 0) {
+    let swapped = input
+    for (const [re, en] of ABBREVIATIONS) swapped = swapped.replace(re, en)
+    if (swapped !== input) {
+      const result = translateUncached(swapped)
+      return AR_LETTER.test(result) ? input : result
+    }
+  }
 
   const tokens = tokenize(input)
   // Single-word dictionary is used ONLY when the text is one Arabic word

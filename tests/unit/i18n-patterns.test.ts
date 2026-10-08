@@ -39,3 +39,10 @@ describe('extra dictionaries integrity', () => {
     }
   })
 })
+
+describe('currency abbreviations', () => {
+  it('translates dotted abbreviations inside composed text', () => {
+    expect(translateText('12.500 ر.ع', 'en')).toBe('12.500 OMR')
+    expect(translateText('تكلفة 5 ر.ع.', 'en')).toBe('تكلفة 5 ر.ع.')
+  })
+})
