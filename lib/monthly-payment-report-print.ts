@@ -1,4 +1,5 @@
 // lib/monthly-payment-report-print.ts
+import { printHtml } from '@/lib/print-i18n'
 // طباعة تقرير الدفع الشهري لكامل المدرسة — قسمان: دفعوا هذا الشهر / لم يدفعوا.
 // نفس أسلوب invoice-html.ts وpayment-tracker-print.ts (HTML + طباعة المتصفّح،
 // خط Cairo، انتظار تحميل الخط/الشعار قبل الطباعة).
@@ -163,7 +164,7 @@ export function printMonthlyPaymentReport(d: MonthlyReportData) {
 
   const w = window.open('', '_blank')
   if (!w) { alert('يرجى السماح بالنوافذ المنبثقة للطباعة'); return }
-  w.document.write(html)
+  w.document.write(printHtml(html))
   w.document.close()
 
   const doPrint = () => { try { w.focus(); w.print() } catch { /* نافذة أُغلقت */ } }

@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import { Bus, Printer, Users, ChevronDown } from 'lucide-react'
+import { printHtml } from '@/lib/print-i18n'
 
 type Student = {
   student_id: string; full_name: string; grade: string; section: string | null
@@ -83,7 +84,7 @@ export default function BusRoster({ schoolName }: { schoolName?: string }) {
       </body></html>`
 
     const w = window.open('', '_blank')
-    if (w) { w.document.write(html); w.document.close() }
+    if (w) { w.document.write(printHtml(html)); w.document.close() }
   }
 
   if (!open) {

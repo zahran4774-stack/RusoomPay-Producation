@@ -6,6 +6,7 @@
 // الطباعة عبر نافذة منفصلة — مضمونة بصفحة واحدة نظيفة بلا صفحات فارغة.
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase-client'
+import { printHtml } from '@/lib/print-i18n'
 
 type Item = {
   student_name: string
@@ -303,7 +304,7 @@ tr.tot td{font-weight:800;background:#F2F5F9;border-top:2px solid #0A1D33;border
 
     const win = window.open('', '_blank', 'width=900,height=650')
     if (!win) { alert('فعّل النوافذ المنبثقة للطباعة'); return }
-    win.document.write(html)
+    win.document.write(printHtml(html))
     win.document.close()
 
     const doPrint = () => { try { win.focus(); win.print() } catch { /* نافذة أُغلقت */ } }

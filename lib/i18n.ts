@@ -1948,6 +1948,17 @@ function matchPattern(text: string): string | null {
  * Returns one English string per run, or null when no template matches.
  */
 export function translateSentenceRuns(runs: string[]): string[] | null {
+  // Empty runs at the edges (an element before/after the sentence) are not part of it.
+  let first = 0
+  let last = runs.length - 1
+  while (first <= last && !runs[first].trim()) first++
+  while (last >= first && !runs[last].trim()) last--
+  if (first > last) return null
+  if (first > 0 || last < runs.length - 1) {
+    const inner = translateSentenceRuns(runs.slice(first, last + 1))
+    if (!inner) return null
+    return [...runs.slice(0, first), ...inner, ...runs.slice(last + 1)]
+  }
   const joined = runs.join(BOUNDARY)
   if (!AR_LETTER.test(joined)) return null
   const normalised = normaliseSentence(joined)

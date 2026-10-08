@@ -1,4 +1,5 @@
 // lib/payment-tracker-print.ts
+import { printHtml } from '@/lib/print-i18n'
 // طباعة سجل الدفعات الشهري الكامل للعام الدراسي — نفس أسلوب invoice-html.ts
 // تماماً (HTML + طباعة المتصفّح، خط Cairo، انتظار تحميل الخط/الشعار قبل الطباعة).
 
@@ -170,7 +171,7 @@ export function printPaymentTracker(d: TrackerPrintData) {
 
   const w = window.open('', '_blank')
   if (!w) { alert('يرجى السماح بالنوافذ المنبثقة للطباعة'); return }
-  w.document.write(html)
+  w.document.write(printHtml(html))
   w.document.close()
 
   const doPrint = () => { try { w.focus(); w.print() } catch { /* نافذة أُغلقت */ } }

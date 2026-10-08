@@ -12,6 +12,7 @@ import CertificatesButton from './CertificatesButton'
 import EditStudent from './EditStudent'
 import PaymentTracker from './PaymentTracker'
 import { printStudentCard, printClassCards } from '@/lib/print-student-card'
+import { printHtml } from '@/lib/print-i18n'
 
 type Student = {
   id: string; code: string; full_name: string
@@ -425,7 +426,7 @@ function exportClassPDF(g: ClassGroup, school: { name: string; vat: string | nul
 
   const win = window.open('', '_blank', 'width=900,height=650')
   if (!win) { alert('فعّل النوافذ المنبثقة للطباعة'); return }
-  win.document.write(html)
+  win.document.write(printHtml(html))
   win.document.close()
 
   const doPrint = () => { try { win.focus(); win.print() } catch { /* أُغلقت */ } }

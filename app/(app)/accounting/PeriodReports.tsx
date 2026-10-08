@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase-client'
 import { employeeTypeLabel } from '@/lib/employee-types'
+import { printHtml } from '@/lib/print-i18n'
 
 type School = { name: string; vat_number: string | null; currency: string }
 type ReportKind = 'trial' | 'income' | 'balance' | 'journal' | 'vat' | 'employees' | 'payroll'
@@ -322,7 +323,7 @@ tr.note td{font-size:.72rem;color:#8A94A6;background:#fff !important;border-bott
 
     const win = window.open('', '_blank', 'width=900,height=650')
     if (!win) { alert('فعّل النوافذ المنبثقة للطباعة'); return }
-    win.document.write(html)
+    win.document.write(printHtml(html))
     win.document.close()
 
     // انتظر تحميل الخط والشعار قبل الطباعة

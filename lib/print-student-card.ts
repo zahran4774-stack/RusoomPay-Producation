@@ -1,4 +1,5 @@
 // lib/print-student-card.ts
+import { printHtml } from '@/lib/print-i18n'
 // طباعة بطاقة تعليق صدر للطالب — بطاقة واحدة أو دفعة كاملة (شعبة).
 // المقاس محسوب هندسياً على ورق A4: عمودين × 3 صفوف = 6 بطاقات بالضبط لكل
 // صفحة، بدون أي هدر بالورق:
@@ -196,7 +197,7 @@ function openPrintWindow(school: SchoolBrand, title: string, bodyHtml: string) {
 <style>${buildStyle(school)}</style></head><body>${bodyHtml}</body></html>`
 
   win.document.open()
-  win.document.write(html)
+  win.document.write(printHtml(html))
   win.document.close()
 
   const doPrint = () => { try { win.focus(); win.print() } catch { /* نافذة أُغلقت */ } }

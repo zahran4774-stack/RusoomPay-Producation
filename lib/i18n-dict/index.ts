@@ -6,10 +6,12 @@
 //      ¦             marks an element boundary (e.g. <b>…</b>) inside a multi-node sentence
 // First definition wins: the main dictionary, then the modules in the order below.
 import * as common from './common'
+import * as fees from './fees'
+import * as accounting from './accounting'
 
 type Module = { exact: Record<string, string>; patterns: Array<[string, string]> }
 
-const MODULES: Module[] = [common]
+const MODULES: Module[] = [common, fees, accounting]
 
 export const EXTRA_EXACT: Record<string, string> = {}
 export const PATTERN_PAIRS: Array<[string, string]> = []
