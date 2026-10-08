@@ -1,6 +1,7 @@
 'use client'
 
 import LanguageSwitcher from '@/components/i18n/LanguageSwitcher'
+import { useLanguage } from '@/components/i18n/LanguageProvider'
 // صفحة تسجيل الدخول — مصادقة حقيقية عبر Supabase (لا تحقق في المتصفح)
 // المنطق (المصادقة، MFA، التوجيه، الاستعادة) محفوظ كما هو؛ التحسين بصري فقط.
 // ⚠️ تعديل: autoComplete على الفورم وحقلي البريد/كلمة المرور لتقليل احتمال
@@ -14,6 +15,9 @@ import Logo from '@/app/Logo'
 export default function LoginPage() {
   const router = useRouter()
   const supabase = createClient()
+  // نصوص من عدة عقد نصية (سطرين / روابط داخل جملة) لا يترجمها المحرّك تلقائياً — تُعرض صراحةً حسب اللغة
+  const { language } = useLanguage()
+  const isEn = language === 'en'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPw, setShowPw] = useState(false)
@@ -239,7 +243,11 @@ export default function LoginPage() {
               </div>
 
               <p className="lp-terms">
-                بالتسجيل أنت توافق على <a href="/terms">شروط الخدمة</a> و <a href="/privacy">سياسة الخصوصية</a>
+                {isEn ? (
+                  <>By signing in, you agree to the <a href="/terms">Terms of Service</a> and <a href="/privacy">Privacy Policy</a></>
+                ) : (
+                  <>بالتسجيل أنت توافق على <a href="/terms">شروط الخدمة</a> و <a href="/privacy">سياسة الخصوصية</a></>
+                )}
               </p>
             </form>
           )}
@@ -256,9 +264,19 @@ export default function LoginPage() {
             <span>للمدارس الخاصة في الخليج</span>
           </h1>
           <p className="lp-hero-sub">
-            إدارة الرسوم والمدفوعات والعمليات المالية بكل سهولة وأمان.
-            <br />
-            ضمن منصّة حديثة تساعد المدارس على العمل بكفاءة أعلى.
+            {isEn ? (
+              <>
+                Manage fees, payments, and financial operations with ease and security.
+                <br />
+                A modern platform that helps schools operate more efficiently.
+              </>
+            ) : (
+              <>
+                إدارة الرسوم والمدفوعات والعمليات المالية بكل سهولة وأمان.
+                <br />
+                ضمن منصّة حديثة تساعد المدارس على العمل بكفاءة أعلى.
+              </>
+            )}
           </p>
         </div>
 

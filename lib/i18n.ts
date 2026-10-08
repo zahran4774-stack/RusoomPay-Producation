@@ -787,6 +787,9 @@ const exact: Record<string, string> = {
   'لحماية البيانات': 'To protect data',
   'دعم مخصص': 'Dedicated Support',
   'جاهزون لمساعدتك': "We're ready to help",
+  'النظام المالي والإداري المتكامل': 'Integrated Financial & Administrative System',
+  'إنشاء حساب مدرسة': 'Create School Account',
+  'RusoomPay is powered by Berouq Al Ain Trading · رسوم باي من إنتاج مؤسسة بروق العين التجارية': 'RusoomPay is powered by Berouq Al Ain Trading',
 
   // --- تسجيل مدرسة جديدة (register/page.tsx) ---
   'ريال عُماني': 'Omani Rial',
