@@ -788,6 +788,7 @@ const exact: Record<string, string> = {
   'دعم مخصص': 'Dedicated Support',
   'جاهزون لمساعدتك': "We're ready to help",
   'إضافة طالب': 'Add Student',
+  'بلا رسوم فقط': 'No fees only',
   'أدخل مبلغ التخفيض في الحقل أعلاه — ستظهر النسبة تلقائياً.': 'Enter the discount amount in the field above — the percentage will appear automatically.',
   '🔒 التغذية والنقل مجمّدان — فعّلهما من «الإعدادات» أو أضفهما لاحقاً من صفحتيهما.': '🔒 Meals and transport are locked — enable them from “Settings” or add them later from their own pages.',
   '📜 شهادات': '📜 Certificates',
