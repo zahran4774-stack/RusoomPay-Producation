@@ -4,6 +4,9 @@
 // لا منطق أعمال هنا؛ التصميم تنفيذي نظيف بأسلوب Stripe / Linear.
 import Link from 'next/link'
 import { useState } from 'react'
+import { useLanguage } from '@/components/i18n/LanguageProvider'
+import { translateText } from '@/lib/i18n'
+import { translateCopilotText } from '@/lib/copilot-i18n'
 
 type Alert = { severity: 'high' | 'medium'; title: string; detail: string; action: string; action_label: string; href: string }
 type Reco = { title: string; reason: string; benefit: string; action_label: string; href: string }
@@ -38,10 +41,17 @@ export default function SchoolCopilot({
   // يُستدعى عند تنفيذ توصية — يسجّلها ثم ينتقل لمكان الإجراء
   onAct?: (rec: SmartRec) => void
 }) {
-  const [greeting] = useState(() => {
-    const h = new Date().getHours()
-    return h < 12 ? 'صباح الخير' : h < 18 ? 'مساء الخير' : 'مساء الخير'
-  })
+  // كل نصوص هذا المكوّن تُعرض صراحةً حسب اللغة (لا اعتماد على مترجم DOM) لأن كثيراً منها
+  // جمل ديناميكية بأرقام تأتي من دوال قاعدة البيانات. اسم المدرسة والمستخدم يبقيان كما أدخلهما.
+  const { language } = useLanguage()
+  const en = language === 'en'
+  const T = (ar: string, e: string) => (en ? e : ar)
+  const D = (s: string) => (en ? translateCopilotText(s) : s)
+  const cur = en ? translateText(sym, 'en') : sym
+  const [hour] = useState(() => new Date().getHours())
+  const greeting = en
+    ? (hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening')
+    : (hour < 12 ? 'صباح الخير' : 'مساء الخير')
 
   if (!data || data.ok === false) return null
 
@@ -61,7 +71,7 @@ export default function SchoolCopilot({
         background: '#fff', border: '1px solid #E7EBF0', borderRadius: 18,
         padding: '24px 26px', marginBottom: 22, boxShadow: '0 1px 3px rgba(16,24,40,.04)',
       }}
-      dir="rtl">
+      dir={en ? 'ltr' : 'rtl'}>
       {/* اسم المدرسة — شريط ممركز بارز */}
       {schoolName && (
         <div style={{ textAlign: 'center', marginBottom: 18 }}>
@@ -88,30 +98,30 @@ export default function SchoolCopilot({
             </div>
           )}
           <h2 style={{ fontSize: '1.35rem', fontWeight: 700, color: '#0F1B2D', margin: 0, letterSpacing: '-0.01em' }}>
-            {greeting}{firstName ? `، ${firstName}` : ''}
+            {greeting}{firstName ? `${en ? ', ' : '، '}${firstName}` : ''}
           </h2>
-          <p style={{ fontSize: 13.5, color: '#6B7A90', margin: '3px 0 0' }}>مساعدك التنفيذي — ملخّص اليوم التشغيلي</p>
+          <p style={{ fontSize: 13.5, color: '#6B7A90', margin: '3px 0 0' }}>{T('مساعدك التنفيذي — ملخّص اليوم التشغيلي', "Your executive assistant — today's operational summary")}</p>
         </div>
         {/* درجة صحّة المدرسة */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#FAFBFC', border: '1px solid #EEF1F5', borderRadius: 14, padding: '10px 16px' }}>
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '1.5rem', fontWeight: 800, color: healthColor, lineHeight: 1 }}>{health.score}</div>
-            <div style={{ fontSize: 10, color: '#8A94A6', marginTop: 2 }}>من 100</div>
+            <div style={{ fontSize: 10, color: '#8A94A6', marginTop: 2 }}>{T('من 100', 'out of 100')}</div>
           </div>
           <div style={{ borderInlineStart: '1px solid #E7EBF0', paddingInlineStart: 12 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: healthColor }}>{health.status}</div>
-            <div style={{ fontSize: 11, color: '#8A94A6' }}>صحّة العمليات</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: healthColor }}>{D(health.status)}</div>
+            <div style={{ fontSize: 11, color: '#8A94A6' }}>{T('صحّة العمليات', 'Operations Health')}</div>
           </div>
         </div>
       </div>
 
       {/* الملخّص التنفيذي — أرقام مضغوطة */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 1, background: '#EEF1F5', border: '1px solid #EEF1F5', borderRadius: 12, overflow: 'hidden', marginBottom: nothingUrgent ? 0 : 22 }}>
-        <SummaryCell label="حُصّل اليوم" value={`${num3(summary.today_collected)} ${sym}`} />
-        <SummaryCell label="مستحقات قائمة" value={`${num3(summary.outstanding)} ${sym}`} />
-        <SummaryCell label="نسبة التحصيل" value={`${summary.collection_rate}%`} />
-        <SummaryCell label="بانتظار الاعتماد" value={num(summary.pending_approvals)} />
-        <SummaryCell label="الطلاب" value={num(summary.students)} />
+        <SummaryCell label={T('حُصّل اليوم', 'Collected Today')} value={`${num3(summary.today_collected)} ${cur}`} />
+        <SummaryCell label={T('مستحقات قائمة', 'Outstanding Dues')} value={`${num3(summary.outstanding)} ${cur}`} />
+        <SummaryCell label={T('نسبة التحصيل', 'Collection Rate')} value={`${summary.collection_rate}%`} />
+        <SummaryCell label={T('بانتظار الاعتماد', 'Pending Approval')} value={num(summary.pending_approvals)} />
+        <SummaryCell label={T('الطلاب', 'Students')} value={num(summary.students)} />
       </div>
 
       {/* حالة "كل شيء ممتاز" */}
@@ -121,8 +131,8 @@ export default function SchoolCopilot({
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
           </span>
           <div>
-            <div style={{ fontWeight: 700, color: '#0F1B2D', fontSize: 15 }}>كل شيء ممتاز اليوم</div>
-            <div style={{ fontSize: 13, color: '#5A6B7B' }}>لا توجد إجراءات عاجلة مطلوبة.</div>
+            <div style={{ fontWeight: 700, color: '#0F1B2D', fontSize: 15 }}>{T('كل شيء ممتاز اليوم', 'Everything is great today')}</div>
+            <div style={{ fontSize: 13, color: '#5A6B7B' }}>{T('لا توجد إجراءات عاجلة مطلوبة.', 'No urgent actions are required.')}</div>
           </div>
         </div>
       )}
@@ -130,17 +140,17 @@ export default function SchoolCopilot({
       {/* يحتاج انتباهاً */}
       {alerts.length > 0 && (
         <div style={{ marginBottom: recommendations.length > 0 ? 22 : 0 }}>
-          <h3 style={{ fontSize: 12, fontWeight: 700, color: '#6B7A90', textTransform: 'uppercase', letterSpacing: 0.4, margin: '0 0 10px' }}>يحتاج انتباهاً</h3>
+          <h3 style={{ fontSize: 12, fontWeight: 700, color: '#6B7A90', textTransform: 'uppercase', letterSpacing: 0.4, margin: '0 0 10px' }}>{T('يحتاج انتباهاً', 'Needs Attention')}</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {alerts.slice(0, 5).map((a, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 15px', background: '#FAFBFC', border: '1px solid #EEF1F5', borderRadius: 12 }}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: a.severity === 'high' ? '#D92D20' : '#F79009' }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: '#0F1B2D' }}>{a.title}</div>
-                  <div style={{ fontSize: 12.5, color: '#6B7A90' }}>{a.detail}</div>
+                  <div style={{ fontWeight: 600, fontSize: 14, color: '#0F1B2D' }}>{D(a.title)}</div>
+                  <div style={{ fontSize: 12.5, color: '#6B7A90' }}>{D(a.detail)}</div>
                 </div>
                 <Link href={a.href} style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 600, color: '#fff', background: '#0F1B2D', borderRadius: 8, padding: '7px 14px', textDecoration: 'none', whiteSpace: 'nowrap' }}>
-                  {a.action_label}
+                  {D(a.action_label)}
                 </Link>
               </div>
             ))}
@@ -153,16 +163,18 @@ export default function SchoolCopilot({
         <div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', margin: '0 0 4px' }}>
             <h3 style={{ fontSize: 12, fontWeight: 700, color: '#6B7A90', textTransform: 'uppercase', letterSpacing: 0.4, margin: 0 }}>
-              الإجراءات الموصى بها
+              {T('الإجراءات الموصى بها', 'Recommended Actions')}
             </h3>
             {impact && (impact.actions_this_month ?? 0) > 0 && (
               <span style={{ fontSize: 11.5, fontWeight: 600, color: '#067647', background: '#F0FAF4', border: '1px solid #CDECD9', padding: '3px 11px', borderRadius: 99 }}>
-                نفّذت {num(impact.actions_this_month ?? 0)} توصية هذا الشهر · حُصّل {num3(impact.collected_this_month ?? 0)} {sym}
+                {en
+                  ? `You acted on ${num(impact.actions_this_month ?? 0)} recommendation${(impact.actions_this_month ?? 0) === 1 ? '' : 's'} this month · Collected ${num3(impact.collected_this_month ?? 0)} ${cur}`
+                  : `نفّذت ${num(impact.actions_this_month ?? 0)} توصية هذا الشهر · حُصّل ${num3(impact.collected_this_month ?? 0)} ${sym}`}
               </span>
             )}
           </div>
           <div style={{ fontSize: 12, color: '#8A94A6', margin: '0 0 10px' }}>
-            مرتّبة حسب الأثر المتوقّع — لا يُنفَّذ أي إجراء مالي إلا بقرارك.
+            {T('مرتّبة حسب الأثر المتوقّع — لا يُنفَّذ أي إجراء مالي إلا بقرارك.', 'Sorted by expected impact — no financial action is taken without your decision.')}
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
@@ -178,17 +190,17 @@ export default function SchoolCopilot({
                 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: 700, fontSize: 14.5, color: '#0F1B2D' }}>{r.title}</span>
+                      <span style={{ fontWeight: 700, fontSize: 14.5, color: '#0F1B2D' }}>{D(r.title)}</span>
                       {top && (
                         <span style={{ fontSize: 10.5, fontWeight: 700, color: '#D92D20', background: '#FEF0F0', padding: '2px 8px', borderRadius: 99 }}>
-                          الأهم الآن
+                          {T('الأهم الآن', 'Top priority')}
                         </span>
                       )}
                     </div>
-                    <div style={{ fontSize: 12.5, color: '#6B7A90', lineHeight: 1.75, marginTop: 3 }}>{r.reason}</div>
+                    <div style={{ fontSize: 12.5, color: '#6B7A90', lineHeight: 1.75, marginTop: 3 }}>{D(r.reason)}</div>
                     {r.expected_amount != null && (
                       <div style={{ fontSize: 12, fontWeight: 700, color: '#067647', marginTop: 5 }}>
-                        الأثر المتوقّع: {num3(r.expected_amount)} {sym}
+                        {T('الأثر المتوقّع:', 'Expected impact:')} {num3(r.expected_amount)} {cur}
                       </div>
                     )}
                   </div>
@@ -201,7 +213,7 @@ export default function SchoolCopilot({
                       background: top ? '#D92D20' : '#0F1B2D',
                       border: 0, borderRadius: 8, padding: '8px 15px', whiteSpace: 'nowrap',
                     }}>
-                    {r.action_label}
+                    {D(r.action_label)}
                   </button>
                 </div>
               )
@@ -213,18 +225,18 @@ export default function SchoolCopilot({
       {/* اقتراحات محرّك القواعد (احتياطي — تظهر فقط إن لم تتوفّر توصيات ذكية) */}
       {sorted.length === 0 && recommendations.length > 0 && (
         <div>
-          <h3 style={{ fontSize: 12, fontWeight: 700, color: '#6B7A90', textTransform: 'uppercase', letterSpacing: 0.4, margin: '0 0 4px' }}>اقتراحات</h3>
+          <h3 style={{ fontSize: 12, fontWeight: 700, color: '#6B7A90', textTransform: 'uppercase', letterSpacing: 0.4, margin: '0 0 4px' }}>{T('اقتراحات', 'Suggestions')}</h3>
           <div style={{ fontSize: 12, color: '#8A94A6', margin: '0 0 10px' }}>
-            هذه اقتراحات للمراجعة — لا يُنفَّذ أي إجراء مالي إلا بقرارك.
+            {T('هذه اقتراحات للمراجعة — لا يُنفَّذ أي إجراء مالي إلا بقرارك.', 'These are suggestions for review — no financial action is taken without your decision.')}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 12 }}>
             {recommendations.slice(0, 4).map((r, i) => (
               <div key={i} style={{ padding: '15px 16px', background: '#fff', border: '1px solid #E7EBF0', borderRadius: 14 }}>
-                <div style={{ fontWeight: 700, fontSize: 14.5, color: '#0F1B2D', marginBottom: 4 }}>{r.title}</div>
-                <div style={{ fontSize: 12.5, color: '#6B7A90', marginBottom: 2 }}>{r.reason}</div>
-                <div style={{ fontSize: 12, color: '#8A94A6', marginBottom: 12 }}>{r.benefit}</div>
+                <div style={{ fontWeight: 700, fontSize: 14.5, color: '#0F1B2D', marginBottom: 4 }}>{D(r.title)}</div>
+                <div style={{ fontSize: 12.5, color: '#6B7A90', marginBottom: 2 }}>{D(r.reason)}</div>
+                <div style={{ fontSize: 12, color: '#8A94A6', marginBottom: 12 }}>{D(r.benefit)}</div>
                 <Link href={r.href} style={{ display: 'inline-block', fontSize: 12.5, fontWeight: 600, color: '#0F1B2D', background: '#F2F4F7', borderRadius: 8, padding: '7px 14px', textDecoration: 'none' }}>
-                  راجِع الاقتراح
+                  {T('راجِع الاقتراح', 'Review suggestion')}
                 </Link>
               </div>
             ))}
@@ -234,10 +246,10 @@ export default function SchoolCopilot({
 
       {/* مؤشرات اليوم المضغوطة */}
       <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 22, paddingTop: 16, borderTop: '1px solid #EEF1F5' }}>
-        <MiniKpi label="نسبة التحصيل" value={`${kpis.collection_rate}%`} />
-        <MiniKpi label="فواتير متأخرة" value={num(kpis.overdue_count)} />
-        <MiniKpi label="مدفوعات معلّقة" value={num(kpis.pending_payments)} />
-        <MiniKpi label="مخزون منخفض" value={num(kpis.low_stock)} />
+        <MiniKpi label={T('نسبة التحصيل', 'Collection rate')} value={`${kpis.collection_rate}%`} />
+        <MiniKpi label={T('فواتير متأخرة', 'Overdue invoices')} value={num(kpis.overdue_count)} />
+        <MiniKpi label={T('مدفوعات معلّقة', 'Pending payments')} value={num(kpis.pending_payments)} />
+        <MiniKpi label={T('مخزون منخفض', 'Low stock')} value={num(kpis.low_stock)} />
       </div>
     </section>
   )

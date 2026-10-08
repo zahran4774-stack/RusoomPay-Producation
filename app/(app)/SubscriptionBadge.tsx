@@ -7,6 +7,8 @@
 // المباشر مع فريق الدعم — لا تجديد تلقائي، المراجعة تتم يدوياً عبر
 // Control Center من جهة المنصة.
 import { useState } from 'react'
+import { useLanguage } from '@/components/i18n/LanguageProvider'
+import { translatePlanLabel } from '@/lib/copilot-i18n'
 
 export type SubscriptionInfo = {
   ok: boolean
@@ -30,13 +32,16 @@ const SUPPORT_WHATSAPP_URL = `https://wa.me/${SUPPORT_PHONE}?text=${encodeURICom
 
 export default function SubscriptionBadge({ info, collapsed = false }: { info: SubscriptionInfo; collapsed?: boolean }) {
   const [showRenew, setShowRenew] = useState(false)
+  const en = useLanguage().language === 'en'
 
   if (!info?.ok) return null
   const c = COLORS[info.color ?? 'green'] ?? COLORS.green
   const isExpired = info.color === 'red'
 
   const tooltip = info.days_left != null
-    ? isExpired ? 'انتهى الاشتراك — يرجى التجديد' : `متبقٍ ${info.days_left} يوماً على التجديد`
+    ? isExpired
+      ? (en ? 'Subscription expired — please renew' : 'انتهى الاشتراك — يرجى التجديد')
+      : (en ? `${info.days_left} days left until renewal` : `متبقٍ ${info.days_left} يوماً على التجديد`)
     : ''
 
   if (collapsed) {
@@ -61,11 +66,11 @@ export default function SubscriptionBadge({ info, collapsed = false }: { info: S
           }}
         >
           <span style={{ width: 8, height: 8, borderRadius: '50%', background: c.dot, flexShrink: 0 }} />
-          <span>باقة {info.plan_label}</span>
+          <span>{en ? `${translatePlanLabel(info.plan_label)} plan` : `باقة ${info.plan_label}`}</span>
           {info.days_left != null && !isExpired && (
-            <span style={{ opacity: 0.75, fontWeight: 600 }}>· {info.days_left} يوم</span>
+            <span style={{ opacity: 0.75, fontWeight: 600 }}>· {info.days_left} {en ? (info.days_left === 1 ? 'day' : 'days') : 'يوم'}</span>
           )}
-          {isExpired && <span style={{ fontWeight: 800 }}>· منتهي</span>}
+          {isExpired && <span style={{ fontWeight: 800 }}>· {en ? 'Expired' : 'منتهي'}</span>}
         </div>
 
         {isExpired && (
@@ -77,7 +82,7 @@ export default function SubscriptionBadge({ info, collapsed = false }: { info: S
               fontFamily: 'inherit', whiteSpace: 'nowrap',
             }}
           >
-            تجديد الباقة
+            {en ? 'Renew Plan' : 'تجديد الباقة'}
           </button>
         )}
       </div>
@@ -90,13 +95,17 @@ export default function SubscriptionBadge({ info, collapsed = false }: { info: S
           <div
             onClick={(e) => e.stopPropagation()}
             style={{ background: '#fff', borderRadius: 18, padding: 26, width: '100%', maxWidth: 420, textAlign: 'center' }}
-            dir="rtl"
+            dir={en ? 'ltr' : 'rtl'}
           >
             <div style={{ fontSize: 40, marginBottom: 10 }}>⏳</div>
-            <h3 style={{ color: '#0F2744', margin: '0 0 8px', fontSize: 18 }}>انتهى اشتراك مدرستك</h3>
+            <h3 style={{ color: '#0F2744', margin: '0 0 8px', fontSize: 18 }}>{en ? 'Your school subscription has expired' : 'انتهى اشتراك مدرستك'}</h3>
             <p style={{ color: '#667', fontSize: 13.5, lineHeight: 1.9, marginBottom: 20 }}>
-              باقتك الحالية <b>{info.plan_label}</b> انتهت. تواصل مع فريق الدعم لتجديد اشتراكك
-              ومواصلة استخدام كل ميزات المنصة بلا انقطاع.
+              {en ? (
+                <>Your current <b>{translatePlanLabel(info.plan_label)}</b> plan has expired. Contact the support team to renew your subscription and keep using all platform features without interruption.</>
+              ) : (
+                <>باقتك الحالية <b>{info.plan_label}</b> انتهت. تواصل مع فريق الدعم لتجديد اشتراكك
+                ومواصلة استخدام كل ميزات المنصة بلا انقطاع.</>
+              )}
             </p>
 
             <a
@@ -109,7 +118,7 @@ export default function SubscriptionBadge({ info, collapsed = false }: { info: S
                 fontWeight: 700, fontSize: 14.5, textDecoration: 'none', marginBottom: 10,
               }}
             >
-              💬 تواصل عبر واتساب
+              {en ? '💬 Contact via WhatsApp' : '💬 تواصل عبر واتساب'}
             </a>
             <a
               href={`tel:+${SUPPORT_PHONE}`}
@@ -119,14 +128,14 @@ export default function SubscriptionBadge({ info, collapsed = false }: { info: S
                 fontWeight: 700, fontSize: 14.5, textDecoration: 'none', marginBottom: 16,
               }}
             >
-              ✆ اتصال مباشر
+              {en ? '✆ Call Directly' : '✆ اتصال مباشر'}
             </a>
 
             <button
               onClick={() => setShowRenew(false)}
               style={{ width: '100%', background: 'none', border: 0, color: '#8A94A6', padding: 10, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13.5 }}
             >
-              إغلاق
+              {en ? 'Close' : 'إغلاق'}
             </button>
           </div>
         </div>
