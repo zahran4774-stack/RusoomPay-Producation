@@ -208,12 +208,13 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     if (language === 'ar') {
       // Arabic is the source language: no observer, zero overhead.
       // Restore pass only if English was shown earlier in this tab.
-      if (hasTranslated) processTree(document.body, 'ar')
+      if (hasTranslated) { processTree(document.body, 'ar'); processTree(document.head, 'ar') }
       return
     }
 
     hasTranslated = true
     processTree(document.body, language) // full pass only when the language changes
+    processTree(document.head, language) // <title> follows the language too
 
     // alert / confirm / prompt are native dialogs (not in the DOM): translate their text too.
     const nativeAlert = window.alert
@@ -246,13 +247,15 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
       observer.takeRecords() // discard mutations caused by our own writes
     })
 
-    observer.observe(document.body, {
+    const observeOptions = {
       childList: true,
       subtree: true,
       characterData: true,
       attributes: true,
       attributeFilter: [...ATTRIBUTES],
-    })
+    }
+    observer.observe(document.body, observeOptions)
+    observer.observe(document.head, { childList: true, subtree: true, characterData: true })
 
     return () => {
       observer.disconnect()
