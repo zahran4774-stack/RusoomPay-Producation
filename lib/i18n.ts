@@ -781,7 +781,7 @@ const exact: Record<string, string> = {
   'تجربة دفع سلسة وآمنة لأولياء الأمور': 'A smooth, secure payment experience for guardians',
   'مؤشّرات الثقة': 'Trust Indicators',
   'حماية وأمان على مدار الساعة': 'Protection and security around the clock',
-  'عربي وإنجليزي': 'Arabic & English',
+  'عربي وإنجليزي': 'Bilingual',
   'مصمّمة للمدارس الخليجية': 'Designed for Gulf schools',
   'تشفير متقدم': 'Advanced Encryption',
   'لحماية البيانات': 'To protect data',
