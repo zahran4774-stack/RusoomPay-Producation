@@ -1,0 +1,37 @@
+// Students area (add/import/link/invite/promote/certificates/payment tracker/class lists).
+export const exact: Record<string, string> = {
+  'محمد أحمد الكندي': 'Mohammed Ahmed Al-Kindi',
+  'أحمد الكندي': 'Ahmed Al-Kindi',
+  'الرسوم السنوية (ر.ع)': 'Annual fees (OMR)',
+}
+
+export const patterns: Array<[string, string]> = [
+  ['+ تغذية {0}', '+ Meals {0}'],
+  ['+ نقل {0}', '+ Transport {0}'],
+  ['تعذّر الإصدار: {0}', 'Could not issue: {0}'],
+  ['رُفع الملف لكن تعذّر تسجيله: {0}', 'The file was uploaded but could not be recorded: {0}'],
+  ['سجلّ شهادات: {0}', 'Certificate records: {0}'],
+  ['الشهادات المؤرشفة ({0})', 'Archived certificates ({0})'],
+  ['✓ استُورد {0} طالب', '✓ {0} {0?student|students} imported'],
+  ['✓ استُورد {0} طالب · فشل {1}', '✓ {0} {0?student|students} imported · {1} failed'],
+  ['· فشل {0}', '· {0} failed'],
+  ['صف {0} ({1}): {2}', 'Row {0} ({1}): {2}'],
+  ['رقم هاتف غير صالح لولي الأمر "{0}": {1} صحح الرقم في بيانات الطالب أولاً (يجب أن يكون 8 أرقام عُمانية أو رقم خليجي كامل برمز الدولة).',
+   'Invalid phone number for guardian "{0}": {1} Fix the number in the student record first (it must be 8 Omani digits or a full Gulf number with the country code).'],
+  ['تم إرسال الطلب لكن حالته: {0} SID: {1} راجع Twilio → Monitor → Logs → Messages وابحث عن هذا SID',
+   'The request was sent but its status is: {0} SID: {1} Check Twilio → Monitor → Logs → Messages and search for this SID'],
+  ['(رمز {0})', '(code {0})'],
+  ['{0} (رمز {1})', '{0} (code {1})'],
+  ['لا يوجد حساب ولي أمر مسجّل بالرقم {0}. اطلب من ولي الأمر التسجيل بنفس الرقم أولاً عبر صفحة "حساب ولي أمر".',
+   'No guardian account is registered with the number {0}. Ask the guardian to register with the same number first through the "Guardian account" page.'],
+  ['فواتير {0}', 'Invoices for {0}'],
+  ['{0} دفعات في هذا الشهر · الإجمالي {1} {2}', '{0} payments this month · Total {1} {2}'],
+  ['⚠ {0} طالب بصف غير معروف — لن يُرقّوا. راجع صفوفهم أولاً.', '⚠ {0} {0?student has|students have} an unknown grade — they will not be promoted. Review their grades first.'],
+  ['قائمة الصف {0}', 'Class list {0}'],
+  ['قائمة الصف {0} - شعبة {1}', 'Class list {0} - Section {1}'],
+  ['- شعبة {0}', '- Section {0}'],
+  ['تاريخ الطباعة: {0}', 'Print date: {0}'],
+  ['عدد الطلاب: {0}', 'Number of students: {0}'],
+  ['⚠️ عدد الطلاب ({0}) صار كبيراً بما يكفي ليبدأ يؤثر على سرعة تحميل هذه الصفحة. لا يوجد فقدان بيانات — كل الطلاب معروضون بلا استثناء — لكن يُنصح بترقيم حقيقي للصفحة قريباً بدل الاعتماد على جلب الكل دفعة واحدة.',
+   '⚠️ The number of students ({0}) has grown large enough to start affecting this page\'s load speed. No data is lost — all students are shown without exception — but real pagination is recommended soon instead of loading everything at once.'],
+]
