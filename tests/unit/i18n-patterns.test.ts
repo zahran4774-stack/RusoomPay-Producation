@@ -46,3 +46,12 @@ describe('currency abbreviations', () => {
     expect(translateText('تكلفة 5 ر.ع.', 'en')).toBe('تكلفة 5 ر.ع.')
   })
 })
+
+describe('dates and times', () => {
+  it('translates weekday + month names and AM/PM markers', () => {
+    expect(translateText('الخميس، 8 أكتوبر 2026', 'en')).toBe('Thursday, 8 October 2026')
+    expect(translateText('٨ أكتوبر ٢٠٢٦', 'en')).toBe('8 October 2026')
+    expect(translateText('١٠:٣٠ ص', 'en')).toBe('10:30 AM')
+    expect(translateText('07:05 م', 'en')).toBe('07:05 PM')
+  })
+})

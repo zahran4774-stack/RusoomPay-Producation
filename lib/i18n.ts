@@ -1823,13 +1823,32 @@ const ABBREVIATIONS: Array<[RegExp, string]> = Object.entries(exact)
   .sort((a, b) => b[0].length - a[0].length)
   .map(([ar, en]) => [new RegExp(`(?<![\\u0620-\\u06FF])${ar.replace(/\./g, '\\.')}(?![\\u0620-\\u06FF])`, 'g'), en])
 
+// Month / weekday names and AM-PM markers come from toLocale*String('ar…'). A date such as
+// "الخميس، 8 أكتوبر 2026" holds several Arabic words, so they are swapped before the
+// one-unit-per-text rule applies.
+const DATE_WORDS: Record<string, string> = {
+  'يناير': 'January', 'فبراير': 'February', 'مارس': 'March', 'أبريل': 'April', 'إبريل': 'April',
+  'مايو': 'May', 'يونيو': 'June', 'يوليو': 'July', 'أغسطس': 'August', 'سبتمبر': 'September',
+  'أكتوبر': 'October', 'نوفمبر': 'November', 'ديسمبر': 'December',
+  'السبت': 'Saturday', 'الأحد': 'Sunday', 'الاثنين': 'Monday', 'الإثنين': 'Monday', 'الثلاثاء': 'Tuesday',
+  'الأربعاء': 'Wednesday', 'الخميس': 'Thursday', 'الجمعة': 'Friday',
+}
+const DATE_WORD_RE = new RegExp(`(?<![\\u0620-\\u06FF])(${Object.keys(DATE_WORDS).join('|')})(?![\\u0620-\\u06FF])`, 'g')
+const TIME_MARKER_RE = /([\d\u0660-\u0669]{1,2}[:\u066B][\d\u0660-\u0669]{2}(?:[:\u066B][\d\u0660-\u0669]{2})?)\s*([\u0635\u0645])(?![\u0620-\u06FF])/g
+
+function swapDateWords(value: string): string {
+  return value
+    .replace(DATE_WORD_RE, (word) => DATE_WORDS[word] ?? word)
+    .replace(TIME_MARKER_RE, (_, time: string, marker: string) => `${time} ${marker === '\u0635' ? 'AM' : 'PM'}`)
+}
+
 function translateUncached(input: string): string {
   const trimmed = input.trim()
   if (exact[trimmed] !== undefined) return input.replace(trimmed, () => exact[trimmed])
   const templated = matchPattern(trimmed)
   if (templated !== null) return input.replace(trimmed, () => templated)
-  if (ABBREVIATIONS.length > 0) {
-    let swapped = input
+  {
+    let swapped = swapDateWords(input)
     for (const [re, en] of ABBREVIATIONS) swapped = swapped.replace(re, en)
     if (swapped !== input) {
       const result = translateUncached(swapped)
