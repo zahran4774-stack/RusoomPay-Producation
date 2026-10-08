@@ -164,8 +164,8 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
   function invitedLabel(iso: string): string {
     const diffMs = Date.now() - new Date(iso).getTime()
     const days = Math.floor(diffMs / 86400000)
-    if (days <= 0) return 'اليوم'
-    if (days === 1) return 'أمس'
+    if (days <= 0) return en ? 'today' : 'اليوم'
+    if (days === 1) return en ? 'yesterday' : 'أمس'
     return en ? `${days} days ago` : `منذ ${days} أيام`
   }
 
@@ -179,7 +179,7 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
   }
 
   return (
-    <div style={{ background: '#fff', border: '1px solid #E3E8EE', borderRadius: 16, padding: 22, marginBottom: 16, boxShadow: '0 10px 30px -18px rgba(10,37,64,.3)' }} dir="rtl">
+    <div style={{ background: '#fff', border: '1px solid #E3E8EE', borderRadius: 16, padding: 22, marginBottom: 16, boxShadow: '0 10px 30px -18px rgba(10,37,64,.3)' }} dir={en ? 'ltr' : 'rtl'}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
         <b style={{ color: '#0F2744', fontSize: 16 }}>دعوة أولياء الأمور لتفعيل حساباتهم</b>
         <button onClick={() => setOpen(false)} style={{ background: 'none', border: 0, fontSize: 21, cursor: 'pointer', color: '#667' }}>×</button>
@@ -202,7 +202,7 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
         </button>
         {!loading && (
           <span style={{ fontSize: 13, color: '#667', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <Users size={15} strokeWidth={2} /> {list.length} ولي أمر
+            <Users size={15} strokeWidth={2} /> {en ? `${list.length} ${list.length === 1 ? 'guardian' : 'guardians'}` : `${list.length} ولي أمر`}
           </span>
         )}
       </div>
@@ -239,11 +239,11 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
                     <span style={{ color: '#8A94A6', fontWeight: 400, fontSize: 12.5 }}> · {g.phone}</span>
                   </div>
                   <div style={{ fontSize: 12.5, color: '#667', marginTop: 2 }}>
-                    {g.children_count} {g.children_count === 1 ? 'ابن' : 'أبناء'} — {g.children}
+                    {en ? `${g.children_count} ${g.children_count === 1 ? 'child' : 'children'} — ` : `${g.children_count} ${g.children_count === 1 ? 'ابن' : 'أبناء'} — `}{g.children}
                   </div>
                   {wasInvited && (
                     <div style={{ fontSize: 11.5, color: '#B54708', marginTop: 4, fontWeight: 600 }}>
-                      ⏱ تم إرسال دعوة {invitedLabel(g.invited_at as string)} — لم يُفعّل الحساب بعد
+                      {en ? `⏱ Invitation sent ${invitedLabel(g.invited_at as string)} — account not activated yet` : `⏱ تم إرسال دعوة ${invitedLabel(g.invited_at as string)} — لم يُفعّل الحساب بعد`}
                     </div>
                   )}
                 </div>
@@ -277,8 +277,9 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
       )}
 
       <div style={{ fontSize: 12, color: '#8A94A6', marginTop: 12, lineHeight: 1.8 }}>
-        💡 يختفي ولي الأمر من القائمة تلقائياً بمجرّد تسجيله. القائمة تُبقي "تم الإرسال" ظاهراً
-        حتى يفعّل حسابه فعلياً — حتى لو أعدت فتح هذه الصفحة لاحقاً.
+        {en
+          ? '💡 A guardian disappears from the list automatically once registered. The list keeps "Sent" visible until the account is actually activated — even if you reopen this page later.'
+          : '💡 يختفي ولي الأمر من القائمة تلقائياً بمجرّد تسجيله. القائمة تُبقي "تم الإرسال" ظاهراً حتى يفعّل حسابه فعلياً — حتى لو أعدت فتح هذه الصفحة لاحقاً.'}
       </div>
     </div>
   )
