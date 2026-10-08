@@ -1,6 +1,7 @@
 'use client'
 // استيراد الطلاب جماعياً — قالب CSV يفتحه Excel مباشرة (بلا مكتبات خارجية)
 import { useState, useRef } from 'react'
+import { useLanguage } from '@/components/i18n/LanguageProvider'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
 
@@ -42,6 +43,7 @@ function parseCSV(text: string): string[][] {
 export default function ImportStudents() {
   const router = useRouter()
   const supabase = createClient()
+  const en = useLanguage().language === 'en'
   const fileRef = useRef<HTMLInputElement>(null)
   const [open, setOpen] = useState(false)
   const [rows, setRows] = useState<Row[]>([])
@@ -118,12 +120,15 @@ export default function ImportStudents() {
         <button onClick={() => setOpen(false)} style={{ background: 'none', border: 0, fontSize: 22, cursor: 'pointer', color: '#667' }}>×</button>
       </div>
       <p style={{ color: '#667', fontSize: 13, margin: '0 0 6px', lineHeight: 1.8 }}>
-        نزّل القالب، املأه في Excel، ثم احفظه بصيغة <b>CSV UTF-8</b> وارفعه.
-        الرقم المدرسي يُولَّد تلقائياً.
+        {en
+          ? <>Download the template, fill it in Excel, then save it as <b>CSV UTF-8</b> and upload it. The student ID is generated automatically.</>
+          : <>نزّل القالب، املأه في Excel، ثم احفظه بصيغة <b>CSV UTF-8</b> وارفعه.
+        الرقم المدرسي يُولَّد تلقائياً.</>}
       </p>
       <p style={{ color: '#8A6D0F', fontSize: 12.5, margin: '0 0 16px', lineHeight: 1.8, background: '#FBF3D5', padding: '8px 12px', borderRadius: 8 }}>
-        💡 عمود «معفى بالكامل» يقبل «نعم» أو «لا» فقط. إن كان الطالب معفى، تُترك «الرسوم السنوية» فارغة أو صفراً.
-        «سبب الحالة الخاصة» و«نسبة التخفيض٪» اختياريان معاً — املأهما معاً أو اتركهما فارغين.
+        {en
+          ? '💡 The "معفى بالكامل" (fully exempt) column accepts only "نعم" (yes) or "لا" (no). If the student is exempt, leave "الرسوم السنوية" (annual fees) empty or zero. "سبب الحالة الخاصة" (special case reason) and "نسبة التخفيض٪" (discount percentage) are optional together — fill both or leave both empty. Column headers must stay in Arabic as in the template.'
+          : '💡 عمود «معفى بالكامل» يقبل «نعم» أو «لا» فقط. إن كان الطالب معفى، تُترك «الرسوم السنوية» فارغة أو صفراً. «سبب الحالة الخاصة» و«نسبة التخفيض٪» اختياريان معاً — املأهما معاً أو اتركهما فارغين.'}
       </p>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', marginBottom: 16 }}>
@@ -170,7 +175,7 @@ export default function ImportStudents() {
           </div>
           <button onClick={submit} disabled={busy}
             style={{ marginTop: 14, background: busy ? '#8AA' : '#163B68', color: '#fff', border: 0, padding: '12px 26px', borderRadius: 11, fontWeight: 800, fontSize: 15, cursor: busy ? 'default' : 'pointer', fontFamily: 'inherit' }}>
-            {busy ? 'جارٍ الاستيراد…' : `استيراد ${rows.length} طالب`}
+            {busy ? (en ? 'Importing…' : 'جارٍ الاستيراد…') : (en ? `Import ${rows.length} student${rows.length === 1 ? '' : 's'}` : `استيراد ${rows.length} طالب`)}
           </button>
         </div>
       )}

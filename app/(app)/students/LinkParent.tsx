@@ -4,6 +4,7 @@
 // أداة احتياطية: تُستخدم لو سجّل ولي الأمر قبل إضافة الطالب،
 // فيدوياً يعيد الطاقم تشغيل الربط.
 import { useState } from 'react'
+import { useLanguage } from '@/components/i18n/LanguageProvider'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
 
@@ -13,6 +14,7 @@ export default function LinkParent({ students }: { students: Student[] }) {
   const router = useRouter()
   const supabase = createClient()
   const [open, setOpen] = useState(false)
+  const en = useLanguage().language === 'en'
   const [studentId, setStudentId] = useState('')
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [loading, setLoading] = useState(false)
@@ -61,8 +63,13 @@ export default function LinkParent({ students }: { students: Student[] }) {
         <button onClick={() => { setOpen(false); setMsg(null) }} style={{ background: 'none', border: 0, fontSize: 20, cursor: 'pointer', color: '#667' }}>×</button>
       </div>
       <p style={{ color: '#667', fontSize: 13, margin: '0 0 16px', lineHeight: 1.8 }}>
-        اختر الطالب، وسيبحث النظام عن حساب ولي أمر مسجّل <b>بنفس رقم هاتف ولي أمر الطالب</b> ويربطه تلقائياً.
-        عادةً يتم الربط تلقائياً عند تسجيل ولي الأمر — استخدم هذه الأداة فقط إن لزم.
+        {en ? (
+          <>Select the student, and the system will look for a registered guardian account <b>with the same phone number as the student's guardian</b> and link it automatically.
+          Linking normally happens automatically when the guardian registers — use this tool only if needed.</>
+        ) : (
+          <>اختر الطالب، وسيبحث النظام عن حساب ولي أمر مسجّل <b>بنفس رقم هاتف ولي أمر الطالب</b> ويربطه تلقائياً.
+          عادةً يتم الربط تلقائياً عند تسجيل ولي الأمر — استخدم هذه الأداة فقط إن لزم.</>
+        )}
       </p>
 
       <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#0F2744', marginBottom: 6 }}>الطالب</label>

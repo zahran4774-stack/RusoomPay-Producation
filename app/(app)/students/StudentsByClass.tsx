@@ -6,6 +6,7 @@
 // الحقل نفسه يبقى محفوظاً في قاعدة البيانات، يُستخدم فقط في التواصل الفعلي
 // (رسائل، فواتير) لا في جداول العرض العامة.
 import { useState, useMemo, useEffect } from 'react'
+import { useLanguage } from '@/components/i18n/LanguageProvider'
 import { useSearchParams } from 'next/navigation'
 import CertificatesButton from './CertificatesButton'
 import EditStudent from './EditStudent'
@@ -34,6 +35,7 @@ const statusColor = (s: string) => s === 'active' ? '#067647' : s === 'transferr
 const PAGE_SIZE = 10
 
 function StudentBadges({ s }: { s: Student }) {
+  const en = useLanguage().language === 'en'
   if (!s.is_exempt && !s.special_case_reason) return null
   return (
     <span style={{ display: 'inline-flex', gap: 4, marginInlineStart: 6, verticalAlign: 'middle' }}>
@@ -46,7 +48,7 @@ function StudentBadges({ s }: { s: Student }) {
         </span>
       )}
       {s.special_case_reason && (
-        <span title={`حالة خاصة: ${s.special_case_reason}${s.discount_pct ? ` — تخفيض ${s.discount_pct}%` : ''}`} style={{
+        <span title={en ? `Special case: ${s.special_case_reason}${s.discount_pct ? ` — ${s.discount_pct}% discount` : ''}` : `حالة خاصة: ${s.special_case_reason}${s.discount_pct ? ` — تخفيض ${s.discount_pct}%` : ''}`} style={{
           display: 'inline-flex', alignItems: 'center', fontSize: 11, fontWeight: 700,
           background: '#FDF3D5', color: '#8A6D0F', borderRadius: 20, padding: '2px 7px',
         }}>
@@ -69,6 +71,7 @@ export default function StudentsByClass({
   mealPlans?: MealPlan[]
   studentMealPlanIdMap?: Record<string, string>
 }) {
+  const en = useLanguage().language === 'en'
   const [openKey, setOpenKey] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [noFeeOnly, setNoFeeOnly] = useState(false)
@@ -170,7 +173,7 @@ export default function StudentsByClass({
                 <div>
                   <div style={{ fontSize: '1.05rem', fontWeight: 700 }}>الصف {g.grade}</div>
                   <div style={{ fontSize: '.85rem', opacity: .8, marginTop: 2 }}>
-                    {g.section !== '—' ? `شعبة ${g.section}` : 'بلا شعبة'}
+                    {g.section !== '—' ? (en ? `Section ${g.section}` : `شعبة ${g.section}`) : (en ? 'No Section' : 'بلا شعبة')}
                   </div>
                 </div>
                 <div style={{ textAlign: 'center' }}>

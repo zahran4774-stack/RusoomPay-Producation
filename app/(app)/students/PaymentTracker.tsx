@@ -7,6 +7,7 @@
 // + الشهر المدفوع قابل للضغط: يعرض فواتير الشهر بكامل تفاصيلها (RPC student_month_payments)
 //   مع طباعة كل فاتورة على حدة.
 import { useEffect, useState } from 'react'
+import { useLanguage } from '@/components/i18n/LanguageProvider'
 import { createClient } from '@/lib/supabase-client'
 import { printPaymentTracker } from '@/lib/payment-tracker-print'
 import { generateInvoice } from '@/lib/invoice-pdf'
@@ -68,6 +69,7 @@ export default function PaymentTracker({
   onClose: () => void
 }) {
   const supabase = createClient()
+  const en = useLanguage().language === 'en'
   const [months, setMonths] = useState<MonthRow[] | null>(null)
   const [err, setErr] = useState('')
 
@@ -165,7 +167,7 @@ export default function PaymentTracker({
                 )
                 return paid ? (
                   <button key={m.month_key} type="button" onClick={() => openMonthDetail(m)}
-                    title={`دُفع ${fmt(m.paid_amount)} — اضغط لعرض الفاتورة`}
+                    title={en ? `Paid ${fmt(m.paid_amount)} — click to view the invoice` : `دُفع ${fmt(m.paid_amount)} — اضغط لعرض الفاتورة`}
                     style={style}>
                     {inner}
                   </button>
@@ -232,6 +234,7 @@ function MonthInvoices({
   fmt: (n: number) => string
   onClose: () => void
 }) {
+  const en = useLanguage().language === 'en'
   const items = detail?.items ?? []
   const stu = detail?.student
   const monthTotal = items.reduce((a, it) => a + (Number(it.amount) || 0), 0)

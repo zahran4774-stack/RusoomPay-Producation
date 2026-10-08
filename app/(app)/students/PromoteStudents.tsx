@@ -3,6 +3,7 @@
 // الافتراضي: الجميع ناجح. الطاقم يحدّد المعيدين فقط (الأقلّية).
 // الصف الأخير → متخرّج. الرسوم غير المسدّدة تبقى كما هي (دين مستمر).
 import { useState, useMemo } from 'react'
+import { useLanguage } from '@/components/i18n/LanguageProvider'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
 import { GRADES } from '@/lib/academic'
@@ -29,6 +30,7 @@ export default function PromoteStudents({ students }: { students: Student[] }) {
   const router = useRouter()
   const supabase = createClient()
 
+  const en = useLanguage().language === 'en'
   const [open, setOpen] = useState(false)
   const [year, setYear] = useState(currentAcademicYear())
   const [repeatIds, setRepeatIds] = useState<Set<string>>(new Set())
@@ -108,7 +110,9 @@ export default function PromoteStudents({ students }: { students: Student[] }) {
 
     setMsg({
       ok: true,
-      text: `تمّت الترقية — رُقّي ${res.promoted} طالباً · أعاد ${res.repeated} · تخرّج ${res.graduated}`,
+      text: en
+        ? `Promotion complete — ${res.promoted} promoted · ${res.repeated} repeated · ${res.graduated} graduated`
+        : `تمّت الترقية — رُقّي ${res.promoted} طالباً · أعاد ${res.repeated} · تخرّج ${res.graduated}`,
     })
     setConfirming(false)
     setRepeatIds(new Set())
@@ -178,7 +182,9 @@ export default function PromoteStudents({ students }: { students: Student[] }) {
       <div style={{ fontSize: 13, fontWeight: 700, color: '#0F2744', marginBottom: 8 }}>
         حدّد المعيدين
         <span style={{ color: '#8A94A6', fontWeight: 600 }}>
-          {' '}({repeatIds.size} محدّد إجمالاً{gradeFilter ? ` · ${repeatInView} في هذا الصف` : ''})
+          {' '}{en
+            ? `(${repeatIds.size} selected in total${gradeFilter ? ` · ${repeatInView} in this grade` : ''})`
+            : `(${repeatIds.size} محدّد إجمالاً${gradeFilter ? ` · ${repeatInView} في هذا الصف` : ''})`}
         </span>
       </div>
       <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid #EEF1F5', borderRadius: 12 }}>

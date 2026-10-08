@@ -3,6 +3,7 @@
 // يُحفظ تاريخ آخر إرسال في قاعدة البيانات (guardian_invites) — يبقى ظاهراً حتى بعد إغلاق الصفحة،
 // حتى يسجّل ولي الأمر فعلياً (عندها يختفي تلقائياً من القائمة عبر unlinked_guardians).
 import { useState, useEffect } from 'react'
+import { useLanguage } from '@/components/i18n/LanguageProvider'
 import { createClient } from '@/lib/supabase-client'
 import { MessageCircle, Copy, Check, Users, RefreshCw } from 'lucide-react'
 
@@ -17,6 +18,7 @@ type Guardian = {
 export default function InviteParents({ schoolName }: { schoolName?: string }) {
   const supabase = createClient()
   const [open, setOpen] = useState(false)
+  const en = useLanguage().language === 'en'
   const [list, setList] = useState<Guardian[]>([])
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState<string | null>(null)
@@ -164,7 +166,7 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
     const days = Math.floor(diffMs / 86400000)
     if (days <= 0) return 'اليوم'
     if (days === 1) return 'أمس'
-    return `منذ ${days} أيام`
+    return en ? `${days} days ago` : `منذ ${days} أيام`
   }
 
   if (!open) {
@@ -184,8 +186,13 @@ export default function InviteParents({ schoolName }: { schoolName?: string }) {
       </div>
 
       <p style={{ color: '#667', fontSize: 13.5, margin: '0 0 16px', lineHeight: 1.85 }}>
-        هؤلاء أولياء أمور لم يُفعّلوا حساباتهم بعد. اضغط زر واتساب — تُرسل الدعوة مباشرة
-        من رقم المدرسة الرسمي في المنظومة. <b>لا حاجة لاستخدام واتساب هاتفك الشخصي.</b>
+        {en ? (
+          <>These guardians have not activated their accounts yet. Press the WhatsApp button — the invitation is sent directly
+          from the school's official number in the system. <b>No need to use your personal phone's WhatsApp.</b></>
+        ) : (
+          <>هؤلاء أولياء أمور لم يُفعّلوا حساباتهم بعد. اضغط زر واتساب — تُرسل الدعوة مباشرة
+          من رقم المدرسة الرسمي في المنظومة. <b>لا حاجة لاستخدام واتساب هاتفك الشخصي.</b></>
+        )}
       </p>
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 14 }}>

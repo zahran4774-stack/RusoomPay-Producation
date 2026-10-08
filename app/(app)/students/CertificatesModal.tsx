@@ -1,6 +1,7 @@
 'use client'
 // سجلّ شهادات الطالب — توليد نصّي (قيد/براءة ذمة/إفادة رسوم) + رفع ملفات + أرشفة + طباعة + طلبات معلّقة
 import { useState, useEffect } from 'react'
+import { useLanguage } from '@/components/i18n/LanguageProvider'
 import { createClient } from '@/lib/supabase-client'
 import { printReport } from '@/lib/print-report'
 
@@ -25,6 +26,7 @@ export default function CertificatesModal({ studentId, studentName, school, onCl
   studentId: string; studentName: string; school: School; onClose: () => void
 }) {
   const supabase = createClient()
+  const en = useLanguage().language === 'en'
   const [certs, setCerts] = useState<Cert[]>([])
   const [pendingReqs, setPendingReqs] = useState<Req[]>([])
   const [loading, setLoading] = useState(true)
@@ -137,14 +139,14 @@ export default function CertificatesModal({ studentId, studentName, school, onCl
           {/* طلبات شهادات معلّقة من ولي الأمر */}
           {!loading && pendingReqs.length > 0 && (
             <div style={{ ...cardS, border: '1.5px solid #F0C24B', background: '#FFFBF0' }}>
-              <b style={{ color: '#0F2744', display: 'block', marginBottom: 12 }}>⏳ طلبات شهادات من ولي الأمر ({pendingReqs.length})</b>
+              <b style={{ color: '#0F2744', display: 'block', marginBottom: 12 }}>{en ? `⏳ Certificate requests from guardians (${pendingReqs.length})` : `⏳ طلبات شهادات من ولي الأمر (${pendingReqs.length})`}</b>
               {pendingReqs.map((r) => {
                 const b = KIND_BADGE[r.kind] || KIND_BADGE.uploaded
                 return (
                   <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '10px 0', borderBottom: '1px solid #F2F5F8' }}>
                     <div>
                       <span style={{ background: b.bg, color: b.c, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 99 }}>{b.t}</span>
-                      <div style={{ fontSize: 12, color: '#8A94A6', marginTop: 4 }}>طلب من: {r.parent_name} · {new Date(r.created_at).toLocaleDateString('en-GB')}</div>
+                      <div style={{ fontSize: 12, color: '#8A94A6', marginTop: 4 }}>{(en ? 'Requested by: ' : 'طلب من: ') + (r.parent_name ?? '')} · {new Date(r.created_at).toLocaleDateString('en-GB')}</div>
                     </div>
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button style={btnApprove} onClick={() => approveReq(r.id)} disabled={reqBusyId === r.id}>

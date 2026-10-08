@@ -8,6 +8,7 @@
 // ⚠️ خيارات الشعبة تأتي من إعدادات المدرسة (schools.section_styles + custom_section_names)
 //    عبر buildSectionOptions — نفس مصدر نموذج «إضافة طالب» — لا من قائمة ثابتة.
 import { useState, useEffect } from 'react'
+import { useLanguage } from '@/components/i18n/LanguageProvider'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
 import { GRADES, SECTIONS, isValidGrade, buildSectionOptions, GULF_COUNTRIES, DEFAULT_COUNTRY, cleanLocalNumber, isValidLocalNumber } from '@/lib/academic'
@@ -69,6 +70,7 @@ export default function EditStudent({
   const router = useRouter()
   const supabase = createClient()
   const [open, setOpen] = useState(false)
+  const en = useLanguage().language === 'en'
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [ok, setOk] = useState(false)
@@ -243,11 +245,23 @@ export default function EditStudent({
         </div>
 
         <div style={{ background: '#EAF4EE', border: '1px solid #BFE5D0', borderRadius: 10, padding: '12px 14px', marginBottom: 18, fontSize: 13, color: '#1A5C3A', lineHeight: 1.8 }}>
-          ℹ️ <b>ملاحظة:</b> تعديل "الرسوم السنوية" أو "مبلغ التخفيض" يُحدّث فاتورة «الرسوم الدراسية السنوية» القائمة
-          تلقائياً (بقيمة الفرق فقط). إن كان المبلغ المدفوع أكبر من الصافي الجديد يُرفض الحفظ.
-          لإضافة رسم جديد اذهب إلى{' '}
-          <a href="/fees" style={{ color: '#1A5C3A', fontWeight: 700, textDecoration: 'underline' }}>صفحة الرسوم والفواتير</a>{' '}
-          واستخدم زر «إضافة رسم».
+          {en ? (
+            <>
+              ℹ️ <b>Note:</b> Editing "Annual fees" or "Discount amount" automatically updates the existing "Annual tuition fees" invoice
+              (by the difference only). If the amount already paid exceeds the new net amount, the save is rejected.
+              To add a new fee go to{' '}
+              <a href="/fees" style={{ color: '#1A5C3A', fontWeight: 700, textDecoration: 'underline' }}>Fees & Invoices</a>{' '}
+              and use the "Add Fee" button.
+            </>
+          ) : (
+            <>
+              ℹ️ <b>ملاحظة:</b> تعديل "الرسوم السنوية" أو "مبلغ التخفيض" يُحدّث فاتورة «الرسوم الدراسية السنوية» القائمة
+              تلقائياً (بقيمة الفرق فقط). إن كان المبلغ المدفوع أكبر من الصافي الجديد يُرفض الحفظ.
+              لإضافة رسم جديد اذهب إلى{' '}
+              <a href="/fees" style={{ color: '#1A5C3A', fontWeight: 700, textDecoration: 'underline' }}>صفحة الرسوم والفواتير</a>{' '}
+              واستخدم زر «إضافة رسم».
+            </>
+          )}
         </div>
 
         <div style={{ marginBottom: 14 }}>
