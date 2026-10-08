@@ -225,7 +225,16 @@ type ClaudeMessage = {
 }
 
 // ---------- استدعاء Claude API ----------
-async function callClaude(messages: ClaudeMessage[], forceSearch: boolean) {
+// يُضاف عند اختيار الإنجليزية في الواجهة: يبقى النص الأساسي مخزّناً مؤقتاً (cache) ولا يتغيّر.
+function languageBlocks(lang: 'ar' | 'en') {
+  if (lang !== 'en') return []
+  return [{
+    type: 'text',
+    text: "The user's interface language is English. Always answer in English, even though the instructions above are written in Arabic: translate the knowledge faithfully and refer to pages and buttons by the English names shown in the English interface. Only if the user writes to you in Arabic, answer in Arabic.",
+  }]
+}
+
+async function callClaude(messages: ClaudeMessage[], forceSearch: boolean, lang: 'ar' | 'en' = 'ar') {
   const bodyObj: Record<string, unknown> = {
     model: MODEL,
     max_tokens: MAX_TOKENS,
@@ -237,6 +246,7 @@ async function callClaude(messages: ClaudeMessage[], forceSearch: boolean) {
         text: SYSTEM_PROMPT,
         cache_control: { type: 'ephemeral' },
       },
+      ...languageBlocks(lang),
     ],
     tools: TOOLS,
     messages,
@@ -266,7 +276,7 @@ async function callClaude(messages: ClaudeMessage[], forceSearch: boolean) {
 }
 
 // استدعاء بلا أدوات — يُجبر المساعد على صياغة رد نصّي نهائي من السياق المتوفّر.
-async function callClaudeNoTools(messages: ClaudeMessage[]) {
+async function callClaudeNoTools(messages: ClaudeMessage[], lang: 'ar' | 'en' = 'ar') {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -279,6 +289,7 @@ async function callClaudeNoTools(messages: ClaudeMessage[]) {
       max_tokens: MAX_TOKENS,
       system: [
         { type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
+        ...languageBlocks(lang),
       ],
       messages,
     }),
@@ -326,6 +337,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => null)
     const userText: string | undefined = body?.message
     let conversationId: string | undefined = body?.conversationId
+    const replyLang: 'ar' | 'en' = body?.language === 'en' ? 'en' : 'ar'
 
     if (!userText || typeof userText !== 'string' || userText.trim().length === 0) {
       return NextResponse.json({ error: 'empty_message' }, { status: 400 })
@@ -389,7 +401,7 @@ export async function POST(req: NextRequest) {
     // 8) حلقة المحادثة مع الأدوات
     let finalText = ''
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const reply = await callClaude(messages, round === 0)
+      const reply = await callClaude(messages, round === 0, replyLang)
       const blocks: any[] = reply.content ?? []
 
       // اجمع النص
@@ -424,7 +436,7 @@ export async function POST(req: NextRequest) {
     // نطلب صياغة نهائية بلا أدوات — يُجبر المساعد على الرد من نتائج البحث.
     if (!finalText) {
       try {
-        const finalReply = await callClaudeNoTools(messages)
+        const finalReply = await callClaudeNoTools(messages, replyLang)
         const fb: any[] = finalReply.content ?? []
         finalText = fb.filter((b) => b.type === 'text').map((b) => b.text).join('\n')
       } catch {

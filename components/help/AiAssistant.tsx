@@ -140,7 +140,7 @@ export default function AiAssistant() {
         const res = await fetch('/api/assistant', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: clean, conversationId }),
+          body: JSON.stringify({ message: clean, conversationId, language }),
         })
         // قد تكون الاستجابة ليست JSON (مثل صفحة خطأ 504/502 عند تجاوز المهلة)
         let data: { message?: string; reply?: string; conversationId?: string; error?: string } = {}
@@ -173,7 +173,7 @@ export default function AiAssistant() {
         taRef.current?.focus()
       }
     },
-    [conversationId, loading, t],
+    [conversationId, loading, t, language],
   )
 
   const onKeyDown = (e: React.KeyboardEvent) => {
