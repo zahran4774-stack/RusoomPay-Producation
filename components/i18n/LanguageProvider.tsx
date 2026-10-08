@@ -7,6 +7,8 @@ import {
   LANGUAGE_STORAGE_KEY,
   STANDALONE_ONLY,
   type Language,
+  translateDialog,
+  translateSentenceRuns,
   translateText,
 } from '@/lib/i18n'
 
@@ -63,8 +65,13 @@ function isIgnored(element: Element | null): boolean {
   return element.closest(IGNORE_SELECTOR) !== null
 }
 
+// Invisible placeholder written into text nodes whose content moved into a sibling
+// (sentence-level translation). Differs from '' so a later React write of '' is detected.
+const BLANK = '\u200B'
+
 // Returns the tracked state of a text node, refreshing it when React changed the value.
-function syncTextState(text: Text): NodeState | undefined {
+// `track` also follows nodes without Arabic (numbers / interpolations of a sentence).
+function syncTextState(text: Text, track: boolean): NodeState | undefined {
   const current = text.nodeValue ?? ''
   let state = textState.get(text)
   if (state && current !== state.applied) {
@@ -72,31 +79,59 @@ function syncTextState(text: Text): NodeState | undefined {
     state = undefined
   }
   if (!state) {
-    if (!ARABIC.test(current)) return undefined
+    if (!(track ? current !== '' : ARABIC.test(current))) return undefined
     state = { source: current, applied: current }
     textState.set(text, state)
   }
   return state
 }
 
-// Processes the DIRECT text children of one element as a group.
+// Processes the DIRECT children of one element as a group (a "sentence").
 // JSX like `صفحة {page} من {total}` renders several text nodes in one element.
-// Translating them one by one gives broken English ("Page 3 From 10"), so when
-// more than one text node in the group contains Arabic words, the whole
-// sentence stays in Arabic (all-or-nothing at sentence level).
+//  1. If the joined sentence matches a template ("صفحة {0} من {1}") the whole
+//     sentence is translated at once (elements such as <b> act as ¦ boundaries).
+//  2. Otherwise, when more than one text node contains Arabic words, the sentence
+//     stays in Arabic (all-or-nothing) – translating node by node reads wrongly.
 function processTextGroup(parent: Element | null, language: Language) {
   if (!parent || isIgnored(parent)) return
-  const entries: Array<[Text, NodeState]> = []
-  let arabicWordNodes = 0
+  const children = Array.from(parent.childNodes)
   let contentNodes = 0
-  for (const child of Array.from(parent.childNodes)) {
+  let elementNodes = 0
+  for (const child of children) {
+    if (child.nodeType === Node.TEXT_NODE) {
+      if ((child.nodeValue ?? '').trim() || child.nodeValue === BLANK) contentNodes++
+    } else if (child.nodeType === Node.ELEMENT_NODE) elementNodes++
+  }
+  const track = contentNodes > 1 || elementNodes > 0
+
+  const entries: Array<[Text, NodeState]> = []
+  const runs: Array<Array<[Text, NodeState]>> = [[]]
+  let arabicWordNodes = 0
+  for (const child of children) {
+    if (child.nodeType === Node.ELEMENT_NODE) { runs.push([]); continue }
     if (child.nodeType !== Node.TEXT_NODE) continue
-    if ((child.nodeValue ?? '').trim()) contentNodes++
-    const state = syncTextState(child as Text)
+    const state = syncTextState(child as Text, track)
     if (!state) continue
     entries.push([child as Text, state])
+    runs[runs.length - 1].push([child as Text, state])
     if (AR_WORD.test(state.source)) arabicWordNodes++
   }
+
+  if (language === 'en' && track && arabicWordNodes > 0) {
+    const sources = runs.map((run) => run.map(([, state]) => (state.source === BLANK ? '' : state.source)).join(''))
+    const segments = translateSentenceRuns(sources)
+    if (segments && segments.every((segment, i) => runs[i].length > 0 || !segment.trim())) {
+      runs.forEach((run, i) => {
+        run.forEach(([text, state], j) => {
+          const next = j === 0 ? segments[i] || BLANK : BLANK
+          if (next !== text.nodeValue) text.nodeValue = next
+          state.applied = next
+        })
+      })
+      return
+    }
+  }
+
   const atomic = arabicWordNodes > 1
   for (const [text, state] of entries) {
     // "من {total}" means "of", not "From" — particles translate only as a standalone label.
@@ -180,6 +215,14 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     hasTranslated = true
     processTree(document.body, language) // full pass only when the language changes
 
+    // alert / confirm / prompt are native dialogs (not in the DOM): translate their text too.
+    const nativeAlert = window.alert
+    const nativeConfirm = window.confirm
+    const nativePrompt = window.prompt
+    window.alert = (message?: unknown) => nativeAlert.call(window, translateDialog(message))
+    window.confirm = (message?: string) => nativeConfirm.call(window, translateDialog(message))
+    window.prompt = (message?: string, fallback?: string) => nativePrompt.call(window, translateDialog(message), fallback)
+
     // Runs as a microtask right after React commits — before the browser paints,
     // so new content never flashes in Arabic while English is selected.
     const observer = new MutationObserver((records) => {
@@ -211,7 +254,12 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
       attributeFilter: [...ATTRIBUTES],
     })
 
-    return () => observer.disconnect()
+    return () => {
+      observer.disconnect()
+      window.alert = nativeAlert
+      window.confirm = nativeConfirm
+      window.prompt = nativePrompt
+    }
   }, [language, ready])
 
   useEffect(() => {

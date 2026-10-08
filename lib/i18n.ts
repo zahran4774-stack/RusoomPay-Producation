@@ -1,5 +1,7 @@
 // RusoomPay bilingual presentation layer.
 // IMPORTANT: This module translates UI text only. It does not touch database/business data.
+import { EXTRA_EXACT, PATTERN_PAIRS } from './i18n-dict'
+
 export type Language = 'ar' | 'en'
 
 export const DEFAULT_LANGUAGE: Language = 'ar'
@@ -1776,6 +1778,11 @@ function normalisePunctuation(value: string): string {
     .replace(/[\u2190\u2192]/g, (ch) => ARROWS[ch] ?? ch)
 }
 
+// Merge the per-area dictionaries (the main dictionary wins on collisions).
+for (const [ar, en] of Object.entries(EXTRA_EXACT)) {
+  if (!(ar in exact)) exact[ar] = en
+}
+
 // Multi-word phrases from the exact dictionary, indexed by word count.
 const phraseIndex: Map<string, string> = new Map()
 let maxPhraseWords = 1
@@ -1811,7 +1818,9 @@ function tokenize(input: string): Token[] {
 
 function translateUncached(input: string): string {
   const trimmed = input.trim()
-  if (exact[trimmed] !== undefined) return input.replace(trimmed, exact[trimmed])
+  if (exact[trimmed] !== undefined) return input.replace(trimmed, () => exact[trimmed])
+  const templated = matchPattern(trimmed)
+  if (templated !== null) return input.replace(trimmed, () => templated)
 
   const tokens = tokenize(input)
   // Single-word dictionary is used ONLY when the text is one Arabic word
@@ -1880,4 +1889,98 @@ export function translateText(input: string, language: Language): string {
   if (cache.size >= CACHE_LIMIT) cache.clear()
   cache.set(input, result)
   return result
+}
+
+// ─────────────────────────────────────────────────────────────
+// Sentence templates: "{0} طالب" → "{0} student(s)".
+// ─────────────────────────────────────────────────────────────
+const BOUNDARY = '\u00A6' // ¦ = element boundary inside a sentence
+
+const normaliseSentence = (value: string) =>
+  value.replace(/\s*\u00A6\s*/g, BOUNDARY).replace(/\s+/g, ' ').trim()
+
+type CompiledPattern = { re: RegExp; en: string; weight: number }
+
+function compilePattern(ar: string, en: string): CompiledPattern {
+  const parts = normaliseSentence(ar).split(/(\{\d+\})/)
+  let source = '^'
+  let weight = 0
+  for (const part of parts) {
+    if (/^\{\d+\}$/.test(part)) {
+      source += '([^\u00A6]+?)'
+    } else {
+      weight += part.length
+      source += part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s+')
+    }
+  }
+  return { re: new RegExp(source + '$'), en, weight }
+}
+
+const PATTERNS: CompiledPattern[] = PATTERN_PAIRS
+  .map(([ar, en]) => compilePattern(ar, en))
+  .sort((a, b) => b.weight - a.weight)
+
+function renderPattern(template: string, values: string[]): string {
+  return template
+    .replace(/\{(\d+)\?([^|}]*)\|([^}]*)\}/g, (_, index, one, many) => {
+      const raw = normalisePunctuation(values[Number(index)] ?? '').replace(/,/g, '')
+      return Number(raw) === 1 ? one : many
+    })
+    .replace(/\{(\d+)\}/g, (_, index) => values[Number(index)] ?? '')
+}
+
+function matchPattern(text: string): string | null {
+  const normalised = normaliseSentence(text)
+  for (const pattern of PATTERNS) {
+    const m = normalised.match(pattern.re)
+    if (!m) continue
+    const values = m.slice(1).map((v) => translateText(v, 'en'))
+    const rendered = renderPattern(pattern.en, values)
+    // The result must not keep Arabic words that belong to the template itself.
+    return rendered
+  }
+  return null
+}
+
+/**
+ * Translates a whole sentence made of several text nodes / elements.
+ * `runs` are the text pieces between element boundaries (JSX `a {x} b <b>c</b> d`).
+ * Returns one English string per run, or null when no template matches.
+ */
+export function translateSentenceRuns(runs: string[]): string[] | null {
+  const joined = runs.join(BOUNDARY)
+  if (!AR_LETTER.test(joined)) return null
+  const normalised = normaliseSentence(joined)
+  const direct = exact[normalised]
+  const rendered = direct !== undefined ? direct : matchPattern(normalised)
+  if (rendered === null) return null
+  const segments = rendered.split(BOUNDARY)
+  if (segments.length !== runs.length) return null
+  if (AR_LETTER.test(segments.join(''))) return null
+  return segments.map((segment, i) => {
+    const lead = /^\s*/.exec(runs[i])?.[0] ?? ''
+    const trail = /\s*$/.exec(runs[i])?.[0] ?? ''
+    const body = segment.trim()
+    return body ? lead + body + trail : lead + trail
+  })
+}
+
+/** Translates a message for alert()/confirm()/prompt() or other non-DOM output. */
+export function uiText(text: string): string {
+  if (!ENGLISH_ENABLED || typeof window === 'undefined' || !text) return text
+  try {
+    if (window.localStorage.getItem(LANGUAGE_STORAGE_KEY) !== 'en') return text
+  } catch {
+    return text
+  }
+  return translateText(text, 'en')
+}
+
+/** Dialog text (alert/confirm/prompt): whole message first, then line by line. */
+export function translateDialog(message: unknown): string {
+  const text = message === undefined || message === null ? '' : String(message)
+  if (!AR_LETTER.test(text)) return text
+  const whole = translateText(text, 'en')
+  if (!AR_LETTER.test(whole)) return whole
+  return text.split('\n').map((line) => translateText(line, 'en')).join('\n')
 }
