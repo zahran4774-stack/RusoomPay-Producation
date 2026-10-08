@@ -788,6 +788,7 @@ const exact: Record<string, string> = {
   'دعم مخصص': 'Dedicated Support',
   'جاهزون لمساعدتك': "We're ready to help",
   'إضافة طالب': 'Add Student',
+  'دعوة أولياء الأمور': 'Invite Guardians',
   'تحديث القائمة': 'Refresh List',
   'بلا رسوم فقط': 'No fees only',
   'أدخل مبلغ التخفيض في الحقل أعلاه — ستظهر النسبة تلقائياً.': 'Enter the discount amount in the field above — the percentage will appear automatically.',

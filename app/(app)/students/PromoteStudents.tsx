@@ -136,8 +136,13 @@ export default function PromoteStudents({ students }: { students: Student[] }) {
           style={{ background: 'none', border: 0, fontSize: 21, cursor: 'pointer', color: '#667' }}>×</button>
       </div>
       <p style={{ color: '#667', fontSize: 13.5, margin: '0 0 18px', lineHeight: 1.85 }}>
-        ينتقل كل طالب نشط إلى الصف التالي. طلاب <b>{LAST_GRADE}</b> يصبحون متخرّجين.
-        حدّد <b>المعيدين</b> فقط — الباقون يُرقّون تلقائياً. الرسوم غير المسدّدة تبقى مستحقّة.
+        {en ? (
+          <>Every active student moves up to the next grade. <b>{LAST_GRADE}</b> students become graduates.
+          Select only the <b>repeating students</b> — the rest are promoted automatically. Unpaid fees remain due.</>
+        ) : (
+          <>ينتقل كل طالب نشط إلى الصف التالي. طلاب <b>{LAST_GRADE}</b> يصبحون متخرّجين.
+          حدّد <b>المعيدين</b> فقط — الباقون يُرقّون تلقائياً. الرسوم غير المسدّدة تبقى مستحقّة.</>
+        )}
       </p>
 
       {/* العام الدراسي */}
@@ -233,9 +238,15 @@ export default function PromoteStudents({ students }: { students: Student[] }) {
         <div style={{ marginTop: 18, background: '#FBF3D5', border: '1px solid #EAD9A0', borderRadius: 12, padding: 16 }}>
           <b style={{ color: '#7A5C0A', fontSize: 14.5 }}>تأكيد الترقية</b>
           <p style={{ color: '#8A6D0F', fontSize: 13, margin: '6px 0 14px', lineHeight: 1.8 }}>
-            سيُرقّى {preview.promote} طالباً، ويعيد {preview.repeat}، ويتخرّج {preview.graduate}.
-            <br />هذه العملية تشمل <b>كل الطلاب النشطين</b> بغضّ النظر عن الفلتر المعروض.
-            <br />وهي <b>لا يمكن التراجع عنها</b>، وتُنفَّذ مرّة واحدة للعام {year}.
+            {en ? (
+              <>{preview.promote} will be promoted, {preview.repeat} will repeat, and {preview.graduate} will graduate.
+              <br />This operation includes <b>all active students</b> regardless of the filter shown.
+              <br />It <b>cannot be undone</b>, and is performed once for the year {year}.</>
+            ) : (
+              <>سيُرقّى {preview.promote} طالباً، ويعيد {preview.repeat}، ويتخرّج {preview.graduate}.
+              <br />هذه العملية تشمل <b>كل الطلاب النشطين</b> بغضّ النظر عن الفلتر المعروض.
+              <br />وهي <b>لا يمكن التراجع عنها</b>، وتُنفَّذ مرّة واحدة للعام {year}.</>
+            )}
           </p>
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={execute} disabled={busy}
