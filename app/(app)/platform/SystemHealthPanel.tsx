@@ -124,7 +124,9 @@ export default function SystemHealthPanel() {
   const dbQuotaStatus: Status = dbQuotaPct < 70 ? 'ok' : dbQuotaPct < 90 ? 'warn' : 'bad'
   const storageQuotaPct = Math.round((data.quotas.storage_size_bytes / data.quotas.storage_limit_bytes) * 100)
   const storageQuotaStatus: Status = storageQuotaPct < 70 ? 'ok' : storageQuotaPct < 90 ? 'warn' : 'bad'
-  const fmtMB = (bytes: number) => (bytes / (1024 * 1024)).toFixed(1)
+  // يعرض MB أو GB حسب الحجم — الحدّ يأتي من الدالة (حسب خطة Supabase) وليس رقماً ثابتاً
+  const fmtSize = (bytes: number) =>
+    bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(bytes >= 10 * 1024 ** 3 ? 0 : 1)} GB` : `${(bytes / 1024 ** 2).toFixed(1)} MB`
 
   return (
     <div>
@@ -154,8 +156,8 @@ export default function SystemHealthPanel() {
         <Gauge title="البريد (Resend)" sub={emTotal ? `${data.email.sent}/${emTotal} آخر عيّنة` : 'لا إرسال حديث'} status={emStatus} big={emRate === null ? '—' : `${emRate}%`} />
         <Gauge title="بوابة الدفع (Thawani)" sub={fmtAgo(paidAgoMin)} status={payStatus} big={`${data.payments.paid_24h}`} />
         <Gauge title="الأخطاء الحرجة" sub={`${data.errors.unresolved_total} غير محلولة إجمالاً`} status={errStatus} big={`${data.errors.critical_24h}`} />
-        <Gauge title="حجم قاعدة البيانات" sub={`${fmtMB(data.quotas.db_size_bytes)} / 500 MB`} status={dbQuotaStatus} big={`${dbQuotaPct}%`} />
-        <Gauge title="مساحة التخزين" sub={`${fmtMB(data.quotas.storage_size_bytes)} / 1024 MB`} status={storageQuotaStatus} big={`${storageQuotaPct}%`} />
+        <Gauge title="حجم قاعدة البيانات" sub={`${fmtSize(data.quotas.db_size_bytes)} / ${fmtSize(data.quotas.db_limit_bytes)}`} status={dbQuotaStatus} big={`${dbQuotaPct}%`} />
+        <Gauge title="مساحة التخزين" sub={`${fmtSize(data.quotas.storage_size_bytes)} / ${fmtSize(data.quotas.storage_limit_bytes)}`} status={storageQuotaStatus} big={`${storageQuotaPct}%`} />
       </div>
 
       <div style={{ marginTop: 10, fontSize: 11.5, color: '#8A94A6' }}>
